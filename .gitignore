@@ -5,3 +5,4 @@ out/
 .env
 .env.local
 .neon
+tsconfig.tsbuildinfo

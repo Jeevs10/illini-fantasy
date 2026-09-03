@@ -2,6 +2,7 @@
  * Ingest and score game days.
  *
  *   npm run ingest -- setup 2026            teams and ratings
+ *   npm run ingest -- schedule 2026 20261101 20270315   games and tip-off times
  *   npm run ingest -- night 2026 20260214   one game day
  *   npm run ingest -- range 2026 20260210 20260214
  *   npm run ingest -- link 2026             crosswalk CBBD onto known players
@@ -11,7 +12,7 @@
  */
 import { connect, migrate } from "@illini/db";
 import { CbbdClient, TorvikClient } from "@illini/sources";
-import { ingestNight, syncTeams, syncRatings, linkCbbdRosters } from "@illini/ingest";
+import { ingestNight, syncSchedule, syncTeams, syncRatings, linkCbbdRosters } from "@illini/ingest";
 import { loadEnv } from "./env.ts";
 
 loadEnv();
@@ -19,7 +20,7 @@ loadEnv();
 const [command, seasonArg, a, b] = process.argv.slice(2);
 const season = Number(seasonArg);
 if (!command || !Number.isFinite(season)) {
-  console.error("usage: ingest <setup|night|range|link> <season> [date] [endDate]");
+  console.error("usage: ingest <setup|schedule|night|range|link> <season> [date] [endDate]");
   process.exit(1);
 }
 
@@ -43,6 +44,11 @@ try {
     const teams = await syncTeams(db, cbbd, season);
     const ratings = await syncRatings(db, cbbd, season, `${season - 1}-11-01`);
     console.log(`teams ${teams} | ratings ${ratings}`);
+  } else if (command === "schedule") {
+    // Lineups are set the night before, so the schedule has to land before the
+    // box scores do. One call covers a whole range.
+    const games = await syncSchedule(db, cbbd, season, a!, b ?? a!);
+    console.log(`schedule ${games} games ${iso(a!)} to ${iso(b ?? a!)}`);
   } else if (command === "link") {
     const { rows } = await db.query<{ n: string }>("SELECT count(*) n FROM player");
     if (rows[0]!.n === "0") {

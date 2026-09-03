@@ -140,6 +140,8 @@ order, split so a re-ingest can never touch league data:
 | `001_sources` | teams, players, the crosswalk, games, ratings, raw per-game stats, availability |
 | `002_scoring` | versioned scoring configs, per-game scores, ingest runs |
 | `003_league` | users, leagues, fantasy teams, rosters, lineups, matchups, transactions |
+| `004_membership` | sessions, league members, invites, league-wide player ownership, tip-off times |
+| `005_game_day` | re-dates games onto the day they were played |
 
 **Scores are versioned by the config that produced them.** `scoring_config` is
 immutable and keyed by a digest of its contents, and `player_game_score` is keyed
@@ -194,6 +196,7 @@ Two things worth knowing if you touch the connection code:
 
 ```sh
 npm run ingest -- setup 2026                 # teams and adjusted ratings
+npm run ingest -- schedule 2026 20261101 20270315   # games and tip-off times
 npm run ingest -- night 2026 20260214        # one game day
 npm run ingest -- range 2026 20260210 20260214
 npm run ingest -- link  2026                 # crosswalk CBBD onto known players
@@ -264,7 +267,148 @@ Settlement is re-runnable. Totals are recomputed from stored scores rather than
 accumulated, so a Torvik revision flows through to the standings on the next run
 instead of needing a manual fix.
 
+## Phase 3 — league core
+
+Phase 2 proved the mechanics with one user owning all ten teams, lineups
+auto-filled the morning after, and nothing stopping two managers from rostering
+the same player. Phase 3 makes each of those real.
+
+```sh
+npm run league -- create 2026 "Illini Fantasy" 10 you@example.com
+npm run league -- invite 1 manager@example.com     # prints the token once
+npm run league -- accept <token> manager@example.com "Manager Name"
+npm run league -- members 1
+npm run league -- roster 3
+npm run league -- lineups 1 20260214              # auto-fill, locks respected
+```
+
+### Membership and invites
+
+`app_user` doubles as the Auth.js user table rather than sitting beside a second
+one. The project already carries a crosswalk because four sources mint their own
+player ids; there was no reason to repeat that for humans. Sessions, accounts
+and magic-link tokens hang off it in `auth_*` tables.
+
+Teams are created **unowned**. A manager takes one by redeeming an invite, so
+ownership is something a person did rather than something the seed script
+asserted. Redemption runs in one transaction and takes a row lock on the claimed
+team, because two people opening the same link at once must not share a roster.
+
+Only the token's SHA-256 hash is stored. The plaintext is returned once, at
+creation, and is unrecoverable afterwards — an emailed link is a bearer
+credential, and this is the table most likely to end up rendered in a
+commissioner screen. Re-inviting an address revokes the outstanding link rather
+than adding a second, so revoking the one you remember cannot leave a forgotten
+one live.
+
+### One player, one team
+
+The old index was unique on `(fantasy_team_id, player_id)` — it stopped a team
+rostering the same player twice and happily let two teams in one league both own
+him. Enforcing it league-wide needs `league_id` on the row, and a composite
+foreign key back to `fantasy_team (id, league_id)` is what keeps that copy
+honest, so no trigger is involved and the two cannot drift.
+
+`claimPlayer` reads the current owner first, but only to name them in the error.
+The unique index is what actually prevents the double claim: two managers
+claiming one player at the same instant *is* the waiver case, and the loser has
+to lose in the database.
+
+Tenures close rather than delete. Settling an old week sees the roster as it
+stood that night, so a March trade cannot rewrite who scored for whom in
+January.
+
+### The lineup lock
+
+The league locks per game at tip-off, Sleeper-style, not once a week. Two things
+had to change before that was possible.
+
+**Startability now comes from the schedule.** The Phase 2 path joined
+`player_game_stat`, which exists only once a box score has been filed — so a
+lineup could only be set for games that had already been played. `startableOn`
+joins `game` on the player's real team instead, which is the difference between
+a lineup and a retrospective.
+
+**`game` had no tip-off time**, only a date, so there was no boundary to lock
+against. CBBD had been returning `startDate` all along.
+
+`entries` is a patch, not a replacement: a player it does not name keeps the slot
+he has. Replacement semantics would mean a manager who opened the page at six
+and submitted at eight silently benched whoever tipped off in between, which is
+exactly the move the lock exists to refuse. Sliding someone into a slot a locked
+player holds is refused too, but as an overfilled slot rather than a lock
+violation — the lock is about moving a player who has played, and that player
+has not moved.
+
+Auto-fill is the safety net for a manager who never logs in, and it cannot undo
+a decision the clock already made: locked players keep the slot they tipped off
+in, and auto-fill competes only for what is left.
+
+Against the real Feb 14 slate, one team's nine startable players:
+
+| clock | startable | locked |
+|---|---|---|
+| 17:00Z, before the slate | 9 | 1 |
+| 23:00Z, mid-slate | 9 | 8 |
+| 06:00Z, after | 9 | 9 |
+
+Replaying a night needs a commissioner override, because every game in it has
+tipped off and the lock would otherwise — correctly — refuse to move anyone:
+
+```sh
+npm run league -- lineups 1 20260214 2026-02-14T12:00:00Z
+```
+
+### The bug the schedule join exposed
+
+**A 9pm Eastern tip is already tomorrow in UTC.** `game.played_on` stored the
+UTC date of `startDate`; Torvik labels a box score with the local game date. The
+two disagreed for **158 of the first 280 games**, and nothing noticed while
+lineups were derived from box scores. Join the schedule instead and half the
+slate vanishes — Feb 10 reported zero startable players against 401 real stat
+lines.
+
+The day boundary is 09:00 UTC, 4am Eastern. Observed tip-offs run 16:00 to 05:00
+UTC, so the empty band has hours of margin at both ends. After `005_game_day`,
+all 280 games agree with Torvik:
+
+```
+schedule vs box score dates    days_off 0 : 280 games
+```
+
+This is the third timezone bug in this codebase and the second in the same
+column. The first was the query *window*; this was the *storage*.
+
+### Run end to end
+
+Against production, week 15 of the ingested slate:
+
+```
+week 15    674.6 - 635.8    (9/20 vs 9/18 games)  home
+week 15    666.1 - 681.6    (9/19 vs 9/20 games)  away
+week 15    644.1 - 597.3    (9/17 vs 9/13 games)  home
+week 15    679.4 - 649.4    (9/22 vs 9/18 games)  home
+week 15    646.4 - 665.0    (9/19 vs 9/17 games)  away
+```
+
+Totals moved from the Phase 2 figures because more players are startable now: a
+manager can start someone who then does not play, which is the risk that makes
+setting a lineup a decision rather than a formality.
+
+A realistic college week, from the same run — the roster is the top 120 season
+scorers, so it follows the major-conference calendar:
+
+| day | rostered players with a game |
+|---|---|
+| Tue Feb 10 | 60 |
+| Wed Feb 11 | 52 |
+| Thu Feb 12 | 6 |
+| Fri Feb 13 | 6 |
+| Sat Feb 14 | 112 |
+
 ## Next
 
-The web app: player pool, player card with the six-block breakdown, matchup
-view, draft room.
+The web app on Next.js: Auth.js magic-link sign-in over the `auth_*` tables,
+then `/league`, `/team`, `/players`, `/players/:id` and `/standings`. The draft
+room follows in Phase 4 and is the one hard deadline — the season tips in
+November and there is no second chance at a draft.

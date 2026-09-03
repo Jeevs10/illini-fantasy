@@ -3,7 +3,7 @@ import { upsertScoringConfig, writeScores, type StoredScore } from "@illini/db";
 import { GAME_CONFIG, scoreLine, type PlayerLine, type ScoringConfig } from "@illini/scoring";
 import {
   COL, num, seasonRatesFrom, toPlayerLine,
-  type CbbdClient, type TorvikClient, type SeasonRates,
+  type CbbdClient, type CbbdGame, type TorvikClient, type SeasonRates,
 } from "@illini/sources";
 import { normaliseTeam } from "@illini/crosswalk";
 import { insertMany } from "@illini/db";
@@ -13,9 +13,72 @@ import { strengthMap, teamMap } from "./teams.ts";
 const iso = (yyyymmdd: string): string =>
   `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
 
-/** Who each team played on a date, so the multiplier can use the opponent. */
 /**
- * Who each team played, so the multiplier can use the opponent.
+ * The day a game belongs to, as everyone but UTC would name it.
+ *
+ * CBBD timestamps a tip-off in UTC, so a 9pm ET game on the 10th is already the
+ * 11th in UTC — and Torvik, which labels a box score with the local game date,
+ * calls it the 10th. Storing the UTC date filed 158 of 280 games a day late,
+ * which nothing noticed while lineups were derived from the box scores; join
+ * the schedule instead and half the slate vanishes.
+ *
+ * The boundary is 09:00 UTC — 4am Eastern, 1am Pacific. Nothing tips between
+ * 05:00 and 16:00 UTC, so the empty band is hours wide on both sides.
+ */
+export function basketballDate(startDate: string): string {
+  const shifted = new Date(startDate);
+  shifted.setUTCHours(shifted.getUTCHours() - 9);
+  return shifted.toISOString().slice(0, 10);
+}
+
+/**
+ * Writes a batch of CBBD games, returning cbbd id -> our game id.
+ *
+ * Tip-off is stored, not just the date: the league locks per game at tip-off,
+ * so without a timestamp there is no boundary to lock against.
+ */
+async function writeGames(
+  db: Db, season: number, games: CbbdGame[],
+): Promise<{ ids: Map<number, number>; pairs: { home: number; away: number; cbbdId: number }[] }> {
+  const teams = await ensureTeams(db, games.flatMap((g) => [g.homeTeam, g.awayTeam]));
+
+  const rows: unknown[][] = [];
+  const pairs: { home: number; away: number; cbbdId: number }[] = [];
+  for (const g of games) {
+    const home = teams.get(normaliseTeam(g.homeTeam));
+    const away = teams.get(normaliseTeam(g.awayTeam));
+    if (!home || !away) continue;
+    // The game's own date, not the requested one, so a game pulled in by the
+    // overnight tail is not relabelled.
+    rows.push([basketballDate(g.startDate), season, home, away,
+               g.neutralSite ?? false, g.id, g.sourceId ?? null, g.startDate]);
+    pairs.push({ home, away, cbbdId: g.id });
+  }
+
+  await insertMany(db, {
+    table: "game",
+    columns: ["played_on", "season", "home_team_id", "away_team_id",
+              "neutral_site", "cbbd_id", "espn_id", "tipoff"],
+    rows,
+    dedupeOn: [5],
+    conflict: `(cbbd_id) DO UPDATE SET
+      played_on = EXCLUDED.played_on,
+      home_team_id = EXCLUDED.home_team_id,
+      away_team_id = EXCLUDED.away_team_id,
+      tipoff = EXCLUDED.tipoff`,
+  });
+
+  if (pairs.length === 0) return { ids: new Map(), pairs };
+  const ids = new Map(
+    (await db.query<{ id: string; cbbd_id: number }>(
+      "SELECT id, cbbd_id FROM game WHERE cbbd_id = ANY($1::int[])",
+      [pairs.map((p) => p.cbbdId)])).rows.map((r) => [r.cbbd_id, Number(r.id)]),
+  );
+  return { ids, pairs };
+}
+
+/**
+ * The window a day's games fall in.
  *
  * `endDateRange` is inclusive of a *timestamp*, not a date, so passing a bare
  * `YYYY-MM-DD` for both ends matches only games tipping at exactly midnight
@@ -23,53 +86,24 @@ const iso = (yyyymmdd: string): string =>
  * extends into the next UTC morning because a US evening tip-off (9pm ET) is
  * already the following day in UTC.
  */
+function dayWindow(day: string): { startDateRange: string; endDateRange: string } {
+  const next = new Date(`${day}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return {
+    startDateRange: `${day}T00:00:00Z`,
+    endDateRange: `${next.toISOString().slice(0, 10)}T11:59:59Z`,
+  };
+}
+
+/** Who each team played on a date, so the multiplier can use the opponent. */
 export async function syncGames(
   db: Db, cbbd: CbbdClient, season: number, date: string,
 ): Promise<Map<number, { opponentId: number; gameId: number }>> {
   const day = iso(date);
-  const next = new Date(`${day}T00:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  const nextDay = next.toISOString().slice(0, 10);
+  const games = await cbbd.games(season, dayWindow(day));
+  const { ids, pairs } = await writeGames(db, season, games);
 
-  const games = await cbbd.games(season, {
-    startDateRange: `${day}T00:00:00Z`,
-    endDateRange: `${nextDay}T11:59:59Z`,
-  });
-  const teams = await ensureTeams(db, games.flatMap((g) => [g.homeTeam, g.awayTeam]));
-
-  const rows: unknown[][] = [];
   const out = new Map<number, { opponentId: number; gameId: number }>();
-  const pairs: { home: number; away: number; cbbdId: number }[] = [];
-
-  for (const g of games) {
-    const home = teams.get(normaliseTeam(g.homeTeam));
-    const away = teams.get(normaliseTeam(g.awayTeam));
-    if (!home || !away) continue;
-    // Store the game's own UTC date rather than the requested one, so a game
-    // pulled in by the overnight tail is not relabelled.
-    rows.push([g.startDate.slice(0, 10), season, home, away,
-               g.neutralSite ?? false, g.id, g.sourceId ?? null]);
-    pairs.push({ home, away, cbbdId: g.id });
-  }
-
-  await insertMany(db, {
-    table: "game",
-    columns: ["played_on", "season", "home_team_id", "away_team_id",
-              "neutral_site", "cbbd_id", "espn_id"],
-    rows,
-    dedupeOn: [5],
-    conflict: `(cbbd_id) DO UPDATE SET
-      played_on = EXCLUDED.played_on,
-      home_team_id = EXCLUDED.home_team_id,
-      away_team_id = EXCLUDED.away_team_id`,
-  });
-
-  const ids = new Map(
-    (await db.query<{ id: string; cbbd_id: number }>(
-      "SELECT id, cbbd_id FROM game WHERE cbbd_id = ANY($1::int[])",
-      [pairs.map((p) => p.cbbdId)])).rows.map((r) => [r.cbbd_id, Number(r.id)]),
-  );
-
   for (const p of pairs) {
     const gameId = ids.get(p.cbbdId);
     if (gameId === undefined) continue;
@@ -77,6 +111,23 @@ export async function syncGames(
     out.set(p.away, { opponentId: p.home, gameId });
   }
   return out;
+}
+
+/**
+ * Loads the schedule for a date range, tip-off times included.
+ *
+ * Lineups are set the day *before* a game, so the schedule has to exist before
+ * any box score does. This is what the nightly stat pull cannot supply.
+ */
+export async function syncSchedule(
+  db: Db, cbbd: CbbdClient, season: number, from: string, to: string,
+): Promise<number> {
+  const games = await cbbd.games(season, {
+    startDateRange: `${iso(from)}T00:00:00Z`,
+    endDateRange: dayWindow(iso(to)).endDateRange,
+  });
+  const { pairs } = await writeGames(db, season, games);
+  return pairs.length;
 }
 
 export interface NightlyResult {
