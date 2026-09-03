@@ -190,7 +190,46 @@ Two things worth knowing if you touch the connection code:
   `verify-full` but will downgrade to weaker libpq semantics in v9. `connect()`
   pins `verify-full` explicitly so a dependency bump cannot quietly loosen TLS.
 
+## Phase 2 — ingest
+
+```sh
+npm run ingest -- setup 2026                 # teams and adjusted ratings
+npm run ingest -- night 2026 20260214        # one game day
+npm run ingest -- range 2026 20260210 20260214
+npm run ingest -- link  2026                 # crosswalk CBBD onto known players
+```
+
+`link` runs *after* at least one night. Torvik is the identity spine — a player
+exists once they have a stat line, and other sources attach to that row rather
+than minting their own.
+
+A night is re-runnable end to end: stats upsert on `(player, date)`, scores on
+`(player, date, config)`. Running the same night twice leaves 2,467 rows, not
+4,934, which is what makes a Torvik revision safe to replay.
+
+**Opponent strength drives the multiplier.** `team_rating` stores dated
+snapshots with a 0..1 percentile strength, and the scorer reads the rating
+current at tip-off rather than today's. Observed across a full slate: multiplier
+min 0.67, median 0.99, max 1.33 — the whole band, as designed.
+
+`npm run team-aliases 2026` lists Torvik team names that do not resolve to a
+CBBD team, with candidates. Review before pasting into `TEAM_ALIASES`: a wrong
+team silently misattributes every player on it. Currently **0 of 365 unmatched**.
+
+### Three bugs worth remembering
+
+- **Batch, don't loop.** The first setup pass made ~13,000 sequential queries
+  and took over two minutes against Neon. Batched, it is under two seconds.
+  `insertMany` also dedupes within a batch, since Postgres rejects a statement
+  whose `ON CONFLICT DO UPDATE` would touch one row twice.
+- **`endDateRange` is a timestamp, not a date.** Passing a bare `YYYY-MM-DD` for
+  both ends matched only games tipping at exactly midnight UTC — 9 games instead
+  of 124. The window runs to end of day and into the next UTC morning, because a
+  9pm ET tip-off is already tomorrow in UTC.
+- **A leading `St.` is Saint, not State.** Expanding it blindly turned
+  "St. Thomas" into "state thomas". Aliases also have to converge: a single pass
+  left "LIU" as "long island university" next to CBBD's "long island".
+
 ## Next
 
-Ingest crons: nightly Torvik + CBBD pull, crosswalk resolution, scoring, matchup
-settlement.
+Matchup settlement and the weekly cron, then the web app.

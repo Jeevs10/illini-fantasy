@@ -16,7 +16,9 @@
     "pool": "tsx scripts/pool.ts",
     "parity": "tsx scripts/parity.ts",
     "crosswalk": "tsx scripts/crosswalk.ts",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "tsx scripts/migrate.ts",
+    "ingest": "tsx scripts/ingest.ts",
+    "team-aliases": "tsx scripts/team-aliases.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

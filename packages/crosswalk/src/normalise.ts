@@ -62,6 +62,28 @@ const TEAM_ALIASES: Record<string, string> = {
   "arkansas little rock": "Little Rock",
   "college of charleston": "Charleston",
   "citadel": "The Citadel",
+  // Torvik spellings, checked against CBBD's own team list.
+  "albany": "UAlbany",
+  "grambling state": "Grambling",
+  "mcneese state": "McNeese",
+  "nicholls state": "Nicholls",
+  "appalachian state": "App State",
+  "cal baptist": "California Baptist",
+  "fiu": "Florida International",
+  "illinois chicago": "UIC",
+  "iu indy": "IU Indianapolis",
+  "liu": "Long Island University",
+  "loyola md": "Loyola Maryland",
+  "mississippi": "Ole Miss",
+  "penn": "Pennsylvania",
+  "saint francis": "St. Francis (PA)",
+  "southeastern louisiana": "SE Louisiana",
+  "st thomas": "St. Thomas-Minnesota",
+  "saint thomas": "St. Thomas-Minnesota",
+  "tennessee martin": "UT Martin",
+  "texas a and m corpus chris": "Texas A&M-Corpus Christi",
+  "umkc": "Kansas City",
+  "usc upstate": "South Carolina Upstate",
   // Sources disagree on whether "State" belongs in the school name at all.
   "middle tennessee state": "Middle Tennessee",
   "middle tennessee st": "Middle Tennessee",
@@ -79,7 +101,9 @@ const TEAM_ALIASES: Record<string, string> = {
   "louisiana lafayette": "Louisiana",
   "louisiana monroe": "UL Monroe",
   "miami florida": "Miami",
+  "miami fl": "Miami",
   "miami ohio": "Miami (OH)",
+  "miami oh": "Miami (OH)",
   "texas a&m corpus christi": "Texas A&M-Corpus Christi",
   "southern mississippi": "Southern Miss",
   "nc state": "NC State",
@@ -92,7 +116,6 @@ const TEAM_ALIASES: Record<string, string> = {
   "detroit": "Detroit Mercy",
   "loyola chicago": "Loyola Chicago",
   "loyola marymount": "Loyola Marymount",
-  "loyola maryland": "Loyola (MD)",
   "sam houston state": "Sam Houston",
   "seattle": "Seattle U",
   "omaha": "Nebraska Omaha",
@@ -114,35 +137,42 @@ const TEAM_ALIASES: Record<string, string> = {
 };
 
 /**
- * Torvik abbreviates "State" to "St." and CBBD spells it out, so the two
- * disagree on ~90 schools. Normalise both directions to "state".
+ * Torvik abbreviates "State" to "St.", so the two sources disagree on ~90
+ * schools. But a *leading* "St." is Saint, not State — expanding it blindly
+ * turned "St. Thomas" into "state thomas". Only a trailing "St" is State.
  */
 function expandStateAbbreviation(name: string): string {
-  return name.replace(/\bst\b\.?/g, "state");
+  return name.replace(/(?<!^)\bst\b\.?(?=\s|$)/g, "state").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Canonical form of a school name.
+ *
+ * Applies aliases and the strip pipeline repeatedly until the result stops
+ * changing. A single pass is not enough: an alias's *output* has to go through
+ * the same normalisation its input did, or "LIU" -> "Long Island University"
+ * ends up beside CBBD's own "Long Island University" -> "long island", and the
+ * two never meet.
+ */
 export function normaliseTeam(raw: string | null | undefined): string {
-  const plain = normaliseName(raw).replace(/&/g, " and ").replace(/\s+/g, " ").trim();
+  let current = normaliseName(raw).replace(/&/g, " and ").replace(/\s+/g, " ").trim();
 
-  // Look aliases up before stripping "college"/"university", or an entry like
-  // "college of charleston" can never match its own key.
-  for (const key of [plain, expandStateAbbreviation(plain)]) {
-    const alias = TEAM_ALIASES[key];
-    if (alias) return normaliseName(alias);
+  for (let pass = 0; pass < 4; pass += 1) {
+    // Aliases are checked before stripping "college"/"university", or an entry
+    // like "college of charleston" can never match its own key.
+    const aliased = TEAM_ALIASES[current] ?? TEAM_ALIASES[expandStateAbbreviation(current)];
+    const next = normaliseName(
+      aliased ?? current
+        .replace(/\b(university|college)\b/g, "")
+        .replace(/^\s*of\s+/, "")
+        .replace(/\s+of\s+/g, " "),
+    ).replace(/&/g, " and ").replace(/\s+/g, " ").trim();
+
+    const expanded = expandStateAbbreviation(next);
+    if (expanded === current) return current;
+    current = expanded;
   }
-
-  const stripped = plain
-    .replace(/\b(university|college)\b/g, "")
-    .replace(/^\s*of\s+/, "")
-    .replace(/\s+of\s+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  for (const key of [stripped, expandStateAbbreviation(stripped)]) {
-    const alias = TEAM_ALIASES[key];
-    if (alias) return normaliseName(alias);
-  }
-  return normaliseName(expandStateAbbreviation(stripped));
+  return current;
 }
 
 /** Register additional aliases at runtime, e.g. from a commissioner override. */

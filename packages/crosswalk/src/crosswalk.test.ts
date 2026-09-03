@@ -41,6 +41,36 @@ test("Torvik's 'St.' and CBBD's 'State' agree", () => {
   assert.equal(normaliseTeam("Ohio St."), normaliseTeam("Ohio State"));
 });
 
+test("a leading 'St.' is Saint, not State", () => {
+  // Expanding it blindly turned "St. Thomas" into "state thomas".
+  assert.equal(normaliseTeam("St. Thomas"), normaliseTeam("St. Thomas-Minnesota"));
+  assert.ok(!normaliseTeam("St. Thomas").startsWith("state"));
+  assert.notEqual(normaliseTeam("St. Thomas"), normaliseTeam("Thomas State"));
+});
+
+test("aliases converge — an alias output is normalised like any other input", () => {
+  // A single pass left "LIU" -> "long island university" beside CBBD's own
+  // "Long Island University" -> "long island", and the two never met.
+  assert.equal(normaliseTeam("LIU"), normaliseTeam("Long Island University"));
+  assert.equal(normaliseTeam("FIU"), normaliseTeam("Florida International"));
+  assert.equal(normaliseTeam("Mississippi"), normaliseTeam("Ole Miss"));
+  assert.equal(normaliseTeam("Penn"), normaliseTeam("Pennsylvania"));
+  assert.equal(normaliseTeam("UMKC"), normaliseTeam("Kansas City"));
+});
+
+test("normaliseTeam is idempotent", () => {
+  for (const name of ["LIU", "St. Thomas", "Miami FL", "Michigan St.", "College of Charleston"]) {
+    const once = normaliseTeam(name);
+    assert.equal(normaliseTeam(once), once, `${name} is not stable under a second pass`);
+  }
+});
+
+test("Miami FL and Miami OH stay distinct", () => {
+  assert.notEqual(normaliseTeam("Miami FL"), normaliseTeam("Miami OH"));
+  assert.equal(normaliseTeam("Miami FL"), normaliseTeam("Miami"));
+  assert.equal(normaliseTeam("Miami OH"), normaliseTeam("Miami (OH)"));
+});
+
 test("edit distance bails out early past the cap", () => {
   assert.equal(editDistance("smith", "smyth"), 1);
   assert.ok(editDistance("smith", "completely different") > 3);
