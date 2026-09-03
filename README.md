@@ -406,9 +406,71 @@ scorers, so it follows the major-conference calendar:
 | Fri Feb 13 | 6 |
 | Sat Feb 14 | 112 |
 
+## Phase 3 — the web app
+
+```sh
+npm run dev        # http://localhost:3000
+```
+
+Next.js 16 App Router in `apps/web`, importing the workspace packages
+directly — the scoring model, the league rules and the queries are the same
+code the CLI runs, so a screen cannot disagree with a settlement.
+
+### Auth
+
+Magic links, no passwords. In a private twenty-person league the invite and the
+sign-in are the same mechanism: an email to an address the commissioner already
+named.
+
+`app_user` doubles as the Auth.js user table rather than sitting beside a second
+one, so `league_member.user_id` and a session point at the same row. The adapter
+in `apps/web/lib/adapter.ts` maps Auth.js onto this schema's snake_case columns;
+redeeming a link is a `DELETE ... RETURNING`, so two clicks race in Postgres
+rather than in Node.
+
+With no `AUTH_RESEND_KEY` set the link is printed to the server log instead of
+emailed — development should not be blocked on a verified sending domain.
+
+### Screens
+
+| route | |
+|---|---|
+| `/league` | the week's matchup, scored live from stored player scores; games past the cap dimmed, not hidden |
+| `/team` | tonight's startable players, with per-game locks and slot validation |
+| `/players` | the pool, ranked by season Player-Score, with ownership |
+| `/players/:id` | the game log, each night broken into its six blocks |
+| `/standings` | settled weeks only |
+
+Totals on `/league` are recomputed from `player_game_score` rather than read from
+`matchup.home_points`, so a week in progress reads the same way a settled one
+does and a Torvik revision shows up without waiting for settlement.
+
+### Design
+
+The palette and faces come from the league design brief — Archivo, Source Serif
+4, IBM Plex Mono, `#D8431F` on `#13294B`. Their *roles* are assigned for product
+UI rather than a brand surface: Archivo carries the interface, the serif is kept
+for prose where someone is actually reading, and mono is used only for
+measurement — scores, tip-off times, tabular numbers.
+
+Three defects the design pass turned up, none of which a test would have caught:
+
+- **Sticky table headers hid the first row of every table.** Inside an
+  `overflow: hidden` panel the sticky `thead` covered row one, so standings
+  opened at rank 2 and the pool's top-ranked player was invisible.
+- **Tip-off was formatted in the browser's timezone**, so the server rendered one
+  string and the client another — a hydration mismatch that made the column
+  silently flip to UTC on a client-side navigation. It is Eastern now, formatted
+  once, which is how college schedules are published anyway.
+- **`--faint` failed contrast at 2.97:1** while carrying most of the small text,
+  and the slot tag was invisible in dark mode. Both were measured, not eyeballed.
+
 ## Next
 
-The web app on Next.js: Auth.js magic-link sign-in over the `auth_*` tables,
-then `/league`, `/team`, `/players`, `/players/:id` and `/standings`. The draft
-room follows in Phase 4 and is the one hard deadline — the season tips in
-November and there is no second chance at a draft.
+Phase 4, the draft room: live snake draft, clock, queue, auto-pick, and a
+best-available board fed by the existing rankings. It is the one hard deadline —
+the season tips in November and there is no second chance at a draft.
+
+Before that, two gaps this phase leaves open: a commissioner surface (invites are
+CLI-only today, so `npm run league -- invite` is the only way to add a manager),
+and waivers, which the schema carries but nothing yet writes.
