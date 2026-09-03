@@ -145,6 +145,7 @@ export function scoreLine(
     blocks,
     raw,
     multiplier,
+    minutesGate: gate,
     score: raw * multiplier * gate,
   };
 }

@@ -83,6 +83,8 @@ export interface ScoredLine {
   /** Weighted sum before the context multiplier and minutes gate. */
   raw: number;
   multiplier: number;
+  /** Minutes ramp actually applied, 0..1. Explains a reduced score. */
+  minutesGate: number;
   /** Final Game Score. */
   score: number;
 }

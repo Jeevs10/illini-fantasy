@@ -130,6 +130,45 @@ Up from the 59% baseline in the plan (normalised name alone). Of the 28
 unmatched, 10 are in the 2026 recruiting class or transfer portal — new to the
 index rather than a matcher failure. Zero remaining team-alias failures.
 
+## Phase 2 — schema
+
+`packages/db` holds the migrations and data layer. Three files, applied in
+order, split so a re-ingest can never touch league data:
+
+| migration | holds |
+|---|---|
+| `001_sources` | teams, players, the crosswalk, games, ratings, raw per-game stats, availability |
+| `002_scoring` | versioned scoring configs, per-game scores, ingest runs |
+| `003_league` | users, leagues, fantasy teams, rosters, lineups, matchups, transactions |
+
+**Scores are versioned by the config that produced them.** `scoring_config` is
+immutable and keyed by a digest of its contents, and `player_game_score` is keyed
+on `(player, date, config)`. Three properties fall out of that:
+
+- replaying a night overwrites those rows and never duplicates them, so a Torvik
+  revision is safe to re-run
+- editing weights creates a new config version instead of mutating one that
+  settled matchups already reference
+- two versions can be compared over the same games (`compareConfigs`) rather than
+  one destroying the other
+
+`player_game_stat` holds raw source values and is never written by scoring;
+`player_game_score` is derived and can always be rebuilt from it.
+
+### Local development
+
+Migrations run against any Postgres. A disposable one:
+
+```sh
+docker run -d --name illini-pg -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=illini \
+  -p 55432:5432 postgres:18-alpine
+export DATABASE_URL=postgresql://postgres:dev@localhost:55432/illini
+npm test
+```
+
+The db tests create and drop their own `illini_test` database.
+
 ## Next
 
-Phase 2 remainder: schema, ingest crons, idempotent re-scoring.
+Ingest crons: nightly Torvik + CBBD pull, crosswalk resolution, scoring, matchup
+settlement. Needs a `DATABASE_URL` — Neon for production.
