@@ -653,3 +653,22 @@ table.board tbody th.board-round { border-bottom: 1px solid var(--rule); font-we
 }
 .board-clock { font-weight: 700; color: var(--ok); }
 .board td .player-link { font-size: var(--t-sm); }
+
+/* The league picker sits with identity rather than with navigation: it says
+   which league you are in, not where in it you are going. Only rendered when
+   there is more than one, which for most managers is never. */
+.leagueswitch { flex: none; margin: 0; }
+.leagueswitch select {
+  background: transparent;
+  color: inherit;
+  border-color: rgba(255, 255, 255, .22);
+  font-weight: 600;
+  max-width: 16ch;
+}
+.leagueswitch select option { color: var(--ink); background: var(--surface); }
+@media (prefers-color-scheme: dark) {
+  .leagueswitch select { border-color: var(--rule); }
+}
+/* Never hidden, only narrowed. It decides which league's data the whole app is
+   showing, which makes it the last control that should vanish on a phone. */
+@media (max-width: 860px) { .leagueswitch select { max-width: 9ch; padding-inline: var(--s-2); } }

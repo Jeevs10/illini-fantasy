@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Nav } from "./nav.tsx";
+import { LeagueSwitch } from "./leagueswitch.tsx";
 import { SignOut } from "./signout.tsx";
 import { who } from "../lib/session.ts";
 
@@ -14,8 +15,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // the page's own call.
   const viewer = await who();
   const signedIn = viewer.state === "anonymous" ? null : viewer.state === "member"
-    ? { name: viewer.viewer.name || viewer.viewer.email, commissioner: viewer.viewer.membership.role === "commissioner" }
-    : { name: viewer.name || viewer.email, commissioner: false };
+    ? {
+        name: viewer.viewer.name || viewer.viewer.email,
+        commissioner: viewer.viewer.membership.role === "commissioner",
+        leagues: viewer.viewer.memberships.map((m) => ({ leagueId: m.leagueId, leagueName: m.leagueName })),
+        current: viewer.viewer.membership.leagueId,
+      }
+    : { name: viewer.name || viewer.email, commissioner: false, leagues: [], current: 0 };
   return (
     <html lang="en">
       <head>
@@ -29,6 +35,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         {signedIn ? (
           <Nav commissioner={signedIn.commissioner}>
+            <LeagueSwitch leagues={signedIn.leagues} current={signedIn.current} />
             <SignOut name={signedIn.name} />
           </Nav>
         ) : null}

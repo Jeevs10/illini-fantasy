@@ -49,11 +49,7 @@ Not done, in the order I would take them:
 1. **Waivers.** `roster_slot` and `transaction` model the claim/release
    lifecycle and `claimPlayer` / `releasePlayer` enforce it, but nothing
    schedules or resolves a FAAB bid. This is now the largest gap.
-2. **Nobody can see a draft they are not the first league of.** `who()` takes
-   `memberships[0]`, so a user in two leagues only ever sees the older one.
-   That was harmless while everyone had one league; it is why production league
-   2 is invisible in the app (see below). A league switcher is the fix.
-3. **Draw the games cap** and the rest of the design backlog — see
+2. **Draw the games cap** and the rest of the design backlog — see
    `.impeccable/critique/` for the persisted snapshot, which `/polish` reads
    automatically. Note that the critique predates `/commissioner` and `/draft`,
    so its heuristic scores do not cover either.
@@ -64,29 +60,21 @@ way to rename or add a team from the app, no way to change a member's role, and
 no resend — re-inviting an address is the resend, which is correct but is
 labelled nowhere.
 
-## Seeing the draft room
+## The two leagues
 
-Production league 1 still holds the 120 players the Phase 2 script seeded, and
-`createDraft` refuses a league with rosters — a draft deals out an empty league.
-So `/draft` on league 1 shows the refusal, not the room. League 2, `Draft
-Night`, is a real drafted league and is what the Phase 4 numbers in the README
-came from, but the app never surfaces it because of the `memberships[0]` problem
-above.
+`createDraft` refuses a league that already has rostered players — a draft deals
+out an empty league — so one league cannot be both a finished season and a
+drawn draft. There are two, and the masthead's league picker moves between
+them:
 
-Two ways forward, and the choice belongs to whoever owns the league:
+| | |
+|---|---|
+| 1 `Illini Fantasy` | the finished season: 120 rostered, 361 lineups, 5 settled weeks. `/draft` here shows the refusal, correctly. |
+| 2 `Draft Night` | an undrafted league with a scheduled 12-round, 60-second draft, waiting on Start. |
 
-```sh
-# a) treat league 1's seeded rosters as the placeholder they are, and draft it
-psql "$DATABASE_URL" -c "DELETE FROM roster_slot WHERE league_id = 1"
-npm run league -- draft new 1 12 90
-
-# b) leave league 1 alone and give league 2 its own commissioner to sign in as
-npm run league -- invite 2 you+draft@example.com
-```
-
-Option (a) invalidates the settled week-15 matchups on league 1, which were
-scored off those seeded rosters. They are demo numbers, but they are the demo
-numbers the Phase 2 and 3 sections of the README quote.
+The picker is a cookie read by `who()`, and it is a *preference* rather than an
+authorisation: the chosen league has to be one the viewer is actually a member
+of, so a hand-edited cookie selects nothing rather than somebody else's data.
 
 ## Things that will mislead you
 

@@ -1,14 +1,21 @@
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { membershipsFor, type Membership } from "@illini/league";
 import { auth } from "../auth.ts";
 import { db } from "./db.ts";
 
+/** The cookie naming which league the viewer is currently looking at. */
+export const LEAGUE_COOKIE = "illini_league";
+
 export interface Viewer {
   userId: number;
   email: string;
   name: string;
+  /** The league being viewed. */
   membership: Membership;
+  /** Every league the viewer belongs to, so the nav can offer the others. */
+  memberships: Membership[];
 }
 
 /**
@@ -37,10 +44,16 @@ export const who = cache(async (): Promise<Who> => {
   const name = user.name ?? "";
 
   const memberships = await membershipsFor(db, userId);
-  const membership = memberships[0];
-  if (!membership) return { state: "no-league", userId, email, name };
+  if (memberships.length === 0) return { state: "no-league", userId, email, name };
 
-  return { state: "member", viewer: { userId, email, name, membership } };
+  // Which league, when there is more than one. The cookie is a preference, not
+  // an authorisation: the chosen league has to be one the viewer is actually a
+  // member of, so a hand-edited cookie selects nothing rather than something
+  // else's data.
+  const preferred = Number((await cookies()).get(LEAGUE_COOKIE)?.value);
+  const membership = memberships.find((m) => m.leagueId === preferred) ?? memberships[0]!;
+
+  return { state: "member", viewer: { userId, email, name, membership, memberships } };
 });
 
 /** The signed-in manager and the league they are looking at. */
