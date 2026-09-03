@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { GAME_CONFIG } from "@illini/scoring";
 import { connect, migrate, upsertScoringConfig, type Db } from "@illini/db";
 import {
-  acceptInvite, inviteToLeague, members, openInvites, revokeInvite, roleOf, upsertUser,
+  acceptInvite, inviteByToken, inviteToLeague, members, openInvites, revokeInvite, roleOf,
+  teamsInLeague, upsertUser,
 } from "./membership.ts";
 import {
   AlreadyRosteredError, RosterFullError, claimPlayer, releasePlayer, rosterOn, playerPool,
@@ -182,4 +183,50 @@ test("the pool reports who owns whom, and can hide the owned", async () => {
     { leagueId: LEAGUE, season: 2026, configId, limit: 500, availableOnly: true });
   assert.ok(all.length >= free.length);
   assert.ok(free.every((p) => p.ownedBy === null));
+});
+
+test("teamsInLeague reports both sides of a seat", async () => {
+  // League 1 was filled by the invite tests above; league 2 was never claimed.
+  const filled = await teamsInLeague(db, LEAGUE);
+  assert.equal(filled.length, 3);
+  assert.ok(filled.every((t) => t.ownerId !== null), "every seat taken");
+  assert.equal(filled[0]!.ownerName, "Manager One");
+  assert.equal(filled[0]!.ownerEmail, "manager.one@illini.test");
+
+  const open = await teamsInLeague(db, OTHER_LEAGUE);
+  assert.equal(open.filter((t) => t.ownerId === null).length, 3, "nothing claimed yet");
+  assert.equal(open[0]!.ownerName, null);
+});
+
+test("an invite can be read before it is redeemed, and not after", async () => {
+  const invite = await inviteToLeague(db, {
+    leagueId: OTHER_LEAGUE, email: "Preview@illini.test", invitedBy: commish,
+    fantasyTeamId: 22,
+  });
+
+  const preview = (await inviteByToken(db, invite.token!))!;
+  assert.equal(preview.leagueName, "League 2");
+  assert.equal(preview.email, "preview@illini.test");
+  assert.equal(preview.fantasyTeamName, "Team 2", "the named seat, not the next free one");
+  assert.equal(preview.expired, false);
+  assert.equal(preview.role, "manager");
+
+  // Reading it is not redeeming it: the seat is still open afterwards.
+  const stillOpen = await teamsInLeague(db, OTHER_LEAGUE);
+  assert.equal(stillOpen.find((t) => t.id === 22)?.ownerId, null);
+
+  await acceptInvite(db, { token: invite.token!, email: "preview@illini.test" });
+  assert.equal(await inviteByToken(db, invite.token!), null, "a spent link reads as nothing");
+  assert.equal(await inviteByToken(db, "not-a-real-token"), null);
+});
+
+test("a preview says an expired link is expired rather than hiding it", async () => {
+  // A refusal a manager can act on — ask for a new link — beats a dead end that
+  // looks the same as a typo.
+  const stale = await inviteToLeague(db, {
+    leagueId: OTHER_LEAGUE, email: "stale@illini.test", invitedBy: commish, ttlDays: -1,
+  });
+  const preview = (await inviteByToken(db, stale.token!))!;
+  assert.equal(preview.expired, true);
+  assert.equal(preview.email, "stale@illini.test");
 });

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Nav } from "./nav.tsx";
 import { SignOut } from "./signout.tsx";
-import { auth } from "../auth.ts";
+import { who } from "../lib/session.ts";
 
 export const metadata: Metadata = {
   title: "Illini Fantasy Hoops",
@@ -10,7 +10,12 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth();
+  // Cached for the request, so asking here for the nav costs nothing on top of
+  // the page's own call.
+  const viewer = await who();
+  const signedIn = viewer.state === "anonymous" ? null : viewer.state === "member"
+    ? { name: viewer.viewer.name || viewer.viewer.email, commissioner: viewer.viewer.membership.role === "commissioner" }
+    : { name: viewer.name || viewer.email, commissioner: false };
   return (
     <html lang="en">
       <head>
@@ -22,9 +27,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body>
-        {session?.user ? (
-          <Nav>
-            <SignOut name={session.user.name ?? session.user.email ?? ""} />
+        {signedIn ? (
+          <Nav commissioner={signedIn.commissioner}>
+            <SignOut name={signedIn.name} />
           </Nav>
         ) : null}
         <main className="page">{children}</main>

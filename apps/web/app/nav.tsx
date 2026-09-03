@@ -10,14 +10,19 @@ const LINKS = [
   ["/standings", "Standings"],
 ] as const;
 
-export function Nav({ children }: { children: React.ReactNode }) {
+export function Nav({
+  commissioner, children,
+}: { commissioner: boolean; children: React.ReactNode }) {
   const pathname = usePathname();
+  // The commissioner's tools are the one thing not everyone can act on, so the
+  // link only exists for the person it works for.
+  const links = commissioner ? [...LINKS, ["/commissioner", "Commissioner"] as const] : LINKS;
   return (
     <header className="masthead">
       <div className="masthead-inner">
         <Link href="/league" className="wordmark">Illini Fantasy</Link>
         <nav>
-          {LINKS.map(([href, label]) => (
+          {links.map(([href, label]) => (
             <Link key={href} href={href} data-active={pathname.startsWith(href)}>{label}</Link>
           ))}
         </nav>

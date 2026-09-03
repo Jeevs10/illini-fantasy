@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { membershipsFor, type Membership } from "@illini/league";
 import { auth } from "../auth.ts";
@@ -11,26 +12,43 @@ export interface Viewer {
 }
 
 /**
- * The signed-in manager and the league they are looking at.
+ * Who is asking: nobody, somebody with no league yet, or a manager.
  *
- * A viewer with no league is a real state — an invite exists but has not been
- * redeemed — and is sent somewhere that says so rather than to an empty page.
+ * Signed in with no league is a real state — an invite exists but has not been
+ * redeemed — and is worth telling apart from signed out, since the two want
+ * different pages.
+ *
+ * `cache` scopes the lookup to one request, so the layout can ask for the
+ * viewer's role to decide what to put in the nav without costing a second
+ * round trip on top of the page's own call.
  */
-export async function requireViewer(): Promise<Viewer> {
+export type Who =
+  | { state: "anonymous" }
+  | { state: "no-league"; userId: number; email: string; name: string }
+  | { state: "member"; viewer: Viewer };
+
+export const who = cache(async (): Promise<Who> => {
   const session = await auth();
   const user = session?.user;
-  if (!user?.id) redirect("/signin");
+  if (!user?.id) return { state: "anonymous" };
 
-  const memberships = await membershipsFor(db, Number(user.id));
+  const userId = Number(user.id);
+  const email = user.email ?? "";
+  const name = user.name ?? "";
+
+  const memberships = await membershipsFor(db, userId);
   const membership = memberships[0];
-  if (!membership) redirect("/no-league");
+  if (!membership) return { state: "no-league", userId, email, name };
 
-  return {
-    userId: Number(user.id),
-    email: user.email ?? "",
-    name: user.name ?? "",
-    membership,
-  };
+  return { state: "member", viewer: { userId, email, name, membership } };
+});
+
+/** The signed-in manager and the league they are looking at. */
+export async function requireViewer(): Promise<Viewer> {
+  const found = await who();
+  if (found.state === "anonymous") redirect("/signin");
+  if (found.state === "no-league") redirect("/no-league");
+  return found.viewer;
 }
 
 /** The date the app treats as today. Overridable so a finished season is browsable. */

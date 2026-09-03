@@ -469,6 +469,8 @@ emailed — development should not be blocked on a verified sending domain.
 | `/players` | the pool, ranked by season Player-Score, with ownership |
 | `/players/:id` | the game log, each night broken into its six blocks |
 | `/standings` | settled weeks only |
+| `/commissioner` | invites, revocation, and who holds which seat — commissioner only |
+| `/join/:token` | redeeming an invite |
 
 Totals on `/league` are recomputed from `player_game_score` rather than read from
 `matchup.home_points`, so a week in progress reads the same way a settled one
@@ -494,12 +496,55 @@ Three defects the design pass turned up, none of which a test would have caught:
 - **`--faint` failed contrast at 2.97:1** while carrying most of the small text,
   and the slot tag was invisible in dark mode. Both were measured, not eyeballed.
 
+### The commissioner surface
+
+Invites were CLI-only through Phase 3, which meant the app could not be used for
+its actual purpose without a terminal — and not just by the commissioner:
+redeeming a link was `npm run league -- accept` too, so every manager needed one.
+Both halves are now screens.
+
+`/commissioner` lists the seats, creates an invite, and revokes an outstanding
+one. It is the commissioner's own page, and a manager who reaches it is told so
+rather than 404'd — the refusal that matters is in the data layer, where
+`inviteToLeague` and `revokeInvite` both call `requireCommissioner`.
+
+**The link is shown once and then it is gone.** Only the token's SHA-256 hash is
+stored, so the plaintext exists for exactly one render. It lives in the client's
+action state and nowhere else — never in the URL, never in a redirect, because a
+bearer credential in a query string ends up in browser history and in every
+access log on the way. Revoking that invite takes the link off the screen with
+it, so a dead link cannot be pasted into an email.
+
+The invite form refuses before it mints rather than after someone redeems: with
+every seat claimed there is no team to hand over, and an invite with nothing
+behind it looks exactly like a good one right up until the manager clicks it.
+The team selector lists only unclaimed seats for the same reason.
+
+`/join/:token` is the other half. It insists on signing in first and takes the
+address from the session rather than from a form field, which is the point: a
+magic link is proof that whoever holds the invite also holds the mailbox it was
+addressed to. `acceptInvite` compares the two at fixed length, so a stolen link
+is worth nothing without the inbox. Signing in from that page carries the token
+in `callbackUrl`, so the invite is still there when the manager comes back.
+
+The page says which of the four states it is in — spent, expired, addressed to
+somebody else, or ready — rather than failing the same way for all of them. Only
+"spent" is deliberately vague: already redeemed, revoked and mistyped look
+identical, since telling them apart only helps someone guessing.
+
+Redemption is a button, not something that happens on page load. It claims a
+team and burns the link; a link preview fetcher should not be able to spend
+somebody's invite for them.
+
+Two additions to the league package back it: `teamsInLeague` reports both sides
+of a seat, and `inviteByToken` reads an invite without redeeming it.
+
 ## Next
 
 Phase 4, the draft room: live snake draft, clock, queue, auto-pick, and a
 best-available board fed by the existing rankings. It is the one hard deadline —
 the season tips in November and there is no second chance at a draft.
 
-Before that, two gaps this phase leaves open: a commissioner surface (invites are
-CLI-only today, so `npm run league -- invite` is the only way to add a manager),
-and waivers, which the schema carries but nothing yet writes.
+After that, waivers — the schema models the claim/release lifecycle and
+`claimPlayer` / `releasePlayer` enforce it, but nothing yet schedules or
+resolves a FAAB bid.

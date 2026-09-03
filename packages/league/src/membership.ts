@@ -277,3 +277,94 @@ export async function openInvites(db: Db, leagueId: number): Promise<Invite[]> {
     expiresAt: r.expires_at.toISOString(),
   }));
 }
+
+/** A seat in the league: the team, and whoever runs it. */
+export interface LeagueTeam {
+  id: number;
+  name: string;
+  ownerId: number | null;
+  ownerName: string | null;
+  ownerEmail: string | null;
+}
+
+/**
+ * Every team in the league, claimed or not.
+ *
+ * Teams are created unowned and a manager takes one by redeeming an invite, so
+ * "how many seats are left" is a question about this table rather than about
+ * the member list. A commissioner screen needs both sides of it: who to name
+ * an invite at, and whether there is anything left to hand out.
+ */
+export async function teamsInLeague(db: Queryable, leagueId: number): Promise<LeagueTeam[]> {
+  const { rows } = await db.query<{
+    id: string; name: string;
+    owner_id: string | null; owner_name: string | null; owner_email: string | null;
+  }>(
+    `SELECT t.id, t.name, t.owner_id, u.display_name AS owner_name, u.email AS owner_email
+       FROM fantasy_team t
+       LEFT JOIN app_user u ON u.id = t.owner_id
+      WHERE t.league_id = $1
+      ORDER BY t.id`,
+    [leagueId],
+  );
+  return rows.map((r) => ({
+    id: Number(r.id),
+    name: r.name,
+    ownerId: r.owner_id === null ? null : Number(r.owner_id),
+    ownerName: r.owner_name,
+    ownerEmail: r.owner_email,
+  }));
+}
+
+/** What an invite says about itself, before anyone commits to redeeming it. */
+export interface InvitePreview {
+  id: number;
+  leagueId: number;
+  leagueName: string;
+  /** The address the link was issued to. Only this address can redeem it. */
+  email: string;
+  role: Role;
+  fantasyTeamName: string | null;
+  expiresAt: string;
+  expired: boolean;
+}
+
+/**
+ * Looks up an open invite by its plaintext token, without redeeming it.
+ *
+ * Redemption is a one-way door — it claims a team and burns the link — so the
+ * page that offers it has to be able to say what is on the other side first.
+ * Nothing here is a secret the holder of the token does not already have.
+ *
+ * Returns null for a token that is unknown, already used, or revoked; the three
+ * are deliberately indistinguishable to the caller, since telling them apart
+ * only helps someone guessing.
+ */
+export async function inviteByToken(
+  db: Queryable, token: string,
+): Promise<InvitePreview | null> {
+  const { rows } = await db.query<{
+    id: string; league_id: string; league_name: string; email: string; role: Role;
+    team_name: string | null; expires_at: Date; expired: boolean;
+  }>(
+    `SELECT i.id, i.league_id, l.name AS league_name, i.email, i.role,
+            t.name AS team_name, i.expires_at, i.expires_at < now() AS expired
+       FROM league_invite i
+       JOIN league l ON l.id = i.league_id
+       LEFT JOIN fantasy_team t ON t.id = i.fantasy_team_id
+      WHERE i.token_hash = $1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL`,
+    [hashToken(token)],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    leagueId: Number(row.league_id),
+    leagueName: row.league_name,
+    email: row.email,
+    role: row.role,
+    fantasyTeamName: row.team_name,
+    expiresAt: row.expires_at.toISOString(),
+    expired: row.expired,
+  };
+}
