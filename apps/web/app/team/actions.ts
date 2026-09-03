@@ -6,7 +6,7 @@ import {
   autoFillDay, setLineup, type Slot,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
-import { requireViewer } from "../../lib/session.ts";
+import { requireViewer, viewNow } from "../../lib/session.ts";
 
 export interface LineupState {
   error?: string;
@@ -33,7 +33,7 @@ export async function moveToSlot(
 
   try {
     await setLineup(db, {
-      fantasyTeamId, day, configId, settings,
+      fantasyTeamId, day, configId, settings, now: viewNow(),
       entries: [{ playerId, slot }],
     });
   } catch (error) {
@@ -58,7 +58,7 @@ export async function autoFill(
   if (fantasyTeamId === null) return { error: "You do not manage a team in this league." };
 
   const day = String(formData.get("day") ?? "");
-  const result = await autoFillDay(db, { fantasyTeamId, day, configId, settings });
+  const result = await autoFillDay(db, { fantasyTeamId, day, configId, settings, now: viewNow() });
   revalidatePath("/team");
 
   const started = result.entries.filter((e) => e.slot !== "BENCH" && e.slot !== "IR").length;

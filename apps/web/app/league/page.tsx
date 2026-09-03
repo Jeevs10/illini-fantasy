@@ -84,7 +84,11 @@ export default async function LeaguePage({
 }
 
 function Scoreline({ view, compact = false }: { view: MatchupView; compact?: boolean }) {
-  const homeLeads = view.home.total >= view.away.total;
+  // Guard the zero case: with nothing played yet, neither side leads. Plain
+  // `>=` painted every future week's home team in leader-orange.
+  const decided = view.home.total !== view.away.total;
+  const homeLeads = decided && view.home.total > view.away.total;
+  const awayLeads = decided && view.away.total > view.home.total;
   return (
     <div className="scoreline" style={compact ? { borderBottom: "1px solid var(--rule)" } : undefined}>
       <div className="side">
@@ -95,7 +99,7 @@ function Scoreline({ view, compact = false }: { view: MatchupView; compact?: boo
       <div className="vs">VS</div>
       <div className="side away">
         <div className="team">{view.away.name}</div>
-        <div className="total num" data-lead={!homeLeads}>{view.away.total.toFixed(1)}</div>
+        <div className="total num" data-lead={awayLeads}>{view.away.total.toFixed(1)}</div>
         <div className="meta">{view.away.gamesCounted} of {view.away.gamesPlayed} games count</div>
       </div>
     </div>
@@ -109,7 +113,7 @@ function Scoreline({ view, compact = false }: { view: MatchupView; compact?: boo
 function Side({ period }: { period: TeamPeriod & { name: string } }) {
   return (
     <div>
-      <h3>{period.name}</h3>
+      <h2>{period.name}</h2>
       {period.games.length === 0 ? (
         <p className="muted" style={{ fontSize: "var(--t-sm)", margin: 0 }}>
           No games started yet this week.

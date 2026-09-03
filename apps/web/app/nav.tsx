@@ -10,7 +10,7 @@ const LINKS = [
   ["/standings", "Standings"],
 ] as const;
 
-export function Nav({ name }: { name: string }) {
+export function Nav({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   return (
     <header className="masthead">
@@ -21,7 +21,7 @@ export function Nav({ name }: { name: string }) {
             <Link key={href} href={href} data-active={pathname.startsWith(href)}>{label}</Link>
           ))}
         </nav>
-        <span className="whoami">{name}</span>
+        {children}
       </div>
     </header>
   );

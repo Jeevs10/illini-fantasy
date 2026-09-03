@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { eligibleSlots, rosterOn, startableOn, type Slot } from "@illini/league";
 import { db } from "../../lib/db.ts";
-import { requireViewer, viewDate } from "../../lib/session.ts";
+import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Lineup } from "./lineup.tsx";
+import { DayStrip, label } from "./daystrip.tsx";
+import { NextLock } from "./nextlock.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,8 @@ export default async function TeamPage({
   const viewer = await requireViewer();
   const { fantasyTeamId, fantasyTeamName, settings, configId, leagueName } = viewer.membership;
   const day = viewDate(date);
+  const now = viewNow();
+  const isToday = day === viewDate();
 
   if (fantasyTeamId === null) {
     return (
@@ -24,7 +28,7 @@ export default async function TeamPage({
   }
 
   const [startable, roster] = await Promise.all([
-    startableOn(db, { fantasyTeamId, day, configId }),
+    startableOn(db, { fantasyTeamId, day, configId, now }),
     rosterOn(db, fantasyTeamId, day),
   ]);
 
@@ -34,6 +38,11 @@ export default async function TeamPage({
   for (const player of startable) eligible[player.playerId] = eligibleSlots(player.archetype);
 
   const idle = roster.filter((p) => !startable.some((s) => s.playerId === p.playerId));
+
+  // The earliest game not yet under way — the deadline the page is really about.
+  const next = startable
+    .filter((p) => !p.locked && p.tipoff !== null)
+    .sort((a, b) => a.tipoff!.localeCompare(b.tipoff!))[0];
 
   return (
     <>
@@ -46,17 +55,30 @@ export default async function TeamPage({
         </p>
       </div>
 
+      <DayStrip day={day} today={viewDate()} />
+
       <div className="panel">
         <div className="panel-head">
-          <h2>Tonight — {day}</h2>
+          <h2>{isToday ? "Tonight" : label(day)}</h2>
+          {next ? (
+            <NextLock
+              iso={next.tipoff!}
+              nowIso={now.toISOString()}
+              label={new Intl.DateTimeFormat("en-US", {
+                hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
+              }).format(new Date(next.tipoff!))}
+            />
+          ) : startable.length > 0 ? (
+            <span className="tag lock" data-missed="true">Every game has tipped off</span>
+          ) : null}
         </div>
         {startable.length === 0 ? (
           <div className="empty">
-            <h3>Nobody plays today</h3>
+            <h3>Nobody plays {isToday ? "tonight" : "that night"}</h3>
             <p>
               College schedules are uneven — most of a week&rsquo;s slate lands on
               Saturday, and a Thursday can be nearly empty for a roster of
-              major-conference players.
+              major-conference players. Try another night above.
             </p>
           </div>
         ) : (
@@ -68,11 +90,11 @@ export default async function TeamPage({
 
       <div className="panel">
         <div className="panel-head">
-          <h2>Not playing today</h2>
+          <h2>Rest of the roster</h2>
           <span className="tag">{idle.length}</span>
         </div>
         {idle.length === 0 ? (
-          <div className="empty"><p>Everyone on the roster has a game tonight.</p></div>
+          <div className="empty"><p>Everyone on the roster has a game.</p></div>
         ) : (
           <div className="scroll">
             <table>

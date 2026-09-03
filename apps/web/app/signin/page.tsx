@@ -1,9 +1,13 @@
-import { signIn } from "../../auth.ts";
+import { redirect } from "next/navigation";
+import { auth, signIn } from "../../auth.ts";
 
 export default async function SignIn({
   searchParams,
 }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
+  // Without this the layout renders the signed-in masthead above a form telling
+  // you to sign in.
+  if ((await auth())?.user) redirect("/league");
 
   return (
     <div className="narrow">

@@ -409,7 +409,7 @@ scorers, so it follows the major-conference calendar:
 ## Phase 3 — the web app
 
 ```sh
-npm run dev        # http://localhost:3000
+npm run dev        # http://localhost:3000 (or the next free port)
 ```
 
 Next.js 16 App Router in `apps/web`, importing the workspace packages

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Nav } from "./nav.tsx";
+import { SignOut } from "./signout.tsx";
 import { auth } from "../auth.ts";
 
 export const metadata: Metadata = {
@@ -21,7 +22,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body>
-        {session?.user ? <Nav name={session.user.name ?? session.user.email ?? ""} /> : null}
+        {session?.user ? (
+          <Nav>
+            <SignOut name={session.user.name ?? session.user.email ?? ""} />
+          </Nav>
+        ) : null}
         <main className="page">{children}</main>
       </body>
     </html>
