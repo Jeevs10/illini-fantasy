@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "engines": {
     "node": ">=20"
@@ -19,7 +20,9 @@
     "migrate": "tsx scripts/migrate.ts",
     "ingest": "tsx scripts/ingest.ts",
     "team-aliases": "tsx scripts/team-aliases.ts",
-    "league": "tsx scripts/league.ts"
+    "league": "tsx scripts/league.ts",
+    "dev": "npm run dev --workspace @illini/web",
+    "build": "npm run build --workspace @illini/web"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
