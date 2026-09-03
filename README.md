@@ -99,6 +99,37 @@ CBBD's 2025-26 rosters (returning players) plus the incomplete NCAA CSV (4,505
 players, 335 of 365 teams), and we poll CBBD weekly to switch over when it
 populates.
 
+## Phase 2 — player crosswalk
+
+`packages/crosswalk` resolves one source's player to another's. Four systems,
+four ID spaces, none shared: Torvik `pid`, ESPN `athlete.id`, NCAA `playerid`,
+RotoWire `ID`. Everything joins through here.
+
+Resolution runs in descending certainty and never guesses:
+
+| confidence | rule |
+|---|---|
+| `exact` | name and team both match, uniquely |
+| `strong` | unique name nationally (catches transfers), or first-initial + surname on the same team |
+| `weak` | edit distance ≤ 2, scoped to one team |
+| `none` | ambiguous or no candidate — goes to the review queue |
+
+Team-scoped fuzzy matching is safe where global matching is not: within one
+team the candidate pool is ~15 names rather than ~5,000.
+
+`npm run crosswalk` measures it against live RotoWire injuries:
+
+```
+exact   186  50.1%      matched       343  92.5%
+strong  157  42.3%      review queue   28   7.5%
+weak      0   0.0%
+none     28   7.5%      genuinely unexplained: 18 (4.9%)
+```
+
+Up from the 59% baseline in the plan (normalised name alone). Of the 28
+unmatched, 10 are in the 2026 recruiting class or transfer portal — new to the
+index rather than a matcher failure. Zero remaining team-alias failures.
+
 ## Next
 
-Phase 2: schema, ingest crons, and the player crosswalk.
+Phase 2 remainder: schema, ingest crons, idempotent re-scoring.

@@ -10,11 +10,12 @@
   },
   "scripts": {
     "typecheck": "tsc -b",
-    "test": "node --test --experimental-strip-types packages/*/src/*.test.ts",
+    "test": "tsx --test packages/*/src/*.test.ts",
     "backtest": "tsx scripts/backtest.ts",
     "budget": "tsx scripts/budget.ts",
     "pool": "tsx scripts/pool.ts",
-    "parity": "tsx scripts/parity.ts"
+    "parity": "tsx scripts/parity.ts",
+    "crosswalk": "tsx scripts/crosswalk.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
