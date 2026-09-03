@@ -409,8 +409,37 @@ scorers, so it follows the major-conference calendar:
 ## Phase 3 — the web app
 
 ```sh
-npm run dev        # http://localhost:3000 (or the next free port)
+npm run dev        # http://localhost:3000
 ```
+
+Two things that will waste your afternoon otherwise:
+
+- **`AUTH_URL` in `.env.local` pins the port.** `next dev` falls through to the
+  next free port if 3000 is taken, and the magic link is built from `AUTH_URL`,
+  not from the port actually in use — so the link lands on a dead port and
+  sign-in silently fails. Either free 3000 or move `AUTH_URL` with it.
+- **`AUTH_SECRET` is per-machine.** It lives in gitignored `.env.local`; a fresh
+  clone has to generate one:
+  `node -e 'console.log(require("crypto").randomBytes(32).toString("base64"))'`
+
+### Browsing a finished season
+
+The ingested data is February 2026, so with the real clock every game has long
+tipped off and every lineup is correctly frozen. Two env vars unpin that:
+
+```sh
+ILLINI_TODAY=2026-02-14                  # the date the app treats as today
+ILLINI_NOW=2026-02-14T18:30:00Z          # the clock the lock is measured against
+```
+
+`ILLINI_TODAY` alone keeps the real time of day, so a demo slate locks through
+the evening the way a real one does. Set both to freeze a specific moment —
+useful for screenshots, and for seeing the lineup controls at all.
+
+The lock clock has to move with the view date. It did not at first, and the
+result was an app that looked complete and was inert: every tip-off compared
+against a wall clock seven months later, so every game read as started and the
+one interactive control on the site never rendered on any date.
 
 Next.js 16 App Router in `apps/web`, importing the workspace packages
 directly — the scoring model, the league rules and the queries are the same
