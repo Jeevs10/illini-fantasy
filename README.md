@@ -142,6 +142,7 @@ order, split so a re-ingest can never touch league data:
 | `003_league` | users, leagues, fantasy teams, rosters, lineups, matchups, transactions |
 | `004_membership` | sessions, league members, invites, league-wide player ownership, tip-off times |
 | `005_game_day` | re-dates games onto the day they were played |
+| `006_draft` | the draft, its materialised board, and each manager's queue |
 
 **Scores are versioned by the config that produced them.** `scoring_config` is
 immutable and keyed by a digest of its contents, and `player_game_score` is keyed
@@ -466,6 +467,7 @@ emailed — development should not be blocked on a verified sending domain.
 |---|---|
 | `/league` | the week's matchup, scored live from stored player scores; games past the cap dimmed, not hidden |
 | `/team` | tonight's startable players, with per-game locks and slot validation |
+| `/draft` | the draft room — clock, best available, your queue, the board |
 | `/players` | the pool, ranked by season Player-Score, with ownership |
 | `/players/:id` | the game log, each night broken into its six blocks |
 | `/standings` | settled weeks only |
@@ -539,12 +541,128 @@ somebody's invite for them.
 Two additions to the league package back it: `teamsInLeague` reports both sides
 of a seat, and `inviteByToken` reads an invite without redeeming it.
 
+## Phase 4 — the draft
+
+Phase 2 filled rosters with a script: rank the season board, deal it out in
+snake order, insert. That is a seeding tool. A draft is a sequence of decisions
+made by different people at different times, and what has to be durable is the
+sequence — who was on the clock, what they took, and what the clock did when
+nobody was there.
+
+```sh
+npm run league -- draft new 2 12 90      # 12 rounds, 90s a pick; draws the order
+npm run league -- draft start 2
+npm run league -- draft board 2
+npm run league -- draft pick 2 <teamId> <playerId>
+npm run league -- draft queue 2 <teamId> 4021 -3877   # a bare id queues, -id removes
+npm run league -- draft pause 2 | run 2
+```
+
+`/draft` is the same engine with a clock on it: the board, best available, your
+queue, and the commissioner's start/pause.
+
+### The board is rows, not arithmetic
+
+Every pick exists as a row the moment the draft is created — the team that owns
+it, and no player yet. "Who picks 47th" is then a fact to read rather than a
+snake calculation repeated in the engine, the auto-picker and the screen, three
+places that would each have to agree about the same off-by-one.
+
+The order is drawn once, stored, and cannot be redrawn. `draft_pick` rows for
+round one *are* the order, so there is no second table to disagree with them.
+
+### The clock is settled on read
+
+There is no daemon in this system, and a draft with a 90-second clock has to
+advance whether or not anyone is watching. So every path that looks at the draft
+first makes the picks that were already due, at the times they were due.
+
+Two properties fall out of that:
+
+- **The board is the same whether one person refreshed all night or nobody
+  did.** Each deadline advances from the previous deadline, never from the
+  moment somebody finally looked.
+- **It is testable**, because "now" is an argument.
+
+That second property stopped being theoretical during verification. The local
+demo was seeded, then left for the best part of three hours before the room was
+opened. One page load reconstructed all 116 overdue picks:
+
+```
+pick   4   17:42:41  auto
+pick   5   17:44:11  auto
+pick   6   17:45:41  auto
+ …
+pick 120   20:36:41  auto      exactly 90s apart, start to finish
+```
+
+An open room polls every five seconds, so in practice a live draft is driven by
+whoever is watching it — and costs nothing when nobody is.
+
+### A pick is a roster claim
+
+`makePick` claims through `claimPlayer`, the same function a waiver claim uses,
+so a drafted player is owned by exactly the unique index that already enforces
+one player to one team per league. The draft does not get its own notion of
+ownership to drift from the league's.
+
+Everything serialises on the draft row. Picking, expiring the clock, starting
+and pausing all take `SELECT … FOR UPDATE` on it first, so two managers who
+click at the same instant queue up in Postgres rather than both being told they
+are on the clock. A pick submitted a second after the buzzer loses to the
+autopick the buzzer already made, and is told so.
+
+### What the clock takes when you are not there
+
+In order: your queue, then the best available player who fills a starting slot
+you cannot yet fill, then the best available player.
+
+The middle rule is the one that matters. A board sorted by season total is
+guards at the top, and a team that takes the top of it twelve times finishes the
+draft unable to field a centre — legal at every individual pick and broken as a
+roster. `unfilledSlots` answers the question by running `autoFill`, so the
+auto-picker's idea of a complete team is the same one the lineup screen enforces
+on a Tuesday night.
+
+FLEX is excluded from that: it takes anyone, so an unfilled FLEX is never a
+reason to pass over the best player on the board. Only the slots that actually
+exclude somebody can steer a pick.
+
+### Run end to end
+
+A fresh ten-team league against the real ingested pool, 12 rounds, 120 picks:
+
+```
+human pick   1. JT Toppin
+out of turn  refused: team 19 is not on the clock — Team 7 is
+double pick  refused: player 2079 is already drafted by Team 9
+clock        1 autopick — Cameron Boozer (from the queue)
+auto-draft   118 picks, status complete
+legal        10/10 rosters field a full lineup
+exclusive    0 players owned twice
+```
+
+Every one of the ten rosters fills all seven starting slots, off a board whose
+top is guard-heavy — which is the whole point of the slot-aware autopick.
+
+### Two things worth remembering
+
+- **The draft runs on the real clock, not `ILLINI_NOW`.** The date pin exists so
+  a finished season can be browsed with the lineup lock behaving as it did that
+  night. A draft is the opposite kind of event: it is happening, now. Pinning it
+  would mean no deadline ever passes and no autopick is ever made — the same
+  inert-looking app the pin was invented to avoid.
+- **A draft deals out an empty league.** `createDraft` refuses a league that
+  already has rostered players, and `/draft` says so before offering the button
+  rather than after somebody commits. Production league 1 still holds the 120
+  players the Phase 2 script seeded, so its draft has to be set up on a league
+  that has none.
+
 ## Next
 
-Phase 4, the draft room: live snake draft, clock, queue, auto-pick, and a
-best-available board fed by the existing rankings. It is the one hard deadline —
-the season tips in November and there is no second chance at a draft.
+Waivers. `roster_slot` and `transaction` already model the claim/release
+lifecycle and `claimPlayer` / `releasePlayer` enforce it, but nothing yet
+schedules or resolves a FAAB bid.
 
-After that, waivers — the schema models the claim/release lifecycle and
-`claimPlayer` / `releasePlayer` enforce it, but nothing yet schedules or
-resolves a FAAB bid.
+After that, the rest of the design backlog — drawing the games cap, and the
+persisted critique snapshot in `.impeccable/critique/`.

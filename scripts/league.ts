@@ -5,7 +5,11 @@
  *   npm run league -- invite 1 manager@example.com [teamId]
  *   npm run league -- accept <token> manager@example.com "Manager Name"
  *   npm run league -- members 1
- *   npm run league -- draft 1 2026          snake draft by season Player-Score
+ *   npm run league -- draft new 1 [rounds] [clockSeconds] [order…]
+ *   npm run league -- draft start 1 | pause 1 | run 1
+ *   npm run league -- draft board 1
+ *   npm run league -- draft pick 1 <teamId> <playerId>
+ *   npm run league -- draft queue 1 <teamId> [+|-]<playerId>…
  *   npm run league -- roster 3
  *   npm run league -- lineups 1 20260214    auto-fill tonight, locks respected
  *   npm run league -- lineups 1 20260214 2026-02-14T16:00:00Z    replay as of a time
@@ -15,8 +19,9 @@
 import { connect, insertMany, upsertScoringConfig } from "@illini/db";
 import { GAME_CONFIG } from "@illini/scoring";
 import {
-  DEFAULT_SETTINGS, autoFillLeague, generateSchedule, inviteToLeague, acceptInvite,
-  members, rosterOn, settleWeek, standings,
+  DEFAULT_SETTINGS, acceptInvite, advanceExpired, autoDraft, autoFillLeague, createDraft,
+  dequeue, draftQueue, draftRoom, enqueue, generateSchedule, inviteToLeague, makePick,
+  members, pauseDraft, rosterOn, settleWeek, standings, startDraft,
 } from "@illini/league";
 import { loadEnv } from "./env.ts";
 
@@ -84,41 +89,82 @@ try {
     }
 
   } else if (command === "draft") {
-    const [leagueArg, seasonArg] = args;
+    // Everything the draft room does, from a terminal — the commissioner's
+    // fallback when the room is the thing that is broken.
+    const [sub, leagueArg, ...rest] = args;
     const leagueId = Number(leagueArg);
-    const season = Number(seasonArg);
-    const { rows: teams } = await db.query<{ id: string }>(
-      "SELECT id FROM fantasy_team WHERE league_id = $1 ORDER BY id", [leagueId]);
-    const roster = DEFAULT_SETTINGS.starters.reduce((a, s) => a + s.count, 0) + DEFAULT_SETTINGS.bench;
+    const { rows: [row] } = await db.query<{ commissioner_id: string }>(
+      "SELECT commissioner_id FROM league WHERE id = $1", [leagueId]);
+    const by = Number(row?.commissioner_id);
 
-    // Rank by season total under the league's config — the best available board.
-    const { rows: pool } = await db.query<{ player_id: string }>(
-      `SELECT s.player_id, sum(s.score) total
-         FROM player_game_score s
-         JOIN player_game_stat st ON st.player_id = s.player_id AND st.played_on = s.played_on
-        WHERE st.season = $1
-        GROUP BY s.player_id
-        ORDER BY total DESC
-        LIMIT $2`,
-      [season, teams.length * roster]);
+    if (sub === "new") {
+      const [roundsArg, clockArg, ...orderArgs] = rest;
+      const draft = await createDraft(db, {
+        leagueId, by,
+        rounds: roundsArg ? Number(roundsArg) : undefined,
+        pickSeconds: clockArg ? Number(clockArg) : undefined,
+        order: orderArgs.length > 0 ? orderArgs.map(Number) : undefined,
+      });
+      const room = (await draftRoom(db, { leagueId }))!;
+      console.log(`draft ${draft.id} | ${draft.rounds} rounds | ${draft.totalPicks} picks | ` +
+        `${draft.pickSeconds}s clock | opens ${draft.opensOn}`);
+      console.log(`order  ${room.order.map((o) => o.teamName).join(" → ")}`);
 
-    // Snake order, so the first pick does not compound every round.
-    const picks: unknown[][] = [];
-    let i = 0;
-    for (let round = 0; round < roster; round += 1) {
-      const order = round % 2 === 0 ? teams : [...teams].reverse();
-      for (const team of order) {
-        const player = pool[i]; i += 1;
-        if (!player) break;
-        picks.push([team.id, leagueId, player.player_id, `${season - 1}-11-01`, "draft"]);
+    } else if (sub === "start") {
+      const draft = await startDraft(db, { leagueId, by });
+      console.log(`draft is live | pick ${draft.onTheClock} | deadline ${draft.deadline ?? "none"}`);
+
+    } else if (sub === "pause") {
+      const draft = await pauseDraft(db, { leagueId, by });
+      console.log(`draft ${draft.status} at pick ${draft.onTheClock}`);
+
+    } else if (sub === "run") {
+      const made = await autoDraft(db, { leagueId });
+      console.log(`auto-picked ${made} selections`);
+
+    } else if (sub === "pick") {
+      const [teamArg, playerArg] = rest;
+      const pick = await makePick(db, {
+        leagueId, fantasyTeamId: Number(teamArg), playerId: Number(playerArg), byUserId: by });
+      console.log(`pick ${pick.overall} (round ${pick.round}.${pick.inRound}) ${pick.playerName}`);
+
+    } else if (sub === "queue") {
+      const [teamArg, ...players] = rest;
+      const fantasyTeamId = Number(teamArg);
+      // A bare id queues; a leading minus removes. The queue is a list a
+      // manager edits, not a form they submit.
+      for (const token of players) {
+        const remove = token.startsWith("-");
+        const playerId = Number(token.replace(/^[+-]/, ""));
+        await (remove ? dequeue : enqueue)(db, { leagueId, fantasyTeamId, playerId });
       }
+      for (const q of await draftQueue(db, { leagueId, fantasyTeamId })) {
+        console.log(`${String(q.rank).padStart(3)}  ${q.name.padEnd(24)}` +
+          `${(q.archetype ?? "—").padEnd(8)}${q.averageScore.toFixed(1).padStart(6)}` +
+          `  ${q.available ? "" : "TAKEN"}`);
+      }
+
+    } else if (sub === "board" || sub === undefined) {
+      await advanceExpired(db, { leagueId });
+      const room = await draftRoom(db, { leagueId });
+      if (!room) { console.log("no draft for that league"); }
+      else {
+        console.log(`${room.draft.status} | ${room.picksMade}/${room.draft.totalPicks} picks | ` +
+          (room.onTheClock
+            ? `on the clock: ${room.onTheClock.teamName} (pick ${room.onTheClock.overall})` +
+              (room.secondsLeft === null ? "" : ` — ${room.secondsLeft}s left`)
+            : "board complete"));
+        for (const p of room.board.filter((b) => b.playerId !== null)) {
+          console.log(`${String(p.round).padStart(3)}.${String(p.inRound).padEnd(3)}` +
+            `${p.teamName.padEnd(12)}${(p.playerName ?? "").padEnd(24)}` +
+            `${(p.archetype ?? "—").padEnd(8)}${p.auto ? "auto" : ""}`);
+        }
+      }
+
+    } else {
+      console.error("usage: league draft <new|start|pause|run|pick|queue|board> <leagueId> …");
+      process.exit(1);
     }
-    const n = await insertMany(db, {
-      table: "roster_slot",
-      columns: ["fantasy_team_id", "league_id", "player_id", "acquired_on", "acquired_via"],
-      rows: picks,
-    });
-    console.log(`drafted ${n} players across ${teams.length} teams (${roster} per roster)`);
 
   } else if (command === "roster") {
     const players = await rosterOn(db, Number(args[0]), args[1] ? iso(args[1]) : today());

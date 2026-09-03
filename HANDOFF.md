@@ -1,6 +1,6 @@
-# Handoff — Phase 3, plus the commissioner surface
+# Handoff — Phase 4, the draft
 
-Phases 1 through 3 are done and verified against the live Neon branch. The
+Phases 1 through 4 are done and verified against the live Neon branch. The
 README is the reference for how the system works; this file is only what the
 next person needs that the README does not say.
 
@@ -8,11 +8,12 @@ next person needs that the README does not say.
 
 | | |
 |---|---|
-| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1, 2 and 3 |
-| Tests | 69 passing (`npm test`, needs local Postgres — see README) |
+| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 4 |
+| Tests | 84 passing (`npm test`, needs local Postgres — see README) |
 | Typecheck | clean (`npm run typecheck`) |
 | Build | clean (`npm run build`) |
 | Production data | Neon `floral-shape-81709658`, 5 ingested game days, Feb 10–14 2026 |
+| Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) |
 
 `npm test` and the web app are separate: the root tsconfig excludes `apps/**`,
 so `npm run typecheck` covers the packages and `npx tsc --noEmit` inside
@@ -37,27 +38,55 @@ and the link does not.
 
 ## Where it stopped
 
-Done: membership and invites, league-wide exclusive player ownership, per-game
-tip-off locking, five manager screens (matchup, my team, player pool, player
-card, standings), and the commissioner surface — `/commissioner` and
-`/join/:token`, which together take invites off the CLI.
+Done through Phase 4: the draft. A materialised snake board, a clock that is
+settled on read rather than by a daemon, per-manager queues, a slot-aware
+autopick, and `/draft` — the room, with the commissioner's start and pause.
+Picks claim through `claimPlayer`, so the draft shares the league's ownership
+index rather than keeping its own.
 
 Not done, in the order I would take them:
 
-1. **Draft room (Phase 4).** The hard deadline — the season tips in November and
-   a draft has no second chance. Nothing exists yet.
-2. **Waivers.** `roster_slot` and `transaction` model the claim/release
+1. **Waivers.** `roster_slot` and `transaction` model the claim/release
    lifecycle and `claimPlayer` / `releasePlayer` enforce it, but nothing
-   schedules or resolves a FAAB bid.
+   schedules or resolves a FAAB bid. This is now the largest gap.
+2. **Nobody can see a draft they are not the first league of.** `who()` takes
+   `memberships[0]`, so a user in two leagues only ever sees the older one.
+   That was harmless while everyone had one league; it is why production league
+   2 is invisible in the app (see below). A league switcher is the fix.
 3. **Draw the games cap** and the rest of the design backlog — see
    `.impeccable/critique/` for the persisted snapshot, which `/polish` reads
-   automatically. Note that the critique predates `/commissioner`, so its
-   heuristic scores do not cover it.
+   automatically. Note that the critique predates `/commissioner` and `/draft`,
+   so its heuristic scores do not cover either.
 
-Smaller things the commissioner surface leaves open: there is no way to rename a
-team or add one from the app, no way to change a member's role, and no resend —
-re-inviting the same address is the resend, which is correct but is not labelled
-as such anywhere.
+Smaller gaps. The draft: no way to edit the order once drawn, no pick trading,
+and snake or nothing — no keeper or auction format. The commissioner surface: no
+way to rename or add a team from the app, no way to change a member's role, and
+no resend — re-inviting an address is the resend, which is correct but is
+labelled nowhere.
+
+## Seeing the draft room
+
+Production league 1 still holds the 120 players the Phase 2 script seeded, and
+`createDraft` refuses a league with rosters — a draft deals out an empty league.
+So `/draft` on league 1 shows the refusal, not the room. League 2, `Draft
+Night`, is a real drafted league and is what the Phase 4 numbers in the README
+came from, but the app never surfaces it because of the `memberships[0]` problem
+above.
+
+Two ways forward, and the choice belongs to whoever owns the league:
+
+```sh
+# a) treat league 1's seeded rosters as the placeholder they are, and draft it
+psql "$DATABASE_URL" -c "DELETE FROM roster_slot WHERE league_id = 1"
+npm run league -- draft new 1 12 90
+
+# b) leave league 1 alone and give league 2 its own commissioner to sign in as
+npm run league -- invite 2 you+draft@example.com
+```
+
+Option (a) invalidates the settled week-15 matchups on league 1, which were
+scored off those seeded rosters. They are demo numbers, but they are the demo
+numbers the Phase 2 and 3 sections of the README quote.
 
 ## Things that will mislead you
 
@@ -79,6 +108,14 @@ as such anywhere.
 - **A re-ingest must never touch league data.** That is why the migrations are
   split at `001_sources` / `003_league`, and why `player_game_stat` is only ever
   written by ingest and `player_game_score` only by scoring.
+- **The draft does not use `ILLINI_NOW`, and must not.** Every other clock in
+  the app is the pinned one, so that a finished season browses correctly. The
+  draft is a live event: pinning it means no deadline passes and no autopick is
+  ever made. If you add a draft screen, take `new Date()` deliberately.
+- **Nothing runs the draft clock but a reader.** There is no worker. An open
+  room polls every five seconds; a closed one costs nothing, and the next reader
+  makes every pick that was due at the time it was due. If picks seem not to be
+  happening, the question is who last read the draft, not what crashed.
 - **Three timezone bugs have been fixed in this codebase and they keep coming
   back in new forms:** the CBBD query window, the stored game date, and the
   browser-vs-server tip-off render. If something is off by a day or by hours,

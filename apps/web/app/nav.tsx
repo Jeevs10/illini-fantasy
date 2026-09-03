@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   ["/league", "Matchup"],
   ["/team", "My Team"],
+  ["/draft", "Draft"],
   ["/players", "Players"],
   ["/standings", "Standings"],
 ] as const;

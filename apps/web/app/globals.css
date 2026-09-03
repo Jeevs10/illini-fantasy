@@ -545,3 +545,111 @@ button.linkish { white-space: nowrap; }
 @media (max-width: 520px) {
   .joinform { flex-direction: column; align-items: stretch; }
 }
+
+/* ---- the draft room -------------------------------------------------- */
+
+/* The clock is the loudest thing on the page, and deliberately: everything
+   else on the screen is a list, and this is the only part with a deadline. */
+.clockbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-5);
+  margin-bottom: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--muted);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.clockbar > div { min-width: 0; flex: 1; }
+.clock-label {
+  display: block;
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-weight: 600;
+  color: var(--faint);
+}
+.clock-team {
+  display: block;
+  font-size: var(--t-xl);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clock-sub { display: block; font-size: var(--t-sm); color: var(--muted); margin-top: 1px; }
+
+.countdown {
+  font-size: var(--t-2xl);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.clockbar[data-state="live"] { border-left-color: var(--ok); }
+.clockbar[data-state="paused"] { border-left-color: var(--warn); }
+.clockbar[data-state="complete"] { border-left-color: var(--ok); }
+/* Your turn, and running out. The escalation is colour plus position, never
+   colour alone — the label above already says which state this is. */
+.clockbar[data-yours="true"] {
+  border-left-color: var(--accent);
+  background: var(--accent-wash);
+}
+.clockbar[data-yours="true"] .countdown { color: var(--accent-strong); }
+.clockbar[data-urgent="true"] { border-left-color: var(--crit); }
+.clockbar[data-urgent="true"] .countdown { color: var(--crit); }
+
+.draft-controls { margin-bottom: var(--s-5); }
+.draft-controls .faint { font-size: var(--t-sm); }
+
+/* Pool and queue sit side by side on a desk and stack on a phone. The pool is
+   wider because it is the one being read; the queue is being edited. */
+.draftgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: var(--s-5);
+  align-items: start;
+}
+@media (max-width: 900px) { .draftgrid { grid-template-columns: 1fr; } }
+
+.rowactions { display: flex; gap: var(--s-2); }
+.rowactions button { padding-inline: var(--s-3); }
+
+.queue { list-style: none; margin: 0; padding: 0; }
+.queue li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-5);
+  border-bottom: 1px solid var(--rule);
+}
+.queue li:last-child { border-bottom: 0; }
+.queue li[data-taken="true"] .queue-who { color: var(--faint); }
+.queue li[data-taken="true"] .player-link { font-weight: 400; text-decoration: line-through; }
+.queue-rank { color: var(--faint); font-size: var(--t-sm); min-width: 2ch; }
+.queue-who { flex: 1; min-width: 0; font-size: var(--t-sm); }
+.queue-who .player-link { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-actions { display: flex; gap: var(--s-1); }
+.queue-actions button { min-width: 2.75rem; justify-content: center; padding-inline: var(--s-2); }
+
+/* The board is wide by nature — ten teams across — so it scrolls rather than
+   compressing names into two characters. */
+table.board { min-width: max-content; font-size: var(--t-xs); }
+table.board thead th { padding-inline: var(--s-3); }
+table.board td { vertical-align: top; padding: var(--s-2) var(--s-3); min-width: 9.5rem; }
+table.board tbody tr:hover { background: transparent; }
+.board-round { width: 2.5rem; color: var(--faint); text-align: center; }
+table.board tbody th.board-round { border-bottom: 1px solid var(--rule); font-weight: 500; }
+.board-num { display: block; font-size: var(--t-xs); color: var(--faint); }
+.board td[data-mine="true"] { background: var(--accent-wash); }
+.board th[data-mine="true"] { color: var(--accent-strong); }
+.board td[data-current="true"] {
+  background: var(--ok-bg);
+  box-shadow: inset 0 0 0 2px var(--ok);
+}
+.board-clock { font-weight: 700; color: var(--ok); }
+.board td .player-link { font-size: var(--t-sm); }

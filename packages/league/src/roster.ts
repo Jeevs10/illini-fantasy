@@ -1,4 +1,5 @@
-import type { Db } from "@illini/db";
+import type { Archetype } from "@illini/scoring";
+import type { Queryable } from "./membership.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
 
 export type Acquisition = "draft" | "waiver" | "free_agent" | "trade";
@@ -39,7 +40,7 @@ export function rosterLimit(settings: LeagueSettings = DEFAULT_SETTINGS): number
  * scored for whom in January.
  */
 export async function rosterOn(
-  db: Db, fantasyTeamId: number, on: string,
+  db: Queryable, fantasyTeamId: number, on: string,
 ): Promise<RosteredPlayer[]> {
   const { rows } = await db.query<{
     player_id: string; name: string; team_name: string | null; role: string | null;
@@ -76,9 +77,14 @@ export async function rosterOn(
  * this check alone — the read here exists to name the other owner in the error,
  * not to prevent the race. Two managers claiming one player at the same instant
  * is exactly the waiver case, and the loser must lose in the database.
+ *
+ * Takes any queryable rather than the pool, so a caller already inside a
+ * transaction — a draft pick holds a lock on the draft row while it claims —
+ * runs the claim on the same connection instead of racing itself from a second
+ * one.
  */
 export async function claimPlayer(
-  db: Db,
+  db: Queryable,
   { fantasyTeamId, playerId, on, via = "free_agent", settings = DEFAULT_SETTINGS }: {
     fantasyTeamId: number; playerId: number; on: string;
     via?: Acquisition; settings?: LeagueSettings;
@@ -129,7 +135,7 @@ export async function claimPlayer(
  * to the team that started them.
  */
 export async function releasePlayer(
-  db: Db, { fantasyTeamId, playerId, on }: {
+  db: Queryable, { fantasyTeamId, playerId, on }: {
     fantasyTeamId: number; playerId: number; on: string;
   },
 ): Promise<boolean> {
@@ -154,6 +160,8 @@ export interface PoolPlayer {
   teamName: string | null;
   conference: string | null;
   role: string | null;
+  /** What the scoring model most recently called him — the slot eligibility. */
+  archetype: Archetype | null;
   games: number;
   totalScore: number;
   averageScore: number;
@@ -167,7 +175,7 @@ export interface PoolPlayer {
  * is ~5,000 rows and the draft board reads it on every pick.
  */
 export async function playerPool(
-  db: Db,
+  db: Queryable,
   { leagueId, season, configId, limit = 200, offset = 0, availableOnly = false, search }: {
     leagueId: number; season: number; configId: number;
     limit?: number; offset?: number; availableOnly?: boolean; search?: string;
@@ -175,7 +183,8 @@ export async function playerPool(
 ): Promise<PoolPlayer[]> {
   const { rows } = await db.query<{
     player_id: string; name: string; team_name: string | null; conference: string | null;
-    role: string | null; games: string; total: number; owned_by: string | null;
+    role: string | null; archetype: Archetype | null; games: string; total: number;
+    owned_by: string | null;
   }>(
     `WITH owned AS (
        SELECT r.player_id, t.name
@@ -184,7 +193,8 @@ export async function playerPool(
      ),
      totals AS (
        SELECT s.player_id, count(*) AS games, sum(s.score) AS total,
-              max(st.role) FILTER (WHERE st.role IS NOT NULL) AS role
+              max(st.role) FILTER (WHERE st.role IS NOT NULL) AS role,
+              (array_agg(s.archetype ORDER BY s.played_on DESC))[1] AS archetype
          FROM player_game_score s
          JOIN player_game_stat st
            ON st.player_id = s.player_id AND st.played_on = s.played_on
@@ -192,7 +202,8 @@ export async function playerPool(
         GROUP BY s.player_id
      )
      SELECT p.id AS player_id, p.name, t.name AS team_name, t.conference,
-            totals.role, totals.games, totals.total, owned.name AS owned_by
+            totals.role, totals.archetype, totals.games, totals.total,
+            owned.name AS owned_by
        FROM totals
        JOIN player p ON p.id = totals.player_id
        LEFT JOIN team t ON t.id = p.team_id
@@ -211,6 +222,7 @@ export async function playerPool(
     teamName: r.team_name,
     conference: r.conference,
     role: r.role,
+    archetype: r.archetype,
     games: Number(r.games),
     totalScore: Number(r.total),
     averageScore: Number(r.total) / Math.max(1, Number(r.games)),
