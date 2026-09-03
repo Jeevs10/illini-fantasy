@@ -168,7 +168,29 @@ npm test
 
 The db tests create and drop their own `illini_test` database.
 
+### Neon
+
+Production is a Neon project (`floral-shape-81709658`, branch `production`),
+linked via `neon link`. Credentials live in `.env.local`, which `neon link`
+writes and keeps current; `.neon` and `.env.local` are both gitignored.
+
+```sh
+npm run migrate     # applies pending migrations, idempotent
+```
+
+Migrations use `DATABASE_URL_UNPOOLED` when present — Neon's pooler multiplexes
+sessions and DDL wants a dedicated connection.
+
+Two things worth knowing if you touch the connection code:
+
+- `neon link` writes **quoted** values into `.env.local`. Shell `source` strips
+  quotes, so a hand-rolled parser looks fine until Node tries to connect to a
+  host named `base`. Use `scripts/env.ts`.
+- The Neon URL carries `sslmode=require`, which `pg` currently treats as
+  `verify-full` but will downgrade to weaker libpq semantics in v9. `connect()`
+  pins `verify-full` explicitly so a dependency bump cannot quietly loosen TLS.
+
 ## Next
 
 Ingest crons: nightly Torvik + CBBD pull, crosswalk resolution, scoring, matchup
-settlement. Needs a `DATABASE_URL` — Neon for production.
+settlement.

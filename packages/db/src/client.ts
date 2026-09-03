@@ -11,10 +11,18 @@ export type Db = pg.Pool;
 
 export function connect(url = process.env.DATABASE_URL): Db {
   if (!url) throw new Error("DATABASE_URL is not set");
-  // Neon terminates TLS at the pooler and issues its own chain; local Docker
-  // has no TLS at all. Only demand verification for a real remote host.
+
+  // Local Docker has no TLS; anything remote must verify.
   const local = /@(localhost|127\.0\.0\.1)/.test(url);
-  return new pg.Pool({ connectionString: url, ...(local ? {} : { ssl: { rejectUnauthorized: true } }) });
+  if (local) return new pg.Pool({ connectionString: url });
+
+  // Neon's URL carries `sslmode=require`, which pg currently treats as
+  // verify-full but will downgrade to libpq semantics in pg v9 — weaker, and
+  // silently so. Pin verify-full explicitly so the behaviour cannot change
+  // underneath us on a dependency bump.
+  const parsed = new URL(url);
+  parsed.searchParams.set("sslmode", "verify-full");
+  return new pg.Pool({ connectionString: parsed.toString() });
 }
 
 /** Applies any migration not yet recorded, in filename order, each in a transaction. */

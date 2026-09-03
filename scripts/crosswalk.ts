@@ -6,14 +6,12 @@
  * The index is built from CBBD's 2025-26 rosters, which is the largest source
  * with real players (5,643 across 365 teams) — 2026-27 is still empty.
  */
-import { readFileSync } from "node:fs";
 import { CbbdClient } from "@illini/sources";
 import { buildIndex, resolveAll, summarise, normaliseTeam, canonicaliseName, type SourceRecord } from "@illini/crosswalk";
+import { loadEnv } from "./env.ts";
 
-for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-  const [k, ...rest] = line.split("=");
-  if (k && rest.length) process.env[k.trim()] ??= rest.join("=").trim();
-}
+loadEnv();
+
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";

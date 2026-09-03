@@ -2,13 +2,11 @@
  * Reports remaining CBBD quota and projects the plan's usage against it.
  * Spends one call (`/conferences`, the smallest payload) to read the header.
  */
-import { readFileSync } from "node:fs";
 import { CbbdClient } from "@illini/sources";
+import { loadEnv } from "./env.ts";
 
-for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-  const [k, ...rest] = line.split("=");
-  if (k && rest.length) process.env[k.trim()] ??= rest.join("=").trim();
-}
+loadEnv();
+
 
 const FREE_TIER_MONTHLY = 1000;
 

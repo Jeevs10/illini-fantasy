@@ -6,11 +6,10 @@
  */
 import { readFileSync } from "node:fs";
 import { CbbdClient, parseCsvRow } from "@illini/sources";
+import { loadEnv } from "./env.ts";
 
-for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-  const [k, ...rest] = line.split("=");
-  if (k && rest.length) process.env[k.trim()] ??= rest.join("=").trim();
-}
+loadEnv();
+
 
 const client = new CbbdClient();
 const median = (xs: number[]): number => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
