@@ -230,6 +230,41 @@ team silently misattributes every player on it. Currently **0 of 365 unmatched**
   "St. Thomas" into "state thomas". Aliases also have to converge: a single pass
   left "LIU" as "long island university" next to CBBD's "long island".
 
+## Phase 2 — league play
+
+```sh
+npm run league -- create 2026 "Illini Fantasy" 10
+npm run league -- draft 1 2026            # snake draft off the season board
+npm run league -- lineups 1 20260214      # auto-fill and lock a day
+npm run league -- settle 1 15
+npm run league -- standings 1
+```
+
+Run end to end against real ingested data — 10 teams, 120 drafted players,
+week 15 settled:
+
+```
+week 15    698.2 - 674.8    (9/20 vs 9/18 games)  home
+week 15    652.5 - 692.5    (9/19 vs 9/17 games)  away
+week 15    681.2 - 681.6    (9/19 vs 9/20 games)  away
+```
+
+**The games cap keeps the best games, not the earliest.** College schedules are
+uneven — a team started 20 games that week and another 13 — so without a cap the
+matchup is decided by whose players happened to draw a heavier slate. Counting
+chronologically until the cap is hit would punish a manager for the order the
+schedule fell in, which is the same schedule luck the cap exists to remove.
+
+Roster slots (`2 G · 2 F · 1 C · 2 FLEX`) derive eligibility from the archetype
+the scoring model already assigns, so eligibility and scoring cannot disagree
+about what a player is. `autoFill` fills the scarce slots first: the only
+eligible centre starts at C even when six guards outscore them.
+
+Settlement is re-runnable. Totals are recomputed from stored scores rather than
+accumulated, so a Torvik revision flows through to the standings on the next run
+instead of needing a manual fix.
+
 ## Next
 
-Matchup settlement and the weekly cron, then the web app.
+The web app: player pool, player card with the six-block breakdown, matchup
+view, draft room.
