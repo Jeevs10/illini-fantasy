@@ -33,17 +33,21 @@
  *   npm run league -- lineups 1 20260214 2026-02-14T16:00:00Z    replay as of a time
  *   npm run league -- settle 1 1
  *   npm run league -- standings 1
+ *   npm run league -- bracket 1    draws the playoff bracket from the current standings
+ *   npm run league -- playoffs 1 [2026-03-14T09:00:00Z]    settle and print the bracket
+ *   npm run league -- picture 1    who is clinched, alive, or eliminated
  */
 import { connect, insertMany, upsertScoringConfig } from "@illini/db";
 import { GAME_CONFIG } from "@illini/scoring";
 import {
-  DEFAULT_SETTINGS, SETTING_FIELDS, STARTER_SLOTS, SettingsRefusedError, acceptInvite,
-  accountByUsername, addFreeAgent, advanceExpired, autoDraft, autoFillLeague, cancelTrade,
-  claimsFor, createDraft, dequeue, draftQueue, draftRoom, dropPlayer, enqueue, generateSchedule,
-  inviteToLeague, leagueSettings, listTrades, makePick, members, pauseDraft, proposeTrade,
-  registerAccount, respondToTrade, rosterOn, setPassword, settingLabel, settingsContext,
-  settleTrades, settleWaivers, settleWeek, standings, startDraft, submitClaim, updateSettings,
-  upsertUser, vetoTrade, waiverState, type LeagueSettings, type Slot,
+  BracketExistsError, BracketRefusedError, DEFAULT_SETTINGS, SETTING_FIELDS, STARTER_SLOTS,
+  SettingsRefusedError, acceptInvite, accountByUsername, addFreeAgent, advanceExpired, autoDraft,
+  autoFillLeague, bracketView, cancelTrade, claimsFor, createBracket, createDraft, dequeue,
+  draftQueue, draftRoom, dropPlayer, enqueue, generateSchedule, inviteToLeague, leagueSettings,
+  listTrades, makePick, members, pauseDraft, playoffPicture, proposeTrade, registerAccount,
+  respondToTrade, rosterOn, setPassword, settingLabel, settingsContext, settleTrades,
+  settleWaivers, settleWeek, standings, startDraft, submitClaim, updateSettings, upsertUser,
+  vetoTrade, waiverState, type LeagueSettings, type Slot,
 } from "@illini/league";
 import { loadEnv } from "./env.ts";
 
@@ -158,6 +162,10 @@ try {
         console.log(`${field.key.padEnd(17)}${String(settings[field.key]).padStart(4)}  ${field.unit}`);
       }
       console.log(`tradeDeadline    ${settings.tradeDeadline ?? "none"}`);
+      console.log(`thirdPlace       ${settings.thirdPlace ? "on" : "off"}`);
+      console.log(`consolation      ${settings.consolation ? "on" : "off"}`);
+      console.log(`reseed           ${settings.reseed ? "on" : "off"}`);
+      console.log(`playoffTiebreak  ${settings.playoffTiebreak}`);
       console.log(`\n${context.settledWeeks} settled week${context.settledWeeks === 1 ? "" : "s"}` +
         ` | largest roster ${context.largestRoster?.size ?? 0}` +
         ` | most spent $${context.mostSpent?.spent ?? 0}`);
@@ -176,10 +184,16 @@ try {
           });
         } else if (key === "tradeDeadline") {
           patch.tradeDeadline = value === "" || value === "none" ? null : iso(value);
+        } else if (key === "thirdPlace" || key === "consolation" || key === "reseed") {
+          patch[key] = value === "on" || value === "true" || value === "1";
+        } else if (key === "playoffTiebreak") {
+          if (value !== "seed" && value !== "pointsFor") throw new Error("playoffTiebreak is seed or pointsFor");
+          patch.playoffTiebreak = value;
         } else if (SETTING_FIELDS.some((f) => f.key === key)) {
           (patch as Record<string, number>)[key!] = Number(value);
         } else {
           throw new Error(`no setting ${key} — try one of: starters, tradeDeadline, ` +
+            "thirdPlace, consolation, reseed, playoffTiebreak, " +
             SETTING_FIELDS.map((f) => f.key).join(", "));
         }
       }
@@ -458,8 +472,71 @@ try {
       console.log(r.name.padEnd(10) + String(r.wins).padStart(3) + String(r.losses).padStart(3) +
         String(r.ties).padStart(3) + r.pointsFor.toFixed(1).padStart(9) + r.pointsAgainst.toFixed(1).padStart(9));
     }
+
+  } else if (command === "bracket") {
+    // Draws the bracket. Unlike the draft, this reads no clock — a
+    // commissioner draws it once, when the regular season the standings come
+    // from is actually over.
+    const [leagueArg] = args;
+    const leagueId = Number(leagueArg);
+    const { rows: [row] } = await db.query<{ commissioner_id: string }>(
+      "SELECT commissioner_id FROM league WHERE id = $1", [leagueId]);
+    try {
+      const created = await createBracket(db, { leagueId, by: Number(row!.commissioner_id) });
+      console.log(`winners bracket: ${created.winners.rounds.join(" → ")} ` +
+        `(${created.winners.matchupIds.length} matches)`);
+      if (created.consolation) {
+        console.log(`consolation bracket: ${created.consolation.rounds.join(" → ")} ` +
+          `(${created.consolation.matchupIds.length} matches)`);
+      }
+    } catch (error) {
+      if (error instanceof BracketExistsError) { console.error(`league ${leagueId} already has a bracket`); process.exit(1); }
+      if (error instanceof BracketRefusedError) {
+        for (const reason of error.reasons) console.error(`refused: ${reason}`);
+        process.exit(1);
+      }
+      throw error;
+    }
+
+  } else if (command === "playoffs") {
+    // Settles what the clock has reached and prints the bracket, the same
+    // "reading settles first" rule waivers and trades follow — there is no
+    // worker, so opening the page (or running this) is what advances a round.
+    const [leagueArg, asOf] = args;
+    const leagueId = Number(leagueArg);
+    const view = await bracketView(db, { leagueId, now: asOf ? new Date(asOf) : clock() });
+    if (!view) { console.log("no bracket for that league"); }
+    else {
+      const printBracket = (bracket: "winners" | "consolation" | "third", label: string) => {
+        const matches = view.matches.filter((m) => m.bracket === bracket);
+        if (matches.length === 0) return;
+        console.log(`\n${label}`);
+        for (const m of matches) {
+          const side = (s: typeof m.home) =>
+            `${(s.name ?? "TBD").padEnd(14)}${s.seed === null ? "" : `(${s.seed})`.padStart(4)}` +
+            `${s.points === null ? "" : s.points.toFixed(1).padStart(8)}`;
+          console.log(`  wk${String(m.week).padStart(2)} ${m.round.padEnd(4)}${side(m.home)}  vs  ${side(m.away)}` +
+            (m.settled ? `  [${m.winner === "home" ? m.home.name : m.away.name} wins]` : ""));
+        }
+      };
+      printBracket("winners", "Winners bracket");
+      printBracket("third", "Third place");
+      printBracket("consolation", "Consolation bracket");
+    }
+
+  } else if (command === "picture") {
+    const picture = await playoffPicture(db, Number(args[0]));
+    console.log(`cut line: top ${picture.cutLine} | ${picture.remainingWeeks} week` +
+      `${picture.remainingWeeks === 1 ? "" : "s"} left in the regular season`);
+    for (const t of picture.teams) {
+      console.log(`${String(t.rank).padStart(3)}  ${t.name.padEnd(20)}` +
+        `${String(t.wins).padStart(2)}-${String(t.losses).padEnd(2)}` +
+        `${t.pointsFor.toFixed(1).padStart(9)}  ${t.status}`);
+    }
+
   } else {
-    console.error("usage: league <create|invite|accept|members|settings|draft|waivers|trades|roster|lineups|settle|standings> …");
+    console.error("usage: league <create|invite|accept|members|settings|draft|waivers|trades|" +
+      "roster|lineups|settle|standings|bracket|playoffs|picture> …");
     process.exit(1);
   }
 } finally {

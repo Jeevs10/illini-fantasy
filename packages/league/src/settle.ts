@@ -140,18 +140,24 @@ export interface StandingsRow {
   pointsAgainst: number;
 }
 
-/** Standings from settled matchups only — an unsettled week counts for nobody. */
-export async function standings(db: Db, leagueId: number): Promise<StandingsRow[]> {
+/**
+ * Standings from settled regular-season matchups only — an unsettled week
+ * counts for nobody, and neither does a playoff round. `round IS NULL` is the
+ * whole test: a playoff loss is not a regular-season loss, or a team that
+ * missed the bracket would watch its own eliminated opponent's playoff run
+ * change the table it is no longer part of.
+ */
+export async function standings(db: Queryable, leagueId: number): Promise<StandingsRow[]> {
   const { rows } = await db.query<{
     id: string; name: string; wins: string; losses: string; ties: string;
     points_for: string | null; points_against: string | null;
   }>(
     `WITH sides AS (
        SELECT home_team_id AS team_id, home_points AS pf, away_points AS pa
-         FROM matchup WHERE league_id = $1 AND settled_at IS NOT NULL
+         FROM matchup WHERE league_id = $1 AND settled_at IS NOT NULL AND round IS NULL
        UNION ALL
        SELECT away_team_id, away_points, home_points
-         FROM matchup WHERE league_id = $1 AND settled_at IS NOT NULL
+         FROM matchup WHERE league_id = $1 AND settled_at IS NOT NULL AND round IS NULL
      )
      SELECT t.id, t.name,
             count(*) FILTER (WHERE s.pf > s.pa) AS wins,

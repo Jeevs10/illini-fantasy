@@ -1,6 +1,6 @@
-# Handoff — Phase 8, roles govern the lineup
+# Handoff — Phase 9, playoffs
 
-Phases 1 through 8 are done. The README is the reference for how the system
+Phases 1 through 9 are done. The README is the reference for how the system
 works; this file is only what the next person needs that the README does not
 say.
 
@@ -16,6 +16,18 @@ say.
 | Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games |
 | Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) · 4 `Illini Fantasy — 2025-26` (branch only, drafted and played out) |
 
+**Phase 9 adds migration `011_playoffs.sql`.** A playoff matchup is a
+matchup — `matchup` gains `round`/`bracket`/`seq`, `home_seed`/`away_seed`,
+the self-referencing `home_from`/`away_from` pointer pair with their
+`_result` columns, and a `winner` column, and `home_team_id`/`away_team_id`
+drop `NOT NULL` so a round can be a row before both of its teams are known.
+The old `(league_id, week, home_team_id)` uniqueness becomes a partial index,
+`WHERE round IS NULL`, alongside a new one for a bracket slot,
+`(league_id, round, bracket, seq) WHERE round IS NOT NULL` — a bracket names
+a round and a seat in it rather than a team. `generateSchedule`'s own
+`ON CONFLICT` had to start repeating the `WHERE round IS NULL` clause, since
+Postgres needs it to infer which partial index a conflict target means.
+
 **Phase 8 adds migration `010_roles.sql`.** It renames the `C` slot to `B`
 everywhere it is written down: `lineup_entry.slot`, and the `starters` array
 inside every league's `settings` jsonb. Additive-safe and re-runnable — a
@@ -27,11 +39,11 @@ new column and a league that has never heard of it reads `null`. The screen
 still needs 007 and 008 on the branch it runs against, because
 `settingsContext` counts sealed claims and live offers.
 
-**Migrations 007 through 010 are not on the production branch.** Production is
+**Migrations 007 through 011 are not on the production branch.** Production is
 still at 006, so `/waivers` and `/trades` both fail against it — and now so does
 signing in, since `app_user.username` does not exist there yet. Phase 5 was
 exercised on the Neon branch `phase-5-waivers` (`br-restless-glade-axer0kym`), a
-copy of production with 007 applied; that branch has neither 008, 009 nor 010.
+copy of production with 007 applied; that branch has none of 008 through 011.
 Migrating production is the owner's call and has deliberately not been made.
 
 009 is not additive-only. It drops `auth_account`, `auth_verification_token` and
@@ -185,6 +197,69 @@ to a dead port.
 
 Not checked: narrow widths and light mode, the same as every phase since 5.
 
+## How Phase 9 was verified
+
+- **`bracketShape` is pure and tested alone**
+  (`packages/league/src/playoffs.test.ts`): the exact 4-team, 6-team and
+  8-team shapes against the spec's own worked example (6 teams gives
+  `QF1 4v5, QF2 3v6, SF1 1×winnerQF1, SF2 2×winnerQF2`), and that a
+  third-place game only exists when both semi-finals were real matches
+  rather than a bye straight to the final. 13 tests, 172 in the suite overall.
+- **The database layer against a real Postgres**, the same pattern every
+  phase since 4 follows: `createBracket` refuses a league without enough
+  teams and a league whose target week is already settled, but not a week
+  that merely holds unplayed round-robin fixtures — those are deleted and
+  replaced, the same "refuse what is true, not what merely exists" rule
+  `createDraft` applies to a league that already has teams. `settlePlayoffs`
+  was driven through a full six-team, third-place bracket across three
+  settle calls (QF, then SF, then F-and-third), checking the board after
+  each one and confirming a re-run changes nothing. `reseed` was checked
+  against a deliberate upset: without it the final is fixed to the original
+  bracket pointers; with it, the final re-pairs by the two survivors'
+  seeds, best against worst. A consolation bracket for the teams that missed
+  the cut was checked to land in the same week as the championship. And a
+  settled playoff round was checked to leave the regular-season `standings`
+  and `rankedStandings` untouched — the reason both now read `round IS NULL`.
+- **The whole path exercised end to end from the CLI** against a from-scratch
+  local database seeded with five real weeks of the 2025-26 season (ingested
+  from Torvik, cached, one API call): `league create`, a full auto-draft,
+  lineups and settlement for every day and week, `league settings
+  playoffTeams=4 playoffStartWeek=6 thirdPlace=on`, `league bracket` to draw
+  it, and `league picture` for the cut line — the same commands and output
+  reproduced in the "Start here" section's demo below.
+- **The screens were driven in a browser** against that same database,
+  serving the production build. `/playoffs` with no bracket yet: the cut
+  line drawn under the fourth of six teams, everyone `Alive` in week one, and
+  the commissioner's "Draw the bracket" button. After drawing: the bracket as
+  columns of round cards with a dashed connector rule between them, the
+  winning side of a settled match highlighted, seed numbers, and the
+  third-place game correctly in its own panel rather than folded into the
+  winners bracket — the one bug this exercise caught (see below). A separate
+  three-team league was drawn to check the bye case specifically: seed 1
+  seeded straight into the final against a `TBD` opponent, rendered with the
+  same fallback avatar the rest of the app uses for an unknown name.
+- **One bug the browser caught that the tests, as first written, did not**:
+  `materialiseBracket` tagged every row of the winners shape — including the
+  third-place game — with `bracket = 'winners'`, so the third-place match sat
+  invisibly inside the "Winners bracket" panel instead of its own. The tests
+  had asserted the *pairing* (home/away team ids) but never the `bracket`
+  column, so they passed against the same bug the screen made obvious in one
+  glance. Fixed by giving the `"3rd"` round its own `bracket = 'third'` at
+  insert time regardless of which shape it came from, with a test added that
+  checks the column directly.
+
+Not checked: narrow widths and light mode, and no worker settles a round on
+its own — the same "settle on read" trade every phase since 5 makes, so a
+finished round only advances the bracket once somebody opens `/playoffs` (or
+runs `league playoffs`) after it ends. Also not done: the games cap's
+`SETTING_FIELDS` infrastructure was reused for the three numeric playoff
+settings (`playoffTeams`, `playoffStartWeek`, `playoffRoundWeeks`), so they
+already have a form row on `/commissioner/settings`; the three
+boolean/enum ones (`thirdPlace`, `consolation`, `reseed`, `playoffTiebreak`)
+are readable and settable from the CLI and are validated by
+`settingsProblems`, but have no widget on that screen yet — a checkbox row
+and a select, not a new pattern.
+
 ## How Phase 7 was verified
 
 Production is three migrations behind, so the same route Phase 6 took:
@@ -273,39 +348,51 @@ Not checked: narrow widths and light mode, same as Phase 6.
 
 ## Where it stopped
 
-Done through Phase 8: roles govern the lineup. Eligibility now comes from
-Torvik's own `role` string rather than the six-way scoring archetype, the
-centre slot is `B` rather than `C`, and a Wing G or a PF/C can start at both
-of the two slots they actually cover — closing the design critique's P1
-finding that three position vocabularies ran in parallel with no mapping
-between them. Phases 9 through 12, written up below, are the rest of that
-plan (playoffs, injuries, a Sleeper-informed stat surface) and were
-deliberately not started this round — Phase 8 was taken alone because it is
-the one that changes an existing rule rather than adding a new one.
+Done through Phase 9: playoffs. A league now has an ending — a bracket seeded
+from the regular-season standings, byes for the top seeds, an optional
+third-place game and consolation pool, and settle-on-read propagation the same
+way waivers and trades already work. It closes the "the season has no ending"
+gap this plan was written against, alongside Phase 8's position-vocabulary fix
+below. Phases 10 through 12, written up below, are the rest of the plan (a
+Sleeper-informed stat surface, injuries and news, and a retrofit of the five
+older screens) and were deliberately not started this round.
 
 Not done, in the order I would take them:
 
-1. **Playoffs, and the rest of the design backlog** — see Phases 9 through 12
-   below, and `.impeccable/critique/` for the persisted snapshot, which
-   `/polish` reads automatically. The critique predates `/commissioner`,
-   `/draft`, `/waivers`, `/trades` and `/commissioner/settings`, so its
-   heuristic scores cover none of the five; Phase 8 closes its P1 finding on
-   position vocabularies, and the games cap still is not drawn.
+1. **The stat surface, and the rest of the design backlog** — see Phases 10
+   through 12 below, and `.impeccable/critique/` for the persisted snapshot,
+   which `/polish` reads automatically. The critique predates `/commissioner`,
+   `/draft`, `/waivers`, `/trades`, `/commissioner/settings` and `/playoffs`,
+   so its heuristic scores cover none of them.
 2. **Settings that vary by week.** The games cap re-scores history because there
    is one settings blob and no way to say "nine until week 6, eight after". That
    is the honest fix and it is a real phase: `matchup` would have to carry the
    settings it settled under, the way `player_game_score` carries its config.
    The re-score is the right behaviour *given one blob*, and it is worth knowing
-   it is a consequence of that rather than a preference.
+   it is a consequence of that rather than a preference. The same gap now
+   applies to the playoff settings a bracket is drawn under.
 3. **A settings screen for a manager.** Everything on `/commissioner/settings`
    is the commissioner's. A manager cannot change their own password or username
    from any screen, and that is the same shape of gap the league settings were
    until now — `changePassword` and `setUsername` exist and are tested with
    nothing calling them.
 
-Smaller gaps. Settings: no way to add a slot the recognised roles do not already
-cover, and no per-week playoff configuration — `matchup` has no notion of a
-playoff at all. Trades: no counter-offer, so countering is a rejection plus a new
+Smaller gaps from Phase 9. `thirdPlace`, `consolation`, `reseed` and
+`playoffTiebreak` are readable and settable from the CLI and validated the
+same way every other setting is, but have no widget on
+`/commissioner/settings` — a checkbox row and a select, not a new pattern; the
+three numeric playoff settings already do, for free, off the existing
+`SETTING_FIELDS` table. `/standings` does not draw the cut line or tag a
+team's status — that lives only on `/playoffs`'s own picture panel, which is a
+narrower version of what the original plan sketched. A
+playoff round is scored under the same `gamesCap` as the regular season, which
+is probably right but was never asked. And the bracket cannot be redrawn once
+created, by design, so a wrong `playoffTeams` or `playoffStartWeek` discovered
+after drawing means deleting the `round IS NOT NULL` rows by hand and drawing
+again — there is no CLI verb for that undo.
+
+Smaller gaps, from before. Settings: no way to add a slot the recognised roles
+do not already cover. Trades: no counter-offer, so countering is a rejection plus a new
 offer; nothing emails a manager who was offered a deal overnight; the
 commissioner cannot force a trade through early, only stop it; a trade cannot
 include FAAB dollars or draft picks, only players; and the deadline binds the
@@ -458,25 +545,22 @@ coverage). The draft pool currently comes from 2025-26 rosters plus an
 incomplete NCAA CSV. Someone has to poll weekly and switch over when it
 populates, or the draft board is built on last year's teams.
 
-## Planned — Phases 9 through 12: playoffs and a Sleeper-informed stat surface
+## Planned — Phases 10 through 12: a Sleeper-informed stat surface
 
 Not started. Written up here so the plan does not live only in a chat
 transcript. Renumbered from Phase 7 up, since Phase 7 was already taken by the
-settings screen and the trade deadline, and Phase 8 — below the state table
-above — has since taken roles.
+settings screen and the trade deadline, and Phases 8 and 9 — below the state
+table above — have since taken roles and playoffs.
 
-Two gaps remain of the three this plan was written against. The third,
-**position shown as a scoring internal**, is Phase 8: players used to be
+One gap remains of the three this plan was written against. The other two are
+done. **Position shown as a scoring internal** is Phase 8: players used to be
 labelled with the *archetype* the model weights against (`lead`, `combo`,
 `wing`, `swing`, `big`), and roster slots were `G / F / C` with eligibility
 derived from those archetypes — a Stretch 4 could start at centre and a pure
 centre could start at forward, two rules nobody would choose. Eligibility now
-comes from Torvik's own role string, and the slot is `B`.
-
-**The season has no ending.** The league runs a 17-week round robin and stops.
-`league.settings` has carried a comment promising "playoff weeks" since
-migration 003 and nothing implements them, so the last settled week is just the
-last settled week.
+comes from Torvik's own role string, and the slot is `B`. **The season has no
+ending** is Phase 9, below and now done — a bracket seeded from the
+regular-season table, byes for the top seeds, and settle-on-read propagation.
 
 **The player card explains the score and nothing else.** Six blocks, the
 opponent multiplier, the minutes ramp. No box line, no rank, no projection, no
@@ -498,9 +582,11 @@ That second finding is the P1 Phase 8 closed. So does the pool filter,
 the sortable tables, and the archetype weights on the player card, below.
 Where a phase closes a critique finding, it is marked **[critique]**.
 
-Three decisions taken up front: playoffs default to **6 teams, weeks 15–17**
-with byes for seeds 1–2 and a third-place game; injuries come from
-**RotoWire**, whose endpoint is already proven in this repo
+Two decisions taken up front, of the three this section originally named —
+the playoff shape shipped in Phase 9, below, as **settings a commissioner
+sets** rather than a fixed default, since `/commissioner/settings` already
+existed to hold exactly this kind of number by the time Phase 9 was taken:
+injuries come from **RotoWire**, whose endpoint is already proven in this repo
 (`scripts/crosswalk.ts`); ingest widens to carry the box line and **the season
 is re-ingested**.
 
@@ -591,53 +677,21 @@ owner's call, so logos go behind an opt-in); player nicknames; Sleeper's
 dark-only palette (this app is theme-aware in both directions and that is
 better).
 
-### Phase 9 — Playoffs
+### Phase 9 — Playoffs — done
 
-Design decision: **a playoff matchup is a matchup.** `scorePeriod` is already
-date-ranged and knows nothing about the regular season, so extending `matchup`
-means the scorebug, `/league`, `/home`, `periodOutlook` and settlement all work
-on a bracket unchanged. A separate `playoff_matchup` table would fork every
-one.
-
-Migration `011_playoffs.sql`: `matchup` gains `round text` (NULL = regular
-season), `bracket text` (`winners` | `consolation` | `third`), `seq`,
-`home_seed`, `away_seed`, and pointer pairs `home_from`/`away_from` (self-FK)
-with `home_from_result`/`away_from_result` (`winner` | `loser`);
-`home_team_id`/`away_team_id` drop `NOT NULL`. The whole bracket is
-materialised at creation with empty team ids and pointers, the same choice
-`006_draft.sql` makes for `draft_pick` — "who picks 47th" is a fact to read
-rather than a calculation repeated in three places. A bye is not a row: seeds
-1–2 are seeded straight into their semi-final.
-
-`packages/league/src/playoffs.ts` (new): `bracketShape` (pure, tested alone —
-6 teams gives QF1 4v5, QF2 3v6, SF1 1×winnerQF1, SF2 2×winnerQF2, FINAL, THIRD
-loserSF1×loserSF2); `createBracket` (refuses if any target week is already
-settled, like `createDraft` refuses a rostered league); `settlePlayoffs`
-(settle-on-read like `settleWaivers`/`settleTrades`, seeds from
-`rankedStandings`, propagates winners/losers, idempotent); tiebreak `"seed" |
-"pointsFor"` (default seed); `reseed` option; `playoffPicture` (cut line +
-clinched/alive/eliminated); `bracketView`.
-
-`standings` and `rankedStandings`'s "before" query both need `AND round IS
-NULL` or a playoff loss pollutes the regular-season record. `weekMatchups`
-returns `round`/seeds so the scorebug says *Semifinal* not *Week 16*.
-`LeagueSettings` gains `playoffTeams`, `playoffStartWeek`, `playoffRoundWeeks`,
-`thirdPlace`, `consolation`, `reseed`, `playoffTiebreak` — **these become new
-`SETTING_FIELDS` entries in the settings module that already exists
-(`packages/league/src/settings.ts`) rather than a new screen**, since Phase 7
-already built `/commissioner/settings` and the CLI verb for exactly this kind
-of number.
-
-UI: `/playoffs` — bracket as columns of matchup cards (seed, school-colour
-avatar, live total, winner marked, `TBD`), playoff picture above until seeded,
-CSS connector lines. `/standings` rules off after the cut line and tags status.
-`Playoffs` joins the nav with a `trophy` glyph. CLI: `npm run league -- bracket
-<leagueId>` / `-- playoffs <leagueId>`, honouring `ILLINI_NOW` like waivers and
-trades, not the draft.
-
-Tests: `playoffs.test.ts` — shape for 4/6/8 teams, seeding, propagation, byes,
-third-place, both tiebreaks, reseeding, idempotency, and that a playoff week
-never reaches `standings`.
+Built as sketched, with two differences worth flagging. The playoff shape is
+a league setting a commissioner draws from (`playoffTeams`,
+`playoffStartWeek`, `playoffRoundWeeks`, `thirdPlace`, `consolation`,
+`reseed`, `playoffTiebreak` on `LeagueSettings`, defaulting to a 4-team, one
+week per round bracket with no third-place game) rather than a fixed 6-team,
+weeks-15–17 default — `/commissioner/settings` and the CLI verb for exactly
+this kind of number already existed by the time this phase was taken, the
+same reasoning Phase 7 used for the trade deadline. And `/standings` was left
+alone; the cut line and clinched/alive/eliminated status live only on
+`/playoffs`'s own picture panel. See `packages/league/src/playoffs.ts`, the
+`011_playoffs.sql` migration, and "How Phase 9 was verified" above for what
+was actually built and how it was checked — this section is left as the
+original plan only where Phase 10 below still depends on reading it that way.
 
 ### Phase 10 — The stat surface
 
@@ -721,19 +775,21 @@ branches and nowhere else — the owner's call, unchanged by this plan.
 
 ### Verification, when this starts
 
-Same shape as every phase above: `npm test` with new suites
-(`slots.test.ts`, `playoffs.test.ts`, `leaders.test.ts`), `npm run typecheck`
-plus `npx tsc --noEmit` inside `apps/web`, `npm run parity` and `npm run
-backtest` after the ingest widening (to prove the `box` sub-object left the
-scorer's inputs untouched), and a browser pass at 1440×900 / 768×1024 / 390×844
-in both colour schemes via the same-origin iframe trick (`resize_window` is
-still non-functional here). The bracket needs a played-out season to be worth
-looking at — `full-season-2026` (147 game days, a drafted and settled league)
-is the right target rather than three rounds of zeroes against production's
-five ingested days.
+Same shape as every phase above: `npm test` with new suites (`leaders.test.ts`
+and whatever Phase 11 needs), `npm run typecheck` plus `npx tsc --noEmit`
+inside `apps/web`, `npm run parity` and `npm run backtest` after the ingest
+widening (to prove the `box` sub-object left the scorer's inputs untouched),
+and a browser pass at 1440×900 / 768×1024 / 390×844 in both colour schemes via
+the same-origin iframe trick (`resize_window` is still non-functional here).
+The stat surface needs a played-out season to be worth looking at —
+`full-season-2026` (147 game days, a drafted and settled league) is the right
+target rather than a handful of rounds against production's five ingested
+days — the same target Phase 9's own bracket was checked against, drawn fresh
+against a from-scratch database instead since `full-season-2026` was not
+rebuilt for it.
 
 ### Order
 
-9 → 10 → 11 → 12, each independently shippable, committed at each phase
-boundary. Phase 8, which changed an existing rule rather than adding one, went
-first and alone, and is done.
+10 → 11 → 12, each independently shippable, committed at each phase boundary.
+Phase 8, which changed an existing rule rather than adding one, and Phase 9,
+which gave the season an ending, each went alone and are both done.

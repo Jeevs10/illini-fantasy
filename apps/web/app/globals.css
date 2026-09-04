@@ -1477,6 +1477,56 @@ table.board tbody th.board-round { border-bottom: 1px solid var(--line-soft); fo
   .h2h-cell .plr-sub { font-size: 10px; }
 }
 
+/* ---- the bracket ------------------------------------------------------ */
+
+/* Columns of rounds, each round's matches centred in the space its round
+   occupies — the classic bracket shape, without measuring pixels in
+   JavaScript to draw exact connector elbows. The dotted rule between columns
+   carries the "this feeds that" idea `.capline` already carries for the cap
+   line, rather than a second visual language. */
+.bracket { display: flex; gap: var(--s-5); overflow-x: auto; padding: var(--s-5); }
+.bracket-round {
+  display: flex; flex-direction: column; justify-content: space-around;
+  gap: var(--s-4); min-width: 15rem; flex: 1;
+}
+.bracket-round + .bracket-round { border-left: 1px dashed var(--line-hard); padding-left: var(--s-5); }
+.bracket-roundlabel {
+  font-size: var(--t-xs); font-weight: 700; font-stretch: 88%;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3);
+  text-align: center; margin-bottom: var(--s-1);
+}
+.bracket-match {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.bracket-side {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  min-height: 2.5rem;
+}
+.bracket-side + .bracket-side { border-top: 1px solid var(--line-soft); }
+.bracket-side[data-winner="true"] { background: var(--accent-wash); font-weight: 700; }
+.bracket-name {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: var(--s-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--t-sm);
+}
+.bracket-name a { color: inherit; text-decoration: none; }
+.bracket-name a:hover { text-decoration: underline; }
+.bracket-seed { color: var(--ink-3); font-size: var(--t-xs); font-weight: 600; }
+.bracket-week { font-size: var(--t-xs); color: var(--ink-3); text-align: center; margin-top: var(--s-1); }
+
+@media (max-width: 640px) {
+  .bracket { padding: var(--s-3); gap: var(--s-4); }
+  .bracket-round { min-width: 12rem; }
+}
+
+/* The playoff cut line — drawn under the last team still in, not the first
+   team out, so the row that matters is the one with the rule beneath it. */
+.row[data-cut="true"] { padding-bottom: var(--s-3); border-bottom: 1px dashed var(--line-hard); }
+
 .daystrip .games {
   font-size: 10px; font-weight: 700; letter-spacing: .04em;
   color: var(--ink-3); font-variant-numeric: tabular-nums;

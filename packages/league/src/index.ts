@@ -11,3 +11,4 @@ export * from "./waivers.ts";
 export * from "./trades.ts";
 export * from "./views.ts";
 export * from "./outlook.ts";
+export * from "./playoffs.ts";

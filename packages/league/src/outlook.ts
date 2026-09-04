@@ -164,7 +164,7 @@ export async function rankedStandings(db: Db, leagueId: number): Promise<RankedT
 
   const { rows } = await db.query<{ week: number }>(
     `SELECT DISTINCT week FROM matchup
-      WHERE league_id = $1 AND settled_at IS NOT NULL
+      WHERE league_id = $1 AND settled_at IS NOT NULL AND round IS NULL
       ORDER BY week DESC LIMIT 2`,
     [leagueId],
   );
@@ -177,10 +177,10 @@ export async function rankedStandings(db: Db, leagueId: number): Promise<RankedT
   const { rows: before } = await db.query<{ id: string; wins: string; points_for: string | null }>(
     `WITH sides AS (
        SELECT home_team_id AS team_id, home_points AS pf, away_points AS pa
-         FROM matchup WHERE league_id = $1 AND settled_at IS NOT NULL AND week <= $2
+         FROM matchup WHERE league_id = $1 AND settled_at IS NOT NULL AND round IS NULL AND week <= $2
        UNION ALL
        SELECT away_team_id, away_points, home_points
-         FROM matchup WHERE league_id = $1 AND settled_at IS NOT NULL AND week <= $2
+         FROM matchup WHERE league_id = $1 AND settled_at IS NOT NULL AND round IS NULL AND week <= $2
      )
      SELECT t.id,
             count(*) FILTER (WHERE s.pf > s.pa) AS wins,

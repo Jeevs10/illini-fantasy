@@ -59,6 +59,23 @@ export interface LeagueSettings {
    * straddled midnight would punish them for a setting they do not control.
    */
   tradeDeadline: string | null;
+  /** How many teams make the playoff bracket. */
+  playoffTeams: number;
+  /** The first week of the bracket — regular-season weeks stop before it. */
+  playoffStartWeek: number;
+  /** How many scoring periods each round lasts. */
+  playoffRoundWeeks: number;
+  /** Whether the two semi-final losers play off for third. */
+  thirdPlace: boolean;
+  /** Whether the teams that miss the bracket play out a placement bracket of their own. */
+  consolation: boolean;
+  /**
+   * Whether the bracket re-seeds each round — best surviving seed against
+   * worst — rather than keeping the pairings fixed at creation.
+   */
+  reseed: boolean;
+  /** How a tied playoff score is broken, since a bracket cannot advance a tie. */
+  playoffTiebreak: "seed" | "pointsFor";
 }
 
 export const DEFAULT_SETTINGS: LeagueSettings = {
@@ -87,6 +104,15 @@ export const DEFAULT_SETTINGS: LeagueSettings = {
   // No deadline until a commissioner sets one. A league that has never thought
   // about it should not discover in March that trading closed in February.
   tradeDeadline: null,
+  playoffTeams: 4,
+  playoffStartWeek: 15,
+  playoffRoundWeeks: 1,
+  // Off until a commissioner asks for it — a third-place game is a preference,
+  // not a default a new league should discover it is playing.
+  thirdPlace: false,
+  consolation: false,
+  reseed: false,
+  playoffTiebreak: "seed",
 };
 
 /**

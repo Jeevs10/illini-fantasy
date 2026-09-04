@@ -16,7 +16,7 @@ const base = {
 export type GlyphName =
   | "home" | "team" | "matchup" | "players" | "league" | "draft"
   | "waivers" | "trades" | "search" | "more" | "clock" | "alert"
-  | "chevron" | "bolt" | "check" | "swap" | "empty";
+  | "chevron" | "bolt" | "check" | "swap" | "empty" | "trophy";
 
 export function Glyph({ name, size = 20 }: { name: GlyphName; size?: number }) {
   const p = { ...base, width: size, height: size };
@@ -55,5 +55,7 @@ export function Glyph({ name, size = 20 }: { name: GlyphName; size?: number }) {
       return <svg {...p}><path d="m9 5 7 7-7 7" /></svg>;
     case "empty":
       return <svg {...p}><path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5z" /><path d="M4 8.5 12 13l8-4.5M12 13v7" /></svg>;
+    case "trophy":
+      return <svg {...p}><path d="M7 4h10v5a5 5 0 0 1-10 0z" /><path d="M7 5H4v2a4 4 0 0 0 4 4M17 5h3v2a4 4 0 0 1-4 4" /><path d="M12 14v3M9 20h6M9.5 17h5l.5 3H9z" /></svg>;
   }
 }

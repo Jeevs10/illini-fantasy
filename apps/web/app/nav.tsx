@@ -23,6 +23,7 @@ const PRIMARY: Dest[] = [
 
 const SECONDARY: Dest[] = [
   { href: "/standings", label: "Standings", glyph: "league" },
+  { href: "/playoffs", label: "Playoffs", glyph: "trophy" },
   { href: "/waivers", label: "Waivers", glyph: "waivers" },
   { href: "/trades", label: "Trades", glyph: "trades" },
   { href: "/draft", label: "Draft", glyph: "draft" },

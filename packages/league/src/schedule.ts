@@ -72,7 +72,10 @@ export async function generateSchedule(
     columns: ["league_id", "week", "starts_on", "ends_on", "home_team_id", "away_team_id"],
     rows: matchupRows,
     dedupeOn: [0, 1, 4],
-    conflict: `(league_id, week, home_team_id) DO UPDATE SET
+    // The regular-season slot is a partial unique index — round IS NULL — since
+    // a playoff round names its own slot by (round, bracket, seq) instead. The
+    // WHERE has to be repeated here for Postgres to infer which index this is.
+    conflict: `(league_id, week, home_team_id) WHERE round IS NULL DO UPDATE SET
       starts_on = EXCLUDED.starts_on,
       ends_on = EXCLUDED.ends_on,
       away_team_id = EXCLUDED.away_team_id`,

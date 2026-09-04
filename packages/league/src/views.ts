@@ -47,8 +47,21 @@ export interface MatchupView {
   startsOn: string;
   endsOn: string;
   settled: boolean;
-  home: TeamPeriod & { name: string };
-  away: TeamPeriod & { name: string };
+  /** "Quarterfinal", "Semifinal", "Final", "Third place" — null in the regular season. */
+  roundLabel: string | null;
+  home: TeamPeriod & { name: string; seed: number | null };
+  away: TeamPeriod & { name: string; seed: number | null };
+}
+
+const ROUND_LABELS: Record<string, string> = {
+  QF: "Quarterfinal", SF: "Semifinal", F: "Final", "3rd": "Third place",
+  R16: "Round of 16", R32: "Round of 32",
+};
+
+function roundLabel(round: string | null, bracket: string | null): string | null {
+  if (round === null) return null;
+  const base = ROUND_LABELS[round] ?? round;
+  return bracket === "consolation" ? `Consolation ${base.toLowerCase()}` : base;
 }
 
 /**
@@ -115,15 +128,21 @@ export async function weekMatchups(
 
   const { rows } = await db.query<{
     id: string; week: number; starts_on: string; ends_on: string; settled_at: Date | null;
+    round: string | null; bracket: string | null;
     home_team_id: string; away_team_id: string; home_name: string; away_name: string;
+    home_seed: number | null; away_seed: number | null;
   }>(
     `SELECT m.id, m.week, to_char(m.starts_on,'YYYY-MM-DD') AS starts_on,
-            to_char(m.ends_on,'YYYY-MM-DD') AS ends_on, m.settled_at,
-            m.home_team_id, m.away_team_id, h.name AS home_name, a.name AS away_name
+            to_char(m.ends_on,'YYYY-MM-DD') AS ends_on, m.settled_at, m.round, m.bracket,
+            m.home_team_id, m.away_team_id, h.name AS home_name, a.name AS away_name,
+            m.home_seed, m.away_seed
        FROM matchup m
        JOIN fantasy_team h ON h.id = m.home_team_id
        JOIN fantasy_team a ON a.id = m.away_team_id
       WHERE m.league_id = $1 AND m.week = $2
+        -- A bracket slot nobody has reached yet has no teams to score. It shows
+        -- on /playoffs as TBD; the week screen only shows matchups that exist.
+        AND m.home_team_id IS NOT NULL AND m.away_team_id IS NOT NULL
       ORDER BY m.id`,
     [leagueId, target],
   );
@@ -139,8 +158,9 @@ export async function weekMatchups(
       startsOn: r.starts_on,
       endsOn: r.ends_on,
       settled: r.settled_at !== null,
-      home: { ...home, name: r.home_name },
-      away: { ...away, name: r.away_name },
+      roundLabel: roundLabel(r.round, r.bracket),
+      home: { ...home, name: r.home_name, seed: r.home_seed },
+      away: { ...away, name: r.away_name, seed: r.away_seed },
     };
   }));
 }

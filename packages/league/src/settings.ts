@@ -35,7 +35,8 @@ import { DEFAULT_SETTINGS, type LeagueSettings, type Slot } from "./slots.ts";
 /** The settings that are a single whole number. */
 export type NumericSetting =
   | "bench" | "ir" | "gamesCap" | "periodDays" | "faabBudget"
-  | "waiverHour" | "waiverDays" | "tradeOfferDays" | "tradeReviewHours";
+  | "waiverHour" | "waiverDays" | "tradeOfferDays" | "tradeReviewHours"
+  | "playoffTeams" | "playoffStartWeek" | "playoffRoundWeeks";
 
 export interface SettingField {
   key: NumericSetting;
@@ -98,6 +99,18 @@ export const SETTING_FIELDS: SettingField[] = [
     help: "How long an agreed trade sits in the open before the players move. " +
       "Zero executes on acceptance, which is a league that trusts itself.",
   },
+  {
+    key: "playoffTeams", label: "Playoff teams", min: 2, max: 16, unit: "teams",
+    help: "How many teams make the bracket. Seeded by the regular-season table.",
+  },
+  {
+    key: "playoffStartWeek", label: "Playoff start week", min: 1, max: 30, unit: "week",
+    help: "The first week of the bracket. Regular-season weeks stop before it.",
+  },
+  {
+    key: "playoffRoundWeeks", label: "Round length", min: 1, max: 4, unit: "weeks",
+    help: "How many scoring periods each round of the bracket lasts.",
+  },
 ];
 
 /** The slots a lineup can be built from, in the order the form shows them. */
@@ -155,6 +168,8 @@ export interface SettingsContext {
   settledWeeks: number;
   /** Whether a schedule exists, which is what freezes the scoring period. */
   scheduleDrawn: boolean;
+  /** Whether a playoff bracket exists, which is what freezes its shape. */
+  bracketDrawn: boolean;
   /** Bids sealed for a run that has not happened. */
   pendingClaims: number;
   /** Offers nobody has answered yet. */
@@ -200,6 +215,7 @@ export async function settingsContext(
 
   const { rows: counts } = await q.query<{
     settled: string; scheduled: string; claims: string; offers: string; agreed: string;
+    bracket: string;
   }>(
     `SELECT (SELECT count(DISTINCT week) FROM matchup
               WHERE league_id = $1 AND settled_at IS NOT NULL) AS settled,
@@ -209,7 +225,9 @@ export async function settingsContext(
             (SELECT count(*) FROM trade
               WHERE league_id = $1 AND status = 'proposed') AS offers,
             (SELECT count(*) FROM trade
-              WHERE league_id = $1 AND status = 'accepted') AS agreed`,
+              WHERE league_id = $1 AND status = 'accepted') AS agreed,
+            (SELECT count(*) FROM matchup
+              WHERE league_id = $1 AND round IS NOT NULL) AS bracket`,
     [leagueId]);
   const row = counts[0]!;
 
@@ -224,6 +242,7 @@ export async function settingsContext(
     },
     settledWeeks: Number(row.settled),
     scheduleDrawn: Number(row.scheduled) > 0,
+    bracketDrawn: Number(row.bracket) > 0,
     pendingClaims: Number(row.claims),
     liveOffers: Number(row.offers),
     pendingTrades: Number(row.agreed),
@@ -275,6 +294,13 @@ export function settingsProblems(settings: LeagueSettings): string[] {
   if (deadline !== null && !isCalendarDate(deadline)) {
     problems.push("The trade deadline has to be a date, as YYYY-MM-DD.");
   }
+
+  for (const key of ["thirdPlace", "consolation", "reseed"] as const) {
+    if (typeof settings[key] !== "boolean") problems.push(`${settingLabel(key)} has to be on or off.`);
+  }
+  if (settings.playoffTiebreak !== "seed" && settings.playoffTiebreak !== "pointsFor") {
+    problems.push("The playoff tiebreak has to be seed or pointsFor.");
+  }
   return problems;
 }
 
@@ -283,16 +309,22 @@ function worded(key: string, value: unknown): string {
   if (key === "starters") {
     return (value as LeagueSettings["starters"]).map((s) => `${s.slot}${s.count}`).join(" ");
   }
+  if (typeof value === "boolean") return value ? "on" : "off";
   return value === null ? "none" : String(value);
 }
 
 const KEYS: (keyof LeagueSettings)[] = [
   "starters", ...SETTING_FIELDS.map((f) => f.key), "tradeDeadline",
+  "thirdPlace", "consolation", "reseed", "playoffTiebreak",
 ];
 
 const LABELS: Record<string, string> = {
   starters: "Starting slots",
   tradeDeadline: "Trade deadline",
+  thirdPlace: "Third-place game",
+  consolation: "Consolation bracket",
+  reseed: "Re-seed each round",
+  playoffTiebreak: "Playoff tiebreak",
   ...Object.fromEntries(SETTING_FIELDS.map((f) => [f.key, f.label])),
 };
 
@@ -449,6 +481,17 @@ export async function updateSettings(
       problems.push(
         "The schedule is already drawn, and its weeks are stored rather than derived. " +
         "Changing the scoring period now would move nothing.");
+    }
+
+    // The bracket is materialised at creation the same way the schedule and the
+    // draft board are — its rounds are rows, dated to real weeks. Moving the
+    // shape afterwards would leave those rows pointing at a bracket that no
+    // longer describes them.
+    if (context.bracketDrawn && (moved.has("playoffTeams") || moved.has("playoffStartWeek")
+        || moved.has("playoffRoundWeeks"))) {
+      problems.push(
+        "The bracket is already drawn, and its rounds are stored rather than derived. " +
+        "Changing its shape now would move nothing.");
     }
 
     if (problems.length > 0) throw new SettingsRefusedError(problems);
