@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { rolesFor, type GameState } from "@illini/league";
+import type { GameState } from "@illini/league";
 import { Glyph, type GlyphName } from "./glyphs.tsx";
 
 /* Small shared parts. Everything here is presentational and takes only what
@@ -56,19 +56,14 @@ export function GameStatus({
 }
 
 /**
- * The lineup role — G, F, B, or both of a pair for a Wing G or a PF/C.
+ * What Torvik calls it, what the score explains it as, and what it starts at.
  *
- * Not the archetype: `lead`/`combo`/`wing`/`swing`/`big` explain the score,
- * this is what the slot machinery actually checks. A role this app does not
- * recognise reads as "—" rather than a guess, the same choice `eligibleSlots`
- * makes for FLEX.
+ * Kept here rather than imported from `@illini/league` — this is presentation
+ * for a client component, and pulling a value from that package would drag
+ * the Postgres driver its barrel also exports into the browser bundle. The
+ * eligibility this mirrors is enforced server-side, in `slots.ts`; this table
+ * only has to agree with it, not be it.
  */
-export function RoleTag({ role }: { role: string | null }) {
-  const roles = rolesFor(role);
-  return <span className="pill ghost">{roles.length > 0 ? roles.join(" · ") : "—"}</span>;
-}
-
-/** What Torvik calls it, what the score explains it as, and what it starts at. */
 const ROLE_TABLE: { torvik: string; archetype: string; role: string }[] = [
   { torvik: "Pure PG", archetype: "lead", role: "G" },
   { torvik: "Scoring PG", archetype: "lead", role: "G" },
@@ -79,6 +74,20 @@ const ROLE_TABLE: { torvik: string; archetype: string; role: string }[] = [
   { torvik: "PF/C", archetype: "big", role: "F · B" },
   { torvik: "C", archetype: "big", role: "B" },
 ];
+const ROLE_TAG = new Map(ROLE_TABLE.map((r) => [r.torvik, r.role]));
+
+/**
+ * The lineup role — G, F, B, or both of a pair for a Wing G or a PF/C.
+ *
+ * Not the archetype: `lead`/`combo`/`wing`/`swing`/`big` explain the score,
+ * this is what the slot machinery actually checks. A role this app does not
+ * recognise reads as "—" rather than a guess, the same choice server-side
+ * eligibility makes for FLEX.
+ */
+export function RoleTag({ role }: { role: string | null }) {
+  const tag = role === null ? undefined : ROLE_TAG.get(role);
+  return <span className="pill ghost">{tag ?? "—"}</span>;
+}
 
 /**
  * The three position vocabularies this app runs on, mapped to each other.

@@ -1,6 +1,6 @@
-# Handoff — Phase 7, league settings and a trade deadline
+# Handoff — Phase 8, roles govern the lineup
 
-Phases 1 through 7 are done. The README is the reference for how the system
+Phases 1 through 8 are done. The README is the reference for how the system
 works; this file is only what the next person needs that the README does not
 say.
 
@@ -8,7 +8,7 @@ say.
 
 | | |
 |---|---|
-| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 7 |
+| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 8 |
 | Tests | 159 passing (`npm test`, needs local Postgres — see README) |
 | Typecheck | clean (`npm run typecheck`, and `npx tsc --noEmit` inside `apps/web`) |
 | Build | clean (`npm run build`) |
@@ -16,17 +16,22 @@ say.
 | Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games |
 | Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) · 4 `Illini Fantasy — 2025-26` (branch only, drafted and played out) |
 
+**Phase 8 adds migration `010_roles.sql`.** It renames the `C` slot to `B`
+everywhere it is written down: `lineup_entry.slot`, and the `starters` array
+inside every league's `settings` jsonb. Additive-safe and re-runnable — a
+league already at `B` is left alone.
+
 **Phase 7 needs no migration.** `league.settings` is jsonb and every reader
 merges it over `DEFAULT_SETTINGS`, so `tradeDeadline` is a new key rather than a
 new column and a league that has never heard of it reads `null`. The screen
 still needs 007 and 008 on the branch it runs against, because
 `settingsContext` counts sealed claims and live offers.
 
-**Migrations 007, 008 and 009 are not on the production branch.** Production is
+**Migrations 007 through 010 are not on the production branch.** Production is
 still at 006, so `/waivers` and `/trades` both fail against it — and now so does
 signing in, since `app_user.username` does not exist there yet. Phase 5 was
 exercised on the Neon branch `phase-5-waivers` (`br-restless-glade-axer0kym`), a
-copy of production with 007 applied; that branch has neither 008 nor 009.
+copy of production with 007 applied; that branch has neither 008, 009 nor 010.
 Migrating production is the owner's call and has deliberately not been made.
 
 009 is not additive-only. It drops `auth_account`, `auth_verification_token` and
@@ -130,6 +135,56 @@ production.
 prints. Set it to the port you are actually on or the commissioner copies a link
 to a dead port.
 
+## How Phase 8 was verified
+
+- **`slots.test.ts` is new**: every one of the eight Torvik role strings against
+  all six slots, the null/unrecognised case, a Wing G and a PF/C confirmed to
+  cover two slots each, `validateLineup`'s messages, and `autoFill` seating the
+  scarcest roles first while benching a role it does not recognise to FLEX.
+  `lineups.test.ts` and `draft.test.ts` were updated for `B` rather than `C` —
+  the draft fixture in particular had to start seeding real role strings
+  (`Pure PG` / `Wing F` / `C`) rather than a single literal `'Wing F'` for
+  every player, since eligibility no longer reads the archetype it used to.
+  159 tests, unchanged in count from Phase 7 — four archetype-eligibility
+  tests in `league.test.ts` were retired in favour of `slots.test.ts`'s more
+  thorough coverage of the same ground, and five were added there.
+- **The migration was run against a local restore of production** (`illini_local`,
+  migrated through 010) and checked directly: every `lineup_entry.slot = 'C'`
+  became `'B'`, and every league's `settings->'starters'` array had its `C`
+  entry rewritten to `B` with the count preserved, `jsonb`-array-order and all.
+- **The screens were driven in a browser** against that same local restore,
+  serving the production build on port 3021 with `ILLINI_TODAY`/`ILLINI_NOW`
+  pinned to the loaded data. `/players`: the glossary discloses the three
+  vocabularies mapped to each other, and the `All / G / F / B` chips filter the
+  pool correctly (`B` showed only `PF/C` and `C` roles). `/team`: the roster
+  header reads `2G · 2F · 1B · 2FLEX`, a `PF/C` player sits in the `B` slot
+  wearing an `F · B` tag, and the move dropdown offers `Start at B`. `/draft`:
+  the pool, queue and board all show the new `RoleTag` in place of the old
+  archetype pill, and the role chips filter the board there too.
+- **A real draft was run to completion** against `illini_local`'s `Draft Night`
+  league — 10 teams, 12 rounds, guard-heavy pool, autopicked to 120/120 — and
+  every one of the ten resulting rosters was checked to hold at least one
+  `PF/C`- or `C`-rostered player, which is exactly the "twelve guards, no big"
+  failure the slot-aware autopick exists to prevent.
+- **One bug the browser caught that the type checker and the test suite did
+  not**: a plain closure (`roleHref: (role) => string`) passed from the
+  `/draft` server component down into the `"use client"` `Pool` component. It
+  type-checks — a function is a function — and only fails at runtime, with
+  React error #441 the moment that code path actually renders, because a
+  function cannot cross the server/client boundary unless it is a Server
+  Action. The fix was the pattern the rest of this app already uses for
+  exactly this reason (see `commissioner/settings/form.tsx`'s own comment
+  about not importing values into client components): pre-build the hrefs on
+  the server as plain strings and pass those down instead of a callback.
+  The same reasoning ruled out importing `rolesFor` from `@illini/league`
+  into `app/ui/bits.tsx` — a value import through that package's barrel
+  reaches `draft.ts`, which reaches the Postgres driver, which does not exist
+  in a browser. `RoleTag` and the glossary carry their own small copy of the
+  role table instead; the eligibility it mirrors is still enforced once, in
+  `slots.ts`, and only server-side.
+
+Not checked: narrow widths and light mode, the same as every phase since 5.
+
 ## How Phase 7 was verified
 
 Production is three migrations behind, so the same route Phase 6 took:
@@ -218,21 +273,24 @@ Not checked: narrow widths and light mode, same as Phase 6.
 
 ## Where it stopped
 
-Done through Phase 7: the settings screen, and the trade deadline it had to
-learn to hold. Every number in `league.settings` is now editable from
-`/commissioner/settings` and from `npm run league -- settings`, through one
-module that knows which changes a league already in progress can survive — three
-refusals that name the team, notes for everything already in flight that keeps
-the rule it was created under, and a re-score of every settled week when the
-games cap moves.
+Done through Phase 8: roles govern the lineup. Eligibility now comes from
+Torvik's own `role` string rather than the six-way scoring archetype, the
+centre slot is `B` rather than `C`, and a Wing G or a PF/C can start at both
+of the two slots they actually cover — closing the design critique's P1
+finding that three position vocabularies ran in parallel with no mapping
+between them. Phases 9 through 12, written up below, are the rest of that
+plan (playoffs, injuries, a Sleeper-informed stat surface) and were
+deliberately not started this round — Phase 8 was taken alone because it is
+the one that changes an existing rule rather than adding a new one.
 
 Not done, in the order I would take them:
 
-1. **Draw the games cap** and the rest of the design backlog — see
-   `.impeccable/critique/` for the persisted snapshot, which `/polish` reads
-   automatically. The critique predates `/commissioner`, `/draft`, `/waivers`,
-   `/trades` and `/commissioner/settings`, so its heuristic scores cover none of
-   the five. This is the largest gap now.
+1. **Playoffs, and the rest of the design backlog** — see Phases 9 through 12
+   below, and `.impeccable/critique/` for the persisted snapshot, which
+   `/polish` reads automatically. The critique predates `/commissioner`,
+   `/draft`, `/waivers`, `/trades` and `/commissioner/settings`, so its
+   heuristic scores cover none of the five; Phase 8 closes its P1 finding on
+   position vocabularies, and the games cap still is not drawn.
 2. **Settings that vary by week.** The games cap re-scores history because there
    is one settings blob and no way to say "nine until week 6, eight after". That
    is the honest fix and it is a real phase: `matchup` would have to carry the
@@ -245,8 +303,8 @@ Not done, in the order I would take them:
    until now — `changePassword` and `setUsername` exist and are tested with
    nothing calling them.
 
-Smaller gaps. Settings: no way to add a slot the archetypes do not already know
-about, and no per-week playoff configuration — `matchup` has no notion of a
+Smaller gaps. Settings: no way to add a slot the recognised roles do not already
+cover, and no per-week playoff configuration — `matchup` has no notion of a
 playoff at all. Trades: no counter-offer, so countering is a rejection plus a new
 offer; nothing emails a manager who was offered a deal overnight; the
 commissioner cannot force a trade through early, only stop it; a trade cannot
@@ -400,24 +458,25 @@ coverage). The draft pool currently comes from 2025-26 rosters plus an
 incomplete NCAA CSV. Someone has to poll weekly and switch over when it
 populates, or the draft board is built on last year's teams.
 
-## Planned — Phases 8 through 12: playoffs, positional roles, a Sleeper-informed stat surface
+## Planned — Phases 9 through 12: playoffs and a Sleeper-informed stat surface
 
 Not started. Written up here so the plan does not live only in a chat
-transcript. Renumbered from Phase 7 up, since Phase 7 above is already taken by
-the settings screen and the trade deadline.
+transcript. Renumbered from Phase 7 up, since Phase 7 was already taken by the
+settings screen and the trade deadline, and Phase 8 — below the state table
+above — has since taken roles.
 
-Three gaps, one of which the repo already diagnosed itself.
+Two gaps remain of the three this plan was written against. The third,
+**position shown as a scoring internal**, is Phase 8: players used to be
+labelled with the *archetype* the model weights against (`lead`, `combo`,
+`wing`, `swing`, `big`), and roster slots were `G / F / C` with eligibility
+derived from those archetypes — a Stretch 4 could start at centre and a pure
+centre could start at forward, two rules nobody would choose. Eligibility now
+comes from Torvik's own role string, and the slot is `B`.
 
 **The season has no ending.** The league runs a 17-week round robin and stops.
 `league.settings` has carried a comment promising "playoff weeks" since
 migration 003 and nothing implements them, so the last settled week is just the
 last settled week.
-
-**Position is shown as a scoring internal.** Players are labelled with the
-*archetype* the model weights against (`lead`, `combo`, `wing`, `swing`, `big`),
-and roster slots are `G / F / C` with eligibility derived from those
-archetypes — which produces two rules nobody would choose: a Stretch 4 can
-start at centre and a pure centre can start at forward.
 
 **The player card explains the score and nothing else.** Six blocks, the
 opponent multiplier, the minutes ramp. No box line, no rank, no projection, no
@@ -435,20 +494,21 @@ direction:
 > Three position vocabularies run in parallel with no mapping: role ("Scoring
 > PG"), archetype ("lead"), slot ("G").
 
-So the roles work below is not only a feature request — it closes an open P1.
-So does the pool filter, the sortable tables, and the archetype weights on the
-player card. Where a phase closes a critique finding, it is marked
-**[critique]**.
+That second finding is the P1 Phase 8 closed. So does the pool filter,
+the sortable tables, and the archetype weights on the player card, below.
+Where a phase closes a critique finding, it is marked **[critique]**.
 
-Four decisions taken up front: roles become **G / F / B** and **govern
-eligibility**; playoffs default to **6 teams, weeks 15–17** with byes for seeds
-1–2 and a third-place game; injuries come from **RotoWire**, whose endpoint is
-already proven in this repo (`scripts/crosswalk.ts`); ingest widens to carry
-the box line and **the season is re-ingested**.
+Three decisions taken up front: playoffs default to **6 teams, weeks 15–17**
+with byes for seeds 1–2 and a third-place game; injuries come from
+**RotoWire**, whose endpoint is already proven in this repo
+(`scripts/crosswalk.ts`); ingest widens to carry the box line and **the season
+is re-ingested**.
 
-### Two findings that shape the work
+### Two findings, one from Phase 8 and one still ahead
 
-**1. The archetype cannot carry the role.** The mapping asked for splits two
+**1. The archetype cannot carry the role — this is Phase 8, and it is done.**
+`packages/league/src/slots.ts` is the result. Kept here because the mapping is
+what the rest of this plan builds position handling on top of. It splits two
 archetypes down the middle:
 
 | Torvik `role` | archetype | new role |
@@ -472,10 +532,10 @@ creation. All 3,525 players have one, all eight values appear, and **no player
 has ever changed role** — so latest-game-role with `player.position` as
 fallback is correct and cheap.
 
-`playerPool` currently picks the role with `max(st.role)`
-(`packages/league/src/roster.ts:220`) — alphabetical, so arbitrary for anyone
-who ever changes. Harmless today, load-bearing after this. It becomes
-most-recent.
+`playerPool` used to pick the role with `max(st.role)` — alphabetical, so
+arbitrary for anyone who ever changed role. Harmless while nothing read it for
+eligibility; load-bearing once Phase 8 did, so it is most-recent-by-`played_on`
+now, the same rule `rosterOn` and `startableOn` already used.
 
 **2. The missing stats are missing only from storage.** Ingest writes
 `stats = JSON.stringify(line)` where `line` is the model input
@@ -514,7 +574,7 @@ borrowings:
 | Opposed pairs — your starter and theirs in one row, slot badge between | Rebuild `/league` as head-to-head-by-slot instead of interleaved-by-rank | `app/league/page.tsx` |
 | Win probability per side, two-tone underline | Add to the scorebug beside the score, from settled totals + `periodOutlook` projections, labelled as a model | `app/ui/scorebug.tsx` |
 | "Yet to play (n)" with the slot breakdown | `TeamOutlook.pending` already carries the slots | `app/ui/scorebug.tsx` |
-| Dense filter/sort chip row | Role chips `All / G / F / B`, an `Avg \| Total \| Projected` sort toggle, week selector | `app/players/page.tsx`, `app/draft/pool.tsx` **[critique P2]** |
+| Dense filter/sort chip row | Role chips `All / G / F / B` — done, Phase 8. Still ahead: an `Avg \| Total \| Projected` sort toggle, week selector | `app/players/page.tsx`, `app/draft/pool.tsx` **[critique P2]** |
 | Grouped two-row stat headers | `BOX / SHOOTING / ADVANCED` groups on the stat tables | Phase 10 |
 | Player hero: coloured block, bio strip, rankings strip | Same structure, minus the photo: school colour, CBBD bio fields, the new rank rollup | `app/players/[id]/page.tsx` |
 | Player card as a modal | Intercepting route so any row opens the card without losing lineup state | `app/@card/players/[id]` |
@@ -530,33 +590,6 @@ benefit and are unambiguously fine; hot-linking trademarked marks is the
 owner's call, so logos go behind an opt-in); player nicknames; Sleeper's
 dark-only palette (this app is theme-aware in both directions and that is
 better).
-
-### Phase 8 — Roles govern the lineup **[critique P1: three vocabularies]**
-
-Migration `010_roles.sql`: `UPDATE lineup_entry SET slot = 'B' WHERE slot =
-'C'`; rewrite `league.settings->'starters'` `C` → `B` for existing leagues. No
-new tables.
-
-`packages/league/src/slots.ts` carries the whole rules change: `Slot` becomes
-`"G" | "F" | "B" | "FLEX" | "BENCH" | "IR"`; a new `Role` type and `ROLE_MAP`
-keyed on the Torvik role string per the table above; `rolesFor(role)` yields
-FLEX-only eligibility for unknown/null rather than guessing; `eligibleSlots` /
-`isEligible` take the role string; `SLOTS_BY_ARCHETYPE` is deleted in favour of
-`SLOTS_BY_ROLE`; `DEFAULT_SETTINGS.starters` becomes `2 G / 2 F / 1 B / 2
-FLEX`. `autoFill`'s scarcity sort needs no change.
-
-Callers: `Startable` gains `role` (the query already selects it); `archetype`
-stays on every shape since it explains the score, not the slot. Then
-`lineups.ts`, `draft.ts` (`unfilledSlots`, `autoDraft`), `app/team/page.tsx:51`,
-`app/home/page.tsx:338`.
-
-UI: a `RoleTag` in `app/ui/bits.tsx` (`G`, `G · F`, `F · B`) replacing the raw
-archetype pills across the pool, draft board/queue and lineup; role filter
-chips on `/players` and the draft pool (`playerPool` takes `roles?: Role[]`); a
-short glossary panel mapping the three vocabularies to each other.
-
-Tests: new `slots.test.ts` over eight role strings × six slots plus the null
-case; `lineups.test.ts` / `draft.test.ts` updated for `B`.
 
 ### Phase 9 — Playoffs
 
@@ -701,6 +734,6 @@ five ingested days.
 
 ### Order
 
-8 → 9 → 10 → 11 → 12, each independently shippable, committed at each phase
-boundary. Phase 8 goes first and alone because it is the only one that changes
-existing rules.
+9 → 10 → 11 → 12, each independently shippable, committed at each phase
+boundary. Phase 8, which changed an existing rule rather than adding one, went
+first and alone, and is done.

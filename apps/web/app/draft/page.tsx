@@ -114,7 +114,11 @@ export default async function DraftPage({
             canPick={fantasyTeamId !== null}
             search={q ?? ""}
             role={roleFilter}
-            roleHref={(r) => query({ role: r ?? undefined })}
+            roleLinks={{
+              all: query({ role: undefined }), G: query({ role: "G" }),
+              F: query({ role: "F" }), B: query({ role: "B" }),
+            }}
+            clearSearchHref={query({ q: undefined })}
           />
           <Queue players={queue} clocked={draft.pickSeconds > 0} />
         </div>

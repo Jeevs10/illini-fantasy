@@ -16,7 +16,7 @@ const ROLES: PositionRole[] = ["G", "F", "B"];
  * whether it is their turn, and that changes every ninety seconds.
  */
 export function Pool({
-  players, queued, yourTurn, canPick, search, role, roleHref,
+  players, queued, yourTurn, canPick, search, role, roleLinks, clearSearchHref,
 }: {
   players: PoolPlayer[];
   queued: Set<number>;
@@ -25,7 +25,9 @@ export function Pool({
   search: string;
   /** The active role filter, or null for every role. */
   role: PositionRole | null;
-  roleHref: (role: PositionRole | null) => string;
+  /** Pre-built hrefs — a function can't cross the server/client boundary. */
+  roleLinks: Record<"all" | PositionRole, string>;
+  clearSearchHref: string;
 }) {
   const [picked, submitPick, picking] = useActionState<DraftState, FormData>(pick, {});
   const [enqueued, submitQueue] = useActionState<DraftState, FormData>(queuePlayer, {});
@@ -49,13 +51,13 @@ export function Pool({
           <input type="search" name="q" defaultValue={search} placeholder="Search a name" />
           {role ? <input type="hidden" name="role" value={role} /> : null}
           <button type="submit">Search</button>
-          {search ? <Link className="button" href={roleHref(role)}>Clear</Link> : null}
+          {search ? <Link className="button" href={clearSearchHref}>Clear</Link> : null}
         </form>
 
         <nav className="segmented" aria-label="Role" style={{ marginTop: "var(--s-2)" }}>
-          <Link href={roleHref(null)} data-active={!role}>All</Link>
+          <Link href={roleLinks.all} data-active={!role}>All</Link>
           {ROLES.map((r) => (
-            <Link key={r} href={roleHref(r)} data-active={role === r}>{r}</Link>
+            <Link key={r} href={roleLinks[r]} data-active={role === r}>{r}</Link>
           ))}
         </nav>
 
