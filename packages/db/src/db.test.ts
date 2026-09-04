@@ -111,7 +111,7 @@ test("a matchup total counts only started players", async () => {
   const { id } = await upsertScoringConfig(db, "game", GAME_CONFIG);
   await writeScores(db, id, "2026-02-14", [1, 2, 3].map((i) => store(line(String(i), 10 + i))));
 
-  await db.query("INSERT INTO app_user (id, email, display_name) VALUES (1,'a@b.c','A')");
+  await db.query("INSERT INTO app_user (id, email, display_name, username) VALUES (1,'a@b.c','A','abc')");
   await db.query(
     `INSERT INTO league (id, name, season, config_id, settings) VALUES (1,'L',2026,$1,'{}'::jsonb)`, [id]);
   await db.query("INSERT INTO fantasy_team (id, league_id, owner_id, name) VALUES (1,1,1,'T')");

@@ -8,6 +8,8 @@ export interface Startable {
   playerId: number;
   name: string;
   archetype: Archetype;
+  /** The Torvik role string — what governs slot eligibility. */
+  role: string | null;
   gameId: number;
   /** ISO 8601, or null when the schedule carries a date but no tip-off time. */
   tipoff: string | null;
@@ -106,18 +108,36 @@ export async function startableOn(
     [fantasyTeamId, day, configId],
   );
 
-  return rows.map((r) => ({
-    playerId: Number(r.player_id),
-    name: r.name,
-    archetype: r.archetype ?? archetypeFor(r.role, config),
-    gameId: Number(r.game_id),
-    tipoff: r.tipoff === null ? null : r.tipoff.toISOString(),
-    opponent: r.opponent,
-    opponentStrength: r.opponent_strength === null ? null : Number(r.opponent_strength),
-    projected: r.projected === null ? 0 : Number(r.projected),
-    slot: r.slot ?? "BENCH",
-    locked: r.tipoff !== null && r.tipoff <= now,
-  }));
+  // A team can be on the schedule twice for one basketball date — a tournament
+  // day, or two halves of a doubleheader. `tonight` then joins the roster row
+  // twice and the player arrives here twice, which `writeLineup` sends to
+  // Postgres as one INSERT naming (team, day, player) twice: "ON CONFLICT DO
+  // UPDATE command cannot affect row a second time". A lineup slot is one row
+  // per player per night, so he is one entry here too — the earlier tip-off,
+  // because that is the one whose clock locks him.
+  const byPlayer = new Map<number, Startable>();
+  for (const r of rows) {
+    const startable: Startable = {
+      playerId: Number(r.player_id),
+      name: r.name,
+      archetype: r.archetype ?? archetypeFor(r.role, config),
+      role: r.role,
+      gameId: Number(r.game_id),
+      tipoff: r.tipoff === null ? null : r.tipoff.toISOString(),
+      opponent: r.opponent,
+      opponentStrength: r.opponent_strength === null ? null : Number(r.opponent_strength),
+      projected: r.projected === null ? 0 : Number(r.projected),
+      slot: r.slot ?? "BENCH",
+      locked: r.tipoff !== null && r.tipoff <= now,
+    };
+    const held = byPlayer.get(startable.playerId);
+    if (held === undefined) { byPlayer.set(startable.playerId, startable); continue; }
+    // A game with no tip-off time cannot lock, so it never displaces one that can.
+    if (startable.tipoff !== null && (held.tipoff === null || startable.tipoff < held.tipoff)) {
+      byPlayer.set(startable.playerId, startable);
+    }
+  }
+  return [...byPlayer.values()];
 }
 
 export interface LineupResult {
@@ -165,7 +185,7 @@ export async function setLineup(
 
   const lineup: LineupSlot[] = startable.map((s) => ({
     playerId: s.playerId,
-    archetype: s.archetype,
+    role: s.role,
     slot: desired.get(s.playerId) ?? s.slot,
   }));
 
@@ -229,12 +249,12 @@ export async function autoFillDay(
   })).filter((s) => s.count > 0);
 
   const filled = autoFill(
-    open.map((s) => ({ playerId: s.playerId, archetype: s.archetype, projected: s.projected })),
+    open.map((s) => ({ playerId: s.playerId, role: s.role, projected: s.projected })),
     { ...settings, starters: remaining },
   );
 
   const lineup: LineupSlot[] = [
-    ...locked.map((l) => ({ playerId: l.playerId, archetype: l.archetype, slot: l.slot })),
+    ...locked.map((l) => ({ playerId: l.playerId, role: l.role, slot: l.slot })),
     ...filled,
   ];
 

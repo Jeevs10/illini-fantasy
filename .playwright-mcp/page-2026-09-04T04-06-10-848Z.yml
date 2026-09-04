@@ -1,0 +1,396 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e13]:
+    - generic [ref=e14]:
+      - link "Illini Fantasy" [ref=e15] [cursor=pointer]:
+        - /url: /league
+      - navigation [ref=e16]:
+        - link "Matchup" [ref=e17] [cursor=pointer]:
+          - /url: /league
+        - link "My Team" [ref=e18] [cursor=pointer]:
+          - /url: /team
+        - link "Draft" [ref=e19] [cursor=pointer]:
+          - /url: /draft
+        - link "Waivers" [ref=e20] [cursor=pointer]:
+          - /url: /waivers
+        - link "Trades" [ref=e21] [cursor=pointer]:
+          - /url: /trades
+        - link "Players" [ref=e22] [cursor=pointer]:
+          - /url: /players
+        - link "Standings" [ref=e23] [cursor=pointer]:
+          - /url: /standings
+        - link "Commissioner" [ref=e24] [cursor=pointer]:
+          - /url: /commissioner
+      - combobox "Which league" [ref=e26] [cursor=pointer]:
+        - option "Illini Fantasy" [selected]
+        - option "Draft Night"
+      - generic [ref=e27]:
+        - generic [ref=e28]: Commissioner
+        - button "Sign out" [ref=e29] [cursor=pointer]
+  - main [ref=e2]:
+    - generic [ref=e30]:
+      - heading "Week 15" [level=1] [ref=e31]
+      - paragraph [ref=e32]:
+        - generic [ref=e33]: 2026-02-08 — 2026-02-14
+        - generic [ref=e34]: Settled
+        - generic [ref=e35]: Best 9 games count
+    - generic [ref=e36]:
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - generic [ref=e39]: Team 5
+          - generic [ref=e40]: "679.4"
+          - generic [ref=e41]: 9 of 22 games count
+        - generic [ref=e42]: VS
+        - generic [ref=e43]:
+          - generic [ref=e44]: Team 1
+          - generic [ref=e45]: "649.4"
+          - generic [ref=e46]: 9 of 18 games count
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - heading "Team 5" [level=2] [ref=e49]
+          - table [ref=e50]:
+            - caption [ref=e51]: Team 5 — started games, best first
+            - rowgroup [ref=e52]:
+              - row [ref=e53]:
+                - columnheader "Player" [ref=e54]
+                - columnheader "Slot" [ref=e55]
+                - columnheader "Score" [ref=e56]
+            - rowgroup [ref=e57]:
+              - row [ref=e58]:
+                - cell "Tahaad Pettiford 2026-02-14" [ref=e59]:
+                  - link "Tahaad Pettiford" [ref=e60] [cursor=pointer]:
+                    - /url: /players/103
+                  - generic [ref=e61]: 2026-02-14
+                - cell "G" [ref=e62]
+                - cell "86.8" [ref=e64]
+              - row [ref=e65]:
+                - cell "AJ Storr 2026-02-11" [ref=e66]:
+                  - link "AJ Storr" [ref=e67] [cursor=pointer]:
+                    - /url: /players/1303
+                  - generic [ref=e68]: 2026-02-11
+                - cell "G" [ref=e69]
+                - cell "85.4" [ref=e71]
+              - row [ref=e72]:
+                - cell "Carter Welling 2026-02-11" [ref=e73]:
+                  - link "Carter Welling" [ref=e74] [cursor=pointer]:
+                    - /url: /players/352
+                  - generic [ref=e75]: 2026-02-11
+                - cell "F" [ref=e76]
+                - cell "77.9" [ref=e78]
+              - row [ref=e79]:
+                - cell "Austin Rapp 2026-02-10" [ref=e80]:
+                  - link "Austin Rapp" [ref=e81] [cursor=pointer]:
+                    - /url: /players/2592
+                  - generic [ref=e82]: 2026-02-10
+                - cell "C" [ref=e83]
+                - cell "76.1" [ref=e85]
+              - row [ref=e86]:
+                - cell "L.J. Cason 2026-02-11" [ref=e87]:
+                  - link "L.J. Cason" [ref=e88] [cursor=pointer]:
+                    - /url: /players/2213
+                  - generic [ref=e89]: 2026-02-11
+                - cell "G" [ref=e90]
+                - cell "75.6" [ref=e92]
+              - row [ref=e93]:
+                - cell "Allen Graves 2026-02-11" [ref=e94]:
+                  - link "Allen Graves" [ref=e95] [cursor=pointer]:
+                    - /url: /players/698
+                  - generic [ref=e96]: 2026-02-11
+                - cell "C" [ref=e97]
+                - cell "73.1" [ref=e99]
+              - row [ref=e100]:
+                - cell "AJ Storr 2026-02-14" [ref=e101]:
+                  - link "AJ Storr" [ref=e102] [cursor=pointer]:
+                    - /url: /players/1303
+                  - generic [ref=e103]: 2026-02-14
+                - cell "FLEX" [ref=e104]
+                - cell "70.0" [ref=e106]
+              - row [ref=e107]:
+                - cell "Rienk Mast 2026-02-10" [ref=e108]:
+                  - link "Rienk Mast" [ref=e109] [cursor=pointer]:
+                    - /url: /players/1522
+                  - generic [ref=e110]: 2026-02-10
+                - cell "F" [ref=e111]
+                - cell "67.2" [ref=e113]
+              - row [ref=e114]:
+                - cell "Malik Reneau 2026-02-10" [ref=e115]:
+                  - link "Malik Reneau" [ref=e116] [cursor=pointer]:
+                    - /url: /players/1251
+                  - generic [ref=e117]: 2026-02-10
+                - cell "F" [ref=e118]
+                - cell "67.2" [ref=e120]
+              - row [ref=e121]:
+                - cell "Naithan George 2026-02-14 · over the cap" [ref=e122]:
+                  - link "Naithan George" [ref=e123] [cursor=pointer]:
+                    - /url: /players/1721
+                  - generic [ref=e124]: 2026-02-14 · over the cap
+                - cell "FLEX" [ref=e125]
+                - cell "63.9" [ref=e127]
+              - row [ref=e128]:
+                - cell "Arnas Sakenis 2026-02-12 · over the cap" [ref=e129]:
+                  - link "Arnas Sakenis" [ref=e130] [cursor=pointer]:
+                    - /url: /players/2000
+                  - generic [ref=e131]: 2026-02-12 · over the cap
+                - cell "C" [ref=e132]
+                - cell "61.3" [ref=e134]
+              - row [ref=e135]:
+                - cell "Malik Reneau 2026-02-14 · over the cap" [ref=e136]:
+                  - link "Malik Reneau" [ref=e137] [cursor=pointer]:
+                    - /url: /players/1251
+                  - generic [ref=e138]: 2026-02-14 · over the cap
+                - cell "C" [ref=e139]
+                - cell "59.8" [ref=e141]
+              - row [ref=e142]:
+                - cell "Allen Graves 2026-02-14 · over the cap" [ref=e143]:
+                  - link "Allen Graves" [ref=e144] [cursor=pointer]:
+                    - /url: /players/698
+                  - generic [ref=e145]: 2026-02-14 · over the cap
+                - cell "F" [ref=e146]
+                - cell "59.0" [ref=e148]
+              - row [ref=e149]:
+                - cell "Carter Welling 2026-02-14 · over the cap" [ref=e150]:
+                  - link "Carter Welling" [ref=e151] [cursor=pointer]:
+                    - /url: /players/352
+                  - generic [ref=e152]: 2026-02-14 · over the cap
+                - cell "C" [ref=e153]
+                - cell "57.8" [ref=e155]
+              - row [ref=e156]:
+                - cell "Tahaad Pettiford 2026-02-10 · over the cap" [ref=e157]:
+                  - link "Tahaad Pettiford" [ref=e158] [cursor=pointer]:
+                    - /url: /players/103
+                  - generic [ref=e159]: 2026-02-10 · over the cap
+                - cell "FLEX" [ref=e160]
+                - cell "56.7" [ref=e162]
+              - row [ref=e163]:
+                - cell "Naithan George 2026-02-11 · over the cap" [ref=e164]:
+                  - link "Naithan George" [ref=e165] [cursor=pointer]:
+                    - /url: /players/1721
+                  - generic [ref=e166]: 2026-02-11 · over the cap
+                - cell "G" [ref=e167]
+                - cell "49.2" [ref=e169]
+              - row [ref=e170]:
+                - cell "L.J. Cason 2026-02-14 · over the cap" [ref=e171]:
+                  - link "L.J. Cason" [ref=e172] [cursor=pointer]:
+                    - /url: /players/2213
+                  - generic [ref=e173]: 2026-02-14 · over the cap
+                - cell "G" [ref=e174]
+                - cell "47.2" [ref=e176]
+              - row [ref=e177]:
+                - cell "Colby Garland 2026-02-10 · over the cap" [ref=e178]:
+                  - link "Colby Garland" [ref=e179] [cursor=pointer]:
+                    - /url: /players/735
+                  - generic [ref=e180]: 2026-02-10 · over the cap
+                - cell "G" [ref=e181]
+                - cell "46.3" [ref=e183]
+              - row [ref=e184]:
+                - cell "Arnas Sakenis 2026-02-14 · over the cap" [ref=e185]:
+                  - link "Arnas Sakenis" [ref=e186] [cursor=pointer]:
+                    - /url: /players/2000
+                  - generic [ref=e187]: 2026-02-14 · over the cap
+                - cell "FLEX" [ref=e188]
+                - cell "44.8" [ref=e190]
+              - row [ref=e191]:
+                - cell "Rienk Mast 2026-02-14 · over the cap" [ref=e192]:
+                  - link "Rienk Mast" [ref=e193] [cursor=pointer]:
+                    - /url: /players/1522
+                  - generic [ref=e194]: 2026-02-14 · over the cap
+                - cell "F" [ref=e195]
+                - cell "41.1" [ref=e197]
+              - row [ref=e198]:
+                - cell "Austin Rapp 2026-02-13 · over the cap" [ref=e199]:
+                  - link "Austin Rapp" [ref=e200] [cursor=pointer]:
+                    - /url: /players/2592
+                  - generic [ref=e201]: 2026-02-13 · over the cap
+                - cell "C" [ref=e202]
+                - cell "39.6" [ref=e204]
+              - row [ref=e205]:
+                - cell "Martin Somerville 2026-02-10 · over the cap" [ref=e206]:
+                  - link "Martin Somerville" [ref=e207] [cursor=pointer]:
+                    - /url: /players/570
+                  - generic [ref=e208]: 2026-02-10 · over the cap
+                - cell "G" [ref=e209]
+                - cell "28.9" [ref=e211]
+        - generic [ref=e212]:
+          - heading "Team 1" [level=2] [ref=e213]
+          - table [ref=e214]:
+            - caption [ref=e215]: Team 1 — started games, best first
+            - rowgroup [ref=e216]:
+              - row [ref=e217]:
+                - columnheader "Player" [ref=e218]
+                - columnheader "Slot" [ref=e219]
+                - columnheader "Score" [ref=e220]
+            - rowgroup [ref=e221]:
+              - row [ref=e222]:
+                - cell "JT Toppin 2026-02-14" [ref=e223]:
+                  - link "JT Toppin" [ref=e224] [cursor=pointer]:
+                    - /url: /players/2079
+                  - generic [ref=e225]: 2026-02-14
+                - cell "C" [ref=e226]
+                - cell "83.3" [ref=e228]
+              - row [ref=e229]:
+                - cell "JT Toppin 2026-02-11" [ref=e230]:
+                  - link "JT Toppin" [ref=e231] [cursor=pointer]:
+                    - /url: /players/2079
+                  - generic [ref=e232]: 2026-02-11
+                - cell "F" [ref=e233]
+                - cell "81.9" [ref=e235]
+              - row [ref=e236]:
+                - cell "Sam Hoiberg 2026-02-14" [ref=e237]:
+                  - link "Sam Hoiberg" [ref=e238] [cursor=pointer]:
+                    - /url: /players/1524
+                  - generic [ref=e239]: 2026-02-14
+                - cell "FLEX" [ref=e240]
+                - cell "81.5" [ref=e242]
+              - row [ref=e243]:
+                - cell "Graham Ike 2026-02-10" [ref=e244]:
+                  - link "Graham Ike" [ref=e245] [cursor=pointer]:
+                    - /url: /players/689
+                  - generic [ref=e246]: 2026-02-10
+                - cell "F" [ref=e247]
+                - cell "74.3" [ref=e249]
+              - row [ref=e250]:
+                - cell "Jacari White 2026-02-10" [ref=e251]:
+                  - link "Jacari White" [ref=e252] [cursor=pointer]:
+                    - /url: /players/1544
+                  - generic [ref=e253]: 2026-02-10
+                - cell "FLEX" [ref=e254]
+                - cell "73.6" [ref=e256]
+              - row [ref=e257]:
+                - cell "Aday Mara 2026-02-14" [ref=e258]:
+                  - link "Aday Mara" [ref=e259] [cursor=pointer]:
+                    - /url: /players/2203
+                  - generic [ref=e260]: 2026-02-14
+                - cell "FLEX" [ref=e261]
+                - cell "71.1" [ref=e263]
+              - row [ref=e264]:
+                - cell "Graham Ike 2026-02-14" [ref=e265]:
+                  - link "Graham Ike" [ref=e266] [cursor=pointer]:
+                    - /url: /players/689
+                  - generic [ref=e267]: 2026-02-14
+                - cell "F" [ref=e268]
+                - cell "63.0" [ref=e270]
+              - row [ref=e271]:
+                - cell "Baye Ndongo 2026-02-11" [ref=e272]:
+                  - link "Baye Ndongo" [ref=e273] [cursor=pointer]:
+                    - /url: /players/659
+                  - generic [ref=e274]: 2026-02-11
+                - cell "F" [ref=e275]
+                - cell "60.6" [ref=e277]
+              - row [ref=e278]:
+                - cell "Labaron Philon 2026-02-14" [ref=e279]:
+                  - link "Labaron Philon" [ref=e280] [cursor=pointer]:
+                    - /url: /players/1761
+                  - generic [ref=e281]: 2026-02-14
+                - cell "G" [ref=e282]
+                - cell "60.2" [ref=e284]
+              - row [ref=e285]:
+                - cell "Labaron Philon 2026-02-11 · over the cap" [ref=e286]:
+                  - link "Labaron Philon" [ref=e287] [cursor=pointer]:
+                    - /url: /players/1761
+                  - generic [ref=e288]: 2026-02-11 · over the cap
+                - cell "G" [ref=e289]
+                - cell "59.3" [ref=e291]
+              - row [ref=e292]:
+                - cell "Aday Mara 2026-02-11 · over the cap" [ref=e293]:
+                  - link "Aday Mara" [ref=e294] [cursor=pointer]:
+                    - /url: /players/2203
+                  - generic [ref=e295]: 2026-02-11 · over the cap
+                - cell "C" [ref=e296]
+                - cell "58.6" [ref=e298]
+              - row [ref=e299]:
+                - cell "Pasha Goodarzi 2026-02-10 · over the cap" [ref=e300]:
+                  - link "Pasha Goodarzi" [ref=e301] [cursor=pointer]:
+                    - /url: /players/734
+                  - generic [ref=e302]: 2026-02-10 · over the cap
+                - cell "FLEX" [ref=e303]
+                - cell "54.8" [ref=e305]
+              - row [ref=e306]:
+                - cell "Baye Ndongo 2026-02-14 · over the cap" [ref=e307]:
+                  - link "Baye Ndongo" [ref=e308] [cursor=pointer]:
+                    - /url: /players/659
+                  - generic [ref=e309]: 2026-02-14 · over the cap
+                - cell "F" [ref=e310]
+                - cell "53.7" [ref=e312]
+              - row [ref=e313]:
+                - cell "Fletcher Loyer 2026-02-10 · over the cap" [ref=e314]:
+                  - link "Fletcher Loyer" [ref=e315] [cursor=pointer]:
+                    - /url: /players/1633
+                  - generic [ref=e316]: 2026-02-10 · over the cap
+                - cell "G" [ref=e317]
+                - cell "49.7" [ref=e319]
+              - row [ref=e320]:
+                - cell "Ebuka Okorie 2026-02-11 · over the cap" [ref=e321]:
+                  - link "Ebuka Okorie" [ref=e322] [cursor=pointer]:
+                    - /url: /players/1917
+                  - generic [ref=e323]: 2026-02-11 · over the cap
+                - cell "G" [ref=e324]
+                - cell "49.5" [ref=e326]
+              - row [ref=e327]:
+                - cell "Blake Buchanan 2026-02-10 · over the cap" [ref=e328]:
+                  - link "Blake Buchanan" [ref=e329] [cursor=pointer]:
+                    - /url: /players/850
+                  - generic [ref=e330]: 2026-02-10 · over the cap
+                - cell "C" [ref=e331]
+                - cell "49.4" [ref=e333]
+              - row [ref=e334]:
+                - cell "Gicarri Harris 2026-02-10 · over the cap" [ref=e335]:
+                  - link "Gicarri Harris" [ref=e336] [cursor=pointer]:
+                    - /url: /players/1646
+                  - generic [ref=e337]: 2026-02-10 · over the cap
+                - cell "G" [ref=e338]
+                - cell "46.8" [ref=e340]
+              - row [ref=e341]:
+                - cell "Jacari White 2026-02-14 · over the cap" [ref=e342]:
+                  - link "Jacari White" [ref=e343] [cursor=pointer]:
+                    - /url: /players/1544
+                  - generic [ref=e344]: 2026-02-14 · over the cap
+                - cell "G" [ref=e345]
+                - cell "45.4" [ref=e347]
+    - heading "Around the league" [level=2] [ref=e348]
+    - generic [ref=e349]:
+      - generic [ref=e350]:
+        - generic [ref=e351]:
+          - generic [ref=e352]: Team 4
+          - generic [ref=e353]: "646.4"
+          - generic [ref=e354]: 9 of 19 games count
+        - generic [ref=e355]: VS
+        - generic [ref=e356]:
+          - generic [ref=e357]: Team 6
+          - generic [ref=e358]: "665.0"
+          - generic [ref=e359]: 9 of 17 games count
+      - generic [ref=e360]:
+        - generic [ref=e361]:
+          - generic [ref=e362]: Team 3
+          - generic [ref=e363]: "674.6"
+          - generic [ref=e364]: 9 of 20 games count
+        - generic [ref=e365]: VS
+        - generic [ref=e366]:
+          - generic [ref=e367]: Team 7
+          - generic [ref=e368]: "635.8"
+          - generic [ref=e369]: 9 of 18 games count
+      - generic [ref=e370]:
+        - generic [ref=e371]:
+          - generic [ref=e372]: Team 2
+          - generic [ref=e373]: "666.1"
+          - generic [ref=e374]: 9 of 19 games count
+        - generic [ref=e375]: VS
+        - generic [ref=e376]:
+          - generic [ref=e377]: Team 8
+          - generic [ref=e378]: "681.6"
+          - generic [ref=e379]: 9 of 20 games count
+      - generic [ref=e380]:
+        - generic [ref=e381]:
+          - generic [ref=e382]: Team 10
+          - generic [ref=e383]: "644.1"
+          - generic [ref=e384]: 9 of 17 games count
+        - generic [ref=e385]: VS
+        - generic [ref=e386]:
+          - generic [ref=e387]: Team 9
+          - generic [ref=e388]: "597.3"
+          - generic [ref=e389]: 9 of 13 games count
+    - navigation "Week navigation" [ref=e390]:
+      - link "← Week 14" [ref=e391] [cursor=pointer]:
+        - /url: /league?week=14
+      - link "Week 16 →" [ref=e392] [cursor=pointer]:
+        - /url: /league?week=16
+  - button "Open Next.js Dev Tools" [ref=e398] [cursor=pointer]
+  - alert [ref=e402]

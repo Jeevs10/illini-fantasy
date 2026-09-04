@@ -1,6 +1,6 @@
 import type { Archetype } from "@illini/scoring";
 import type { Queryable } from "./membership.ts";
-import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
+import { DEFAULT_SETTINGS, KNOWN_ROLES, rolesFor, type LeagueSettings, type PositionRole } from "./slots.ts";
 
 export type Acquisition = "draft" | "waiver" | "free_agent" | "trade";
 
@@ -85,9 +85,9 @@ export async function rosterOn(
  */
 export async function claimPlayer(
   db: Queryable,
-  { fantasyTeamId, playerId, on, via = "free_agent", settings = DEFAULT_SETTINGS }: {
+  { fantasyTeamId, playerId, on, via = "free_agent", settings = DEFAULT_SETTINGS, byUserId }: {
     fantasyTeamId: number; playerId: number; on: string;
-    via?: Acquisition; settings?: LeagueSettings;
+    via?: Acquisition; settings?: LeagueSettings; byUserId?: number;
   },
 ): Promise<void> {
   const { rows: teams } = await db.query<{ league_id: string }>(
@@ -125,18 +125,22 @@ export async function claimPlayer(
   }
 
   await db.query(
-    `INSERT INTO transaction (league_id, kind, payload) VALUES ($1, $2, $3)`,
-    [leagueId, via, JSON.stringify({ fantasyTeamId, playerId, on })],
+    `INSERT INTO transaction (league_id, kind, payload, created_by) VALUES ($1, $2, $3, $4)`,
+    [leagueId, via, JSON.stringify({ fantasyTeamId, playerId, on }), byUserId ?? null],
   );
 }
 
 /**
  * Closes a tenure. The row stays: a released player's past games still belong
  * to the team that started them.
+ *
+ * `via` names what closed it, for the transaction log's sake. A player who was
+ * traded was not released, and a log that says otherwise is the one place a
+ * manager goes to find out what happened to him.
  */
 export async function releasePlayer(
-  db: Queryable, { fantasyTeamId, playerId, on }: {
-    fantasyTeamId: number; playerId: number; on: string;
+  db: Queryable, { fantasyTeamId, playerId, on, via = "release" }: {
+    fantasyTeamId: number; playerId: number; on: string; via?: string;
   },
 ): Promise<boolean> {
   const { rowCount } = await db.query(
@@ -148,10 +152,39 @@ export async function releasePlayer(
 
   await db.query(
     `INSERT INTO transaction (league_id, kind, payload)
-     SELECT league_id, 'release', $2 FROM fantasy_team WHERE id = $1`,
-    [fantasyTeamId, JSON.stringify({ fantasyTeamId, playerId, on })],
+     SELECT league_id, $3, $2 FROM fantasy_team WHERE id = $1`,
+    [fantasyTeamId, JSON.stringify({ fantasyTeamId, playerId, on }), via],
   );
   return true;
+}
+
+/**
+ * Deletes the lineups a closed tenure can no longer stand behind.
+ *
+ * This lives here, next to `releasePlayer`, because every path that closes a
+ * tenure owes it and closing one does not do it on its own. Lineups can be set
+ * for nights that have not happened yet, so a player who leaves a roster on
+ * Tuesday can still be sitting in Thursday's starting five — and settling would
+ * count his points for a team that no longer owns him.
+ *
+ * Nights that have already tipped off stay exactly as they were: those points
+ * were earned by the team that started him, which is the same reason tenures
+ * close rather than delete. `at` is the clock the tip-off is measured against,
+ * so it is the app's clock rather than the wall clock.
+ */
+export async function clearFutureLineups(
+  db: Queryable, { fantasyTeamId, playerId, on, at }: {
+    fantasyTeamId: number; playerId: number; on: string; at: Date;
+  },
+): Promise<number> {
+  const { rowCount } = await db.query(
+    `DELETE FROM lineup_entry le
+      WHERE le.fantasy_team_id = $1 AND le.player_id = $2 AND le.played_on >= $3
+        AND NOT EXISTS (SELECT 1 FROM game g
+                         WHERE g.id = le.game_id AND g.tipoff IS NOT NULL AND g.tipoff <= $4)`,
+    [fantasyTeamId, playerId, on, at],
+  );
+  return rowCount ?? 0;
 }
 
 export interface PoolPlayer {
@@ -176,11 +209,18 @@ export interface PoolPlayer {
  */
 export async function playerPool(
   db: Queryable,
-  { leagueId, season, configId, limit = 200, offset = 0, availableOnly = false, search }: {
+  { leagueId, season, configId, limit = 200, offset = 0, availableOnly = false, search, roles }: {
     leagueId: number; season: number; configId: number;
-    limit?: number; offset?: number; availableOnly?: boolean; search?: string;
+    limit?: number; offset?: number; availableOnly?: boolean; search?: string; roles?: PositionRole[];
   },
 ): Promise<PoolPlayer[]> {
+  // The filter is asked for in the three lineup roles, but what is stored is
+  // Torvik's own string — so the letters are expanded to every raw string that
+  // maps onto one of them before they ever reach SQL.
+  const rawRoles = roles && roles.length > 0
+    ? KNOWN_ROLES.filter((raw) => rolesFor(raw).some((r) => roles.includes(r)))
+    : null;
+
   const { rows } = await db.query<{
     player_id: string; name: string; team_name: string | null; conference: string | null;
     role: string | null; archetype: Archetype | null; games: string; total: number;
@@ -193,7 +233,7 @@ export async function playerPool(
      ),
      totals AS (
        SELECT s.player_id, count(*) AS games, sum(s.score) AS total,
-              max(st.role) FILTER (WHERE st.role IS NOT NULL) AS role,
+              (array_agg(st.role ORDER BY st.played_on DESC) FILTER (WHERE st.role IS NOT NULL))[1] AS role,
               (array_agg(s.archetype ORDER BY s.played_on DESC))[1] AS archetype
          FROM player_game_score s
          JOIN player_game_stat st
@@ -210,10 +250,11 @@ export async function playerPool(
        LEFT JOIN owned ON owned.player_id = p.id
       WHERE ($6::boolean IS NOT TRUE OR owned.player_id IS NULL)
         AND ($7::text IS NULL OR p.normalised LIKE '%' || $7 || '%')
+        AND ($8::text[] IS NULL OR totals.role = ANY($8))
       ORDER BY totals.total DESC
       LIMIT $4 OFFSET $5`,
     [leagueId, season, configId, limit, offset, availableOnly,
-     search?.trim().toLowerCase() || null],
+     search?.trim().toLowerCase() || null, rawRoles],
   );
 
   return rows.map((r) => ({

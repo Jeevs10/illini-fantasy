@@ -119,7 +119,7 @@ export function Invites({ teams, open }: { teams: LeagueTeam[]; open: Invite[] }
                         ? "Next unclaimed"
                         : named.get(invite.fantasyTeamId) ?? `Team ${invite.fantasyTeamId}`}
                     </td>
-                    <td><span className="tag">{invite.role}</span></td>
+                    <td><span className="pill">{invite.role}</span></td>
                     <td className="num faint">
                       <time dateTime={invite.expiresAt}>
                         {DAY.format(new Date(invite.expiresAt))}

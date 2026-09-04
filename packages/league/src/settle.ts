@@ -1,4 +1,5 @@
 import type { Db } from "@illini/db";
+import type { Queryable } from "./membership.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
 
 export interface CountedGame {
@@ -26,9 +27,14 @@ export interface TeamPeriod {
  * chronologically until the cap is hit — punishes a manager for the order the
  * schedule happened to fall in, which is exactly the schedule luck the cap
  * exists to remove.
+ *
+ * Takes any queryable rather than the pool, for the same reason `claimPlayer`
+ * does: a caller already inside a transaction — a games-cap change re-scoring
+ * the weeks it just invalidated — has to run on the same connection rather than
+ * racing itself from a second one.
  */
 export async function scorePeriod(
-  db: Db,
+  db: Queryable,
   { fantasyTeamId, configId, from, to, settings = DEFAULT_SETTINGS }: {
     fantasyTeamId: number; configId: number; from: string; to: string;
     settings?: LeagueSettings;

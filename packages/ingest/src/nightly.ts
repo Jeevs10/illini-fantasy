@@ -114,6 +114,45 @@ export async function syncGames(
 }
 
 /**
+ * The most games CBBD returns in one response.
+ *
+ * The endpoint neither paginates nor says it truncated — asking for a whole
+ * season returns exactly 3,000 games ending in mid-January and looks like a
+ * complete answer. A window that comes back full is therefore treated as
+ * truncated and split, which costs an extra call only where the slate is dense.
+ */
+const GAMES_PAGE_LIMIT = 3000;
+
+const shiftDays = (day: string, by: number): string => {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + by);
+  return d.toISOString().slice(0, 10);
+};
+
+/** Every game tipping between two dates, splitting the window until it fits. */
+async function gamesBetween(
+  cbbd: CbbdClient, season: number, from: string, to: string,
+): Promise<CbbdGame[]> {
+  const games = await cbbd.games(season, {
+    startDateRange: `${from}T00:00:00Z`,
+    endDateRange: dayWindow(to).endDateRange,
+  });
+  if (games.length < GAMES_PAGE_LIMIT || from >= to) return games;
+
+  const days = Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000,
+  );
+  const mid = shiftDays(from, Math.floor(days / 2));
+  const halves = [
+    ...await gamesBetween(cbbd, season, from, mid),
+    ...await gamesBetween(cbbd, season, shiftDays(mid, 1), to),
+  ];
+  // The halves overlap: each window runs into the next UTC morning to catch a
+  // US evening tip-off, so a late game on the seam is returned by both.
+  return [...new Map(halves.map((g) => [g.id, g])).values()];
+}
+
+/**
  * Loads the schedule for a date range, tip-off times included.
  *
  * Lineups are set the day *before* a game, so the schedule has to exist before
@@ -122,12 +161,39 @@ export async function syncGames(
 export async function syncSchedule(
   db: Db, cbbd: CbbdClient, season: number, from: string, to: string,
 ): Promise<number> {
-  const games = await cbbd.games(season, {
-    startDateRange: `${iso(from)}T00:00:00Z`,
-    endDateRange: dayWindow(iso(to)).endDateRange,
-  });
+  const games = await gamesBetween(cbbd, season, iso(from), iso(to));
   const { pairs } = await writeGames(db, season, games);
   return pairs.length;
+}
+
+/**
+ * Who each team played on a date, read from the schedule already stored.
+ *
+ * The same map `syncGames` returns, for the same day, without spending a call.
+ * A backfill loads the whole range's schedule once and then reads it back per
+ * night; the alternative is one `/games` request per game day, which is 150 of
+ * a 1,000-call month spent re-fetching rows already in the table.
+ *
+ * It is also the stricter of the two, since it selects on the stored
+ * `played_on` — the basketball date — rather than on a UTC window that
+ * necessarily spills into the following morning.
+ */
+export async function opponentsOn(
+  db: Db, season: number, day: string,
+): Promise<Map<number, { opponentId: number; gameId: number }>> {
+  const { rows } = await db.query<{ id: string; home_team_id: string; away_team_id: string }>(
+    "SELECT id, home_team_id, away_team_id FROM game WHERE season = $1 AND played_on = $2",
+    [season, day],
+  );
+  const out = new Map<number, { opponentId: number; gameId: number }>();
+  for (const r of rows) {
+    const gameId = Number(r.id);
+    const home = Number(r.home_team_id);
+    const away = Number(r.away_team_id);
+    out.set(home, { opponentId: away, gameId });
+    out.set(away, { opponentId: home, gameId });
+  }
+  return out;
 }
 
 export interface NightlyResult {
@@ -147,9 +213,15 @@ export interface NightlyResult {
  */
 export async function ingestNight(
   db: Db,
-  { torvik, cbbd, season, date, config = GAME_CONFIG, configLabel = "game" }: {
+  { torvik, cbbd, season, date, config = GAME_CONFIG, configLabel = "game", opponents: given }: {
     torvik: TorvikClient; cbbd: CbbdClient; season: number; date: string;
     config?: ScoringConfig; configLabel?: string;
+    /**
+     * The night's schedule, when the caller already has it. A backfill loads a
+     * whole range once and passes `opponentsOn` for each night rather than
+     * asking CBBD for the same day again.
+     */
+    opponents?: Map<number, { opponentId: number; gameId: number }>;
   },
 ): Promise<NightlyResult> {
   const day = iso(date);
@@ -161,7 +233,7 @@ export async function ingestNight(
     const [rows, roles, opponents] = await Promise.all([
       torvik.slice(season, date, date, "all"),
       torvik.roles(season),
-      syncGames(db, cbbd, season, date),
+      given ?? syncGames(db, cbbd, season, date),
     ]);
 
     // Season rates are the shrinkage prior for one-game shooting percentages.

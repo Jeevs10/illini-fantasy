@@ -52,24 +52,48 @@ export interface MatchupView {
 }
 
 /**
- * The scoring period containing a date, or the nearest one before it.
+ * The scoring period containing a date, or the nearest week that was played.
  *
- * Falls back to the latest past week so the landing page is never empty in the
- * off-season — a manager opening the app in July should see how the year ended,
- * not a blank screen.
+ * The fallback matters more than it looks. A manager opening the app in July
+ * should see how the year ended — and "nearest by date" gives them the last
+ * week on the *schedule*, which in a season that stopped early is a fixture
+ * nobody played: two zeroes and an empty game log. Preferring a week with
+ * lineups in it means the off-season lands on the last week that happened.
+ *
+ * Inside a season this changes nothing: a date the schedule covers still wins
+ * on the first clause.
  */
 async function weekContaining(
   db: Db, leagueId: number, on: string,
 ): Promise<{ week: number } | null> {
   const { rows } = await db.query<{ week: number }>(
-    `SELECT week FROM matchup
-      WHERE league_id = $1
-      ORDER BY (starts_on <= $2::date AND ends_on >= $2::date) DESC,
-               abs(starts_on - $2::date)
+    `SELECT m.week FROM matchup m
+      WHERE m.league_id = $1
+      ORDER BY (m.starts_on <= $2::date AND m.ends_on >= $2::date) DESC,
+               EXISTS (
+                 SELECT 1 FROM lineup_entry l
+                   JOIN fantasy_team ft ON ft.id = l.fantasy_team_id
+                  WHERE ft.league_id = m.league_id
+                    AND l.played_on BETWEEN m.starts_on AND m.ends_on
+               ) DESC,
+               abs(m.starts_on - $2::date)
       LIMIT 1`,
     [leagueId, on],
   );
   return rows[0] ?? null;
+}
+
+/** The first and last week the schedule actually holds. */
+export async function seasonWeeks(
+  db: Db, leagueId: number,
+): Promise<{ first: number; last: number } | null> {
+  const { rows } = await db.query<{ first: number; last: number }>(
+    "SELECT min(week) AS first, max(week) AS last FROM matchup WHERE league_id = $1",
+    [leagueId],
+  );
+  const row = rows[0];
+  return row === undefined || row.first === null ? null
+    : { first: Number(row.first), last: Number(row.last) };
 }
 
 /**

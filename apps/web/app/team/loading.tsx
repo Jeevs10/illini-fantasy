@@ -1,21 +1,16 @@
+import { SkelHead, SkelRows } from "../ui/skeleton.tsx";
+
 export default function Loading() {
   return (
     <>
-      <div className="pagehead">
-        <div className="skeleton" style={{ width: "12ch", height: "1.75rem" }} />
-        <div className="skeleton" style={{ width: "34ch", marginTop: "var(--s-2)" }} />
+      <SkelHead />
+      <div className="daystrip" aria-hidden="true">
+        {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+          <span key={i} className="skel" style={{ width: 66, height: 62, borderRadius: "var(--r-md)", flex: "none" }} />
+        ))}
       </div>
-      <div className="panel">
-        <div className="panel-body">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="skeleton"
-              style={{ marginBottom: "var(--s-3)", opacity: 1 - i * 0.15 }}
-            />
-          ))}
-        </div>
-      </div>
+      <div className="panel"><SkelRows count={7} /></div>
+      <div className="panel"><SkelRows count={3} /></div>
     </>
   );
 }

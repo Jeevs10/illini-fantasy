@@ -1,21 +1,19 @@
+import { SkelHead, SkelRows } from "../ui/skeleton.tsx";
+
 export default function Loading() {
   return (
     <>
-      <div className="pagehead">
-        <div className="skeleton" style={{ width: "8ch", height: "1.75rem" }} />
-        <div className="skeleton" style={{ width: "40ch", marginTop: "var(--s-2)" }} />
-      </div>
-      <div className="panel">
-        <div className="panel-body">
-          <div className="skeleton" style={{ width: "22ch", height: "1.5rem" }} />
+      <SkelHead />
+      <div className="clockbar">
+        <div style={{ flex: 1 }}>
+          <div className="skel" style={{ width: "8ch", height: ".7rem" }} />
+          <div className="skel" style={{ width: "16ch", height: "1.4rem", marginTop: 8 }} />
         </div>
+        <div className="skel" style={{ width: "5ch", height: "2rem" }} />
       </div>
-      <div className="panel">
-        <div className="panel-body">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="skeleton" style={{ marginBottom: "var(--s-3)", opacity: 1 - i * 0.12 }} />
-          ))}
-        </div>
+      <div className="draftgrid">
+        <div className="panel"><SkelRows count={8} /></div>
+        <div className="panel"><SkelRows count={4} /></div>
       </div>
     </>
   );

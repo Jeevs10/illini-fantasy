@@ -69,10 +69,10 @@ export function Clock({
     return (
       <div className="clockbar" data-state="complete">
         <div>
-          <span className="clock-label">Draft complete</span>
+          <span className="eyebrow">Draft complete</span>
           <strong className="clock-team">{totalPicks} picks made</strong>
         </div>
-        <span className="tag live">Rosters are set</span>
+        <span className="pill live">Rosters are set</span>
       </div>
     );
   }
@@ -81,12 +81,12 @@ export function Clock({
     return (
       <div className="clockbar" data-state="scheduled">
         <div>
-          <span className="clock-label">Not started</span>
+          <span className="eyebrow">Not started</span>
           <strong className="clock-team">
             {onTheClock ? `${onTheClock.teamName} picks first` : "The order is drawn"}
           </strong>
         </div>
-        <span className="tag">{totalPicks} picks</span>
+        <span className="pill">{totalPicks} picks</span>
       </div>
     );
   }
@@ -95,7 +95,7 @@ export function Clock({
   return (
     <div className="clockbar" data-state={status} data-yours={yourTurn} data-urgent={urgent}>
       <div>
-        <span className="clock-label">
+        <span className="eyebrow">
           {status === "paused" ? "Paused" : yourTurn ? "You are on the clock" : "On the clock"}
         </span>
         <strong className="clock-team">{onTheClock?.teamName ?? "—"}</strong>
@@ -105,9 +105,9 @@ export function Clock({
         </span>
       </div>
       {status === "paused" ? (
-        <span className="tag warn-tag">Clock stopped</span>
+        <span className="pill warn">Clock stopped</span>
       ) : left === null ? (
-        <span className="tag">No clock</span>
+        <span className="pill">No clock</span>
       ) : (
         // aria-live off by design: a per-second countdown read aloud is unusable.
         // The turn change below it is the announcement that matters.

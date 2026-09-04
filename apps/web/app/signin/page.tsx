@@ -1,51 +1,39 @@
 import { redirect } from "next/navigation";
-import { auth, signIn } from "../../auth.ts";
+import { safeNext, sessionUser } from "../../lib/auth.ts";
+import { SignInForm } from "./form.tsx";
 
 export default async function SignIn({
   searchParams,
-}: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+}: { searchParams: Promise<{ next?: string }> }) {
+  const { next } = await searchParams;
+  const destination = safeNext(next, "/home");
+
   // Without this the layout renders the signed-in masthead above a form telling
   // you to sign in.
-  if ((await auth())?.user) redirect("/league");
+  if (await sessionUser()) redirect(destination);
 
   return (
     <div className="narrow">
-      <div className="panel"><div className="panel-body">
-        <h1>Illini Fantasy Hoops</h1>
-        <p className="muted" style={{ marginBottom: "1.25rem" }}>
-          Sign in with the address your commissioner invited. No password — a
-          link arrives by email and works once.
-        </p>
-
-        {error ? (
-          <p className="notice bad">
-            That link did not work. It may have been used already, or expired.
-            Ask for a new one below.
+      <div className="signin-brand">
+        <span className="mark" aria-hidden="true">IF</span>
+        <div>
+          <h1>Illini Fantasy Hoops</h1>
+          <p className="faint" style={{ fontSize: "var(--t-sm)", marginTop: 2 }}>
+            College basketball, scored on the CBB Player-Score model
           </p>
-        ) : null}
-
-        <form
-          action={async (formData: FormData) => {
-            "use server";
-            await signIn("resend", {
-              email: String(formData.get("email") ?? "").trim().toLowerCase(),
-              redirectTo: "/league",
-            });
-          }}
-          style={{ display: "flex", gap: ".5rem" }}
-        >
-          <input
-            type="email"
-            name="email"
-            required
-            placeholder="you@example.com"
-            autoComplete="email"
-            style={{ flex: 1 }}
-          />
-          <button className="primary" type="submit">Send link</button>
-        </form>
+        </div>
       </div>
-    </div></div>
+
+      <div className="panel">
+        <div className="panel-body">
+          <SignInForm next={destination} />
+        </div>
+        <p className="seatless">
+          No account yet? A league is invite-only — your commissioner sends a
+          link, and picking a username is the last step of redeeming it. Lost
+          your password? Your commissioner can set a new one.
+        </p>
+      </div>
+    </div>
   );
 }

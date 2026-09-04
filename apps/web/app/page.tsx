@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function Home() {
-  redirect("/league");
+export default function Index() {
+  redirect("/home");
 }

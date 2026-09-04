@@ -47,7 +47,7 @@ before(async () => {
 
   await db.query(`INSERT INTO team (id, name, normalised) VALUES
     (1,'Illinois','illinois'), (2,'Purdue','purdue'), (3,'Iowa','iowa'), (4,'Ohio State','ohio state')`);
-  await db.query("INSERT INTO app_user (id, email, display_name) VALUES (1,'c@i.test','C')");
+  await db.query("INSERT INTO app_user (id, email, display_name, username) VALUES (1,'c@i.test','C','coach')");
   await db.query(
     `INSERT INTO league (id, name, season, config_id, settings, commissioner_id)
      VALUES (1,'L',2026,$1,$2,1)`, [configId, JSON.stringify(DEFAULT_SETTINGS)]);
@@ -104,7 +104,7 @@ test("a lineup can be set the night before, and must be legal", async () => {
     entries: [
       { playerId: 7, slot: "G" }, { playerId: 8, slot: "G" },
       { playerId: 3, slot: "F" }, { playerId: 4, slot: "F" },
-      { playerId: 10, slot: "C" },
+      { playerId: 10, slot: "B" },
       { playerId: 9, slot: "FLEX" }, { playerId: 5, slot: "FLEX" },
     ],
   });
@@ -114,9 +114,9 @@ test("a lineup can be set the night before, and must be legal", async () => {
   await assert.rejects(
     () => setLineup(db, {
       fantasyTeamId: 1, day: DAY, configId, now: BEFORE_TIP,
-      entries: [{ playerId: 1, slot: "C" }],
+      entries: [{ playerId: 1, slot: "B" }],
     }),
-    (error: Error) => error instanceof InvalidLineupError && /cannot start at C/.test(error.message));
+    (error: Error) => error instanceof InvalidLineupError && /cannot start at B/.test(error.message));
 
   await assert.rejects(
     () => setLineup(db, {

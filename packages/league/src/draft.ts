@@ -1,6 +1,5 @@
 import type { Db } from "@illini/db";
 import { insertMany } from "@illini/db";
-import type { Archetype } from "@illini/scoring";
 import { requireCommissioner, type Queryable } from "./membership.ts";
 import { AlreadyRosteredError, claimPlayer } from "./roster.ts";
 import { DEFAULT_SETTINGS, autoFill, eligibleSlots, type LeagueSettings, type Slot } from "./slots.ts";
@@ -607,21 +606,23 @@ export async function autoDraft(
 // Choosing for a manager who is not there
 // ---------------------------------------------------------------------------
 
-interface Candidate { playerId: number; archetype: Archetype | null; total: number }
+interface Candidate { playerId: number; role: string | null; total: number }
 
 /** Undrafted players, best season Player-Score first. */
 async function availableRanked(q: Queryable, draft: Draft): Promise<Candidate[]> {
-  const { rows } = await q.query<{ player_id: string; archetype: Archetype | null; total: number }>(
+  const { rows } = await q.query<{ player_id: string; role: string | null; total: number }>(
     `WITH totals AS (
-       SELECT s.player_id, sum(s.score) AS total,
-              (array_agg(s.archetype ORDER BY s.played_on DESC))[1] AS archetype
+       SELECT s.player_id, sum(s.score) AS total
          FROM player_game_score s
          JOIN player_game_stat st
            ON st.player_id = s.player_id AND st.played_on = s.played_on
         WHERE s.config_id = $2 AND st.season = $3
         GROUP BY s.player_id
      )
-     SELECT t.player_id, t.archetype, t.total
+     SELECT t.player_id, t.total,
+            (SELECT st.role FROM player_game_stat st
+              WHERE st.player_id = t.player_id AND st.role IS NOT NULL
+              ORDER BY st.played_on DESC LIMIT 1) AS role
        FROM totals t
       WHERE NOT EXISTS (
         SELECT 1 FROM roster_slot r
@@ -632,17 +633,17 @@ async function availableRanked(q: Queryable, draft: Draft): Promise<Candidate[]>
   );
   return rows.map((r) => ({
     playerId: Number(r.player_id),
-    archetype: r.archetype,
+    role: r.role,
     total: Number(r.total),
   }));
 }
 
 /** The starting slots a roster still cannot fill. */
 export function unfilledSlots(
-  archetypes: Archetype[], settings: LeagueSettings = DEFAULT_SETTINGS,
+  roles: (string | null)[], settings: LeagueSettings = DEFAULT_SETTINGS,
 ): Slot[] {
   const lineup = autoFill(
-    archetypes.map((archetype, i) => ({ playerId: i, archetype, projected: 0 })), settings);
+    roles.map((role, i) => ({ playerId: i, role, projected: 0 })), settings);
   const filled = new Map<Slot, number>();
   for (const entry of lineup) filled.set(entry.slot, (filled.get(entry.slot) ?? 0) + 1);
   return settings.starters
@@ -680,24 +681,23 @@ async function chooseAutoPick(
     if (free.has(id)) return id;
   }
 
-  const { rows: held } = await q.query<{ archetype: Archetype | null }>(
-    `SELECT (SELECT s.archetype FROM player_game_score s
-              WHERE s.player_id = dp.player_id AND s.config_id = $2
-              ORDER BY s.played_on DESC LIMIT 1) AS archetype
+  const { rows: held } = await q.query<{ role: string | null }>(
+    `SELECT (SELECT st.role FROM player_game_stat st
+              WHERE st.player_id = dp.player_id AND st.role IS NOT NULL
+              ORDER BY st.played_on DESC LIMIT 1) AS role
        FROM draft_pick dp
-      WHERE dp.draft_id = $1 AND dp.fantasy_team_id = $3 AND dp.player_id IS NOT NULL`,
-    [draft.id, draft.configId, fantasyTeamId],
+      WHERE dp.draft_id = $1 AND dp.fantasy_team_id = $2 AND dp.player_id IS NOT NULL`,
+    [draft.id, fantasyTeamId],
   );
-  const roster = held.map((r) => r.archetype).filter((a): a is Archetype => a !== null);
+  const roster = held.map((r) => r.role);
 
   // FLEX is dropped: it takes anyone, so an unfilled FLEX is never a reason to
   // pass over the best player on the board. Only the slots that actually
-  // exclude somebody — G, F, C — can steer a pick.
+  // exclude somebody — G, F, B — can steer a pick.
   const needed = new Set<Slot>(
     unfilledSlots(roster, draft.settings).filter((slot) => slot !== "FLEX"));
   if (needed.size > 0) {
-    const fits = available.find((c) =>
-      c.archetype !== null && eligibleSlots(c.archetype).some((s) => needed.has(s)));
+    const fits = available.find((c) => eligibleSlots(c.role).some((s) => needed.has(s)));
     if (fits) return fits.playerId;
   }
   return available[0]!.playerId;
@@ -711,7 +711,7 @@ export interface QueuedPlayer {
   playerId: number;
   name: string;
   teamName: string | null;
-  archetype: Archetype | null;
+  role: string | null;
   averageScore: number;
   rank: number;
   /** False once somebody else has taken him — the queue keeps him until then. */
@@ -722,11 +722,13 @@ export async function draftQueue(
   db: Db, { leagueId, fantasyTeamId }: { leagueId: number; fantasyTeamId: number },
 ): Promise<QueuedPlayer[]> {
   const { rows } = await db.query<{
-    player_id: string; name: string; team_name: string | null; archetype: Archetype | null;
+    player_id: string; name: string; team_name: string | null; role: string | null;
     average: number | null; rank: number; owner: string | null;
   }>(
-    `SELECT q.player_id, p.name, t.name AS team_name, q.rank,
-            s.archetype, s.average,
+    `SELECT q.player_id, p.name, t.name AS team_name, q.rank, s.average,
+            (SELECT st.role FROM player_game_stat st
+              WHERE st.player_id = q.player_id AND st.role IS NOT NULL
+              ORDER BY st.played_on DESC LIMIT 1) AS role,
             (SELECT ft.name FROM roster_slot r JOIN fantasy_team ft ON ft.id = r.fantasy_team_id
               WHERE r.league_id = $1 AND r.player_id = q.player_id AND r.released_on IS NULL
               LIMIT 1) AS owner
@@ -736,8 +738,7 @@ export async function draftQueue(
        JOIN player p ON p.id = q.player_id
        LEFT JOIN team t ON t.id = p.team_id
        LEFT JOIN LATERAL (
-         SELECT avg(sc.score) AS average,
-                (array_agg(sc.archetype ORDER BY sc.played_on DESC))[1] AS archetype
+         SELECT avg(sc.score) AS average
            FROM player_game_score sc
           WHERE sc.player_id = q.player_id AND sc.config_id = l.config_id
        ) s ON true
@@ -749,7 +750,7 @@ export async function draftQueue(
     playerId: Number(r.player_id),
     name: r.name,
     teamName: r.team_name,
-    archetype: r.archetype,
+    role: r.role,
     averageScore: r.average === null ? 0 : Number(r.average),
     rank: r.rank,
     available: r.owner === null,
@@ -844,7 +845,7 @@ export interface BoardPick {
   playerId: number | null;
   playerName: string | null;
   school: string | null;
-  archetype: Archetype | null;
+  role: string | null;
   auto: boolean;
   madeAt: string | null;
 }
@@ -881,23 +882,20 @@ export async function draftRoom(
   const { rows } = await db.query<{
     overall: number; round: number; in_round: number; fantasy_team_id: string;
     team_name: string; player_id: string | null; player_name: string | null;
-    school: string | null; archetype: Archetype | null; auto: boolean; made_at: Date | null;
+    school: string | null; role: string | null; auto: boolean; made_at: Date | null;
   }>(
     `SELECT dp.overall, dp.round, dp.in_round, dp.fantasy_team_id, ft.name AS team_name,
             dp.player_id, p.name AS player_name, t.name AS school, dp.auto, dp.made_at,
-            s.archetype
+            (SELECT st.role FROM player_game_stat st
+              WHERE st.player_id = dp.player_id AND st.role IS NOT NULL
+              ORDER BY st.played_on DESC LIMIT 1) AS role
        FROM draft_pick dp
        JOIN fantasy_team ft ON ft.id = dp.fantasy_team_id
        LEFT JOIN player p ON p.id = dp.player_id
        LEFT JOIN team t ON t.id = p.team_id
-       LEFT JOIN LATERAL (
-         SELECT sc.archetype FROM player_game_score sc
-          WHERE sc.player_id = dp.player_id AND sc.config_id = $2
-          ORDER BY sc.played_on DESC LIMIT 1
-       ) s ON true
       WHERE dp.draft_id = $1
       ORDER BY dp.overall`,
-    [draft.id, draft.configId],
+    [draft.id],
   );
 
   const board: BoardPick[] = rows.map((r) => ({
@@ -909,7 +907,7 @@ export async function draftRoom(
     playerId: r.player_id === null ? null : Number(r.player_id),
     playerName: r.player_name,
     school: r.school,
-    archetype: r.archetype,
+    role: r.role,
     auto: r.auto,
     madeAt: r.made_at === null ? null : r.made_at.toISOString(),
   }));

@@ -43,12 +43,18 @@ export default async function Commissioner() {
   return (
     <>
       <div className="pagehead">
+        <div>
         <h1>Commissioner</h1>
-        <p>
+        <p className="meta">
           <span>{leagueName}</span>
           <span>{season - 1}–{String(season).slice(2)}</span>
           <span>{claimed} of {teams.length} seats filled</span>
         </p>
+        </div>
+        <div className="controls">
+          <Link className="button" href="/commissioner/settings">League settings</Link>
+          <Link className="button" href="/standings">Standings</Link>
+        </div>
       </div>
 
       <Invites teams={teams} open={invites} />
@@ -85,8 +91,8 @@ export default async function Commissioner() {
                     <td className="faint">{team.ownerEmail ?? "—"}</td>
                     <td className="r">
                       {member
-                        ? <span className="tag">{member.role}</span>
-                        : <span className="tag free">open</span>}
+                        ? <span className="pill">{member.role}</span>
+                        : <span className="pill free">open</span>}
                     </td>
                   </tr>
                 );

@@ -19,8 +19,11 @@
     "crosswalk": "tsx scripts/crosswalk.ts",
     "migrate": "tsx scripts/migrate.ts",
     "ingest": "tsx scripts/ingest.ts",
+    "merge-teams": "tsx scripts/merge-teams.ts",
     "team-aliases": "tsx scripts/team-aliases.ts",
     "league": "tsx scripts/league.ts",
+    "replay": "tsx scripts/replay.ts",
+    "season": "tsx scripts/season.ts",
     "dev": "npm run dev --workspace @illini/web",
     "build": "npm run build --workspace @illini/web"
   },

@@ -233,6 +233,32 @@ team silently misattributes every player on it. Currently **0 of 365 unmatched**
 - **A leading `St.` is Saint, not State.** Expanding it blindly turned
   "St. Thomas" into "state thomas". Aliases also have to converge: a single pass
   left "LIU" as "long island university" next to CBBD's "long island".
+- **`/games` truncates at 3,000 and does not say so.** One call for a whole
+  season returns exactly 3,000 games ending in mid-January and looks like a
+  complete answer. `syncSchedule` now treats a full response as truncated and
+  splits the window, which cost 5 calls for 6,317 games across 2025-26.
+
+### Fixing the normaliser does not fix the rows
+
+`team.normalised` is written once, at insert. So when `normaliseTeam` learns
+something — a new alias, or that a leading "St." is Saint — the rows already in
+the table keep the answer it used to give, and the school quietly becomes two
+teams: one the box scores attach *players* to, and one the schedule attaches
+*games* to.
+
+That split is silent. `startableOn` joins the schedule on the player's team, so
+a player on the wrong half simply has no game on any night. No error is raised;
+he is never startable. Twenty-three such rows were holding **200 players** when
+the full season was first loaded, St. John's and St. Bonaventure among them, and
+five days of data had never been enough to expose it.
+
+```sh
+npm run merge-teams            # report what would move
+npm run merge-teams -- --apply # repoint players, games, ratings; drop the row
+```
+
+Run it after any change to `TEAM_ALIASES` or `normaliseTeam`. A clean database
+prints `724 teams, all normalised as the current rules would`.
 
 ## Phase 2 — league play
 
@@ -268,6 +294,45 @@ Settlement is re-runnable. Totals are recomputed from stored scores rather than
 accumulated, so a Torvik revision flows through to the standings on the next run
 instead of needing a manual fix.
 
+## A full season, drafted and played
+
+`npm run season` builds a league over the whole of 2025-26 rather than the days
+a demo happened to ingest. It wants the season loaded first:
+
+```sh
+npm run ingest -- setup 2026
+npm run ingest -- range 2026 20251101 20260408   # 159 nights, ~30 min
+npm run season                                    # draft, lineups, settlement
+npm run season -- --drop                          # league only; source data stays
+```
+
+`range` loads the schedule once and reads each night's opponents back out of the
+`game` table, so a whole-season backfill costs about six CBBD calls rather than
+one per night. `night` still asks for its own day, because a single night is
+usually being caught up on its own and the schedule may not be there yet.
+
+What lands:
+
+| | |
+|---|---|
+| Game days | 147, 2025-11-03 to 2026-04-06 |
+| Player-games | 113,860, every one with a resolved opponent |
+| Players · teams · games | 4,978 · 365 · 6,317 |
+| Mean Player-Score | 26.73, high 101.9 |
+| League | 10 teams, 12 rounds, 120 rostered, 4,340 lineup rows, 3,881 starts |
+| Settled | 115 matchups over 23 scoring periods |
+
+Two things about how it is built:
+
+- **The auto-draft ranks by season-total Player-Score**, which is hindsight.
+  That is the right hindsight here — the league exists to show what a full
+  roster of real players scores, not to simulate draft-day ignorance.
+- **Auto-fill runs as of midnight UTC each night.** Nothing tips before 16:00
+  UTC, so no game is locked yet. Against the real clock every game in a past
+  season has already tipped off, so every roster would be frozen on the bench
+  and the season would settle as zeroes — the lineup lock working exactly as
+  designed, on a season that is entirely in the past.
+
 ## Phase 3 — league core
 
 Phase 2 proved the mechanics with one user owning all ten teams, lineups
@@ -278,6 +343,7 @@ the same player. Phase 3 makes each of those real.
 npm run league -- create 2026 "Illini Fantasy" 10 you@example.com
 npm run league -- invite 1 manager@example.com     # prints the token once
 npm run league -- accept <token> manager@example.com "Manager Name"
+npm run league -- passwd commish s3cret-passphrase # the seat becomes an account
 npm run league -- members 1
 npm run league -- roster 3
 npm run league -- lineups 1 20260214              # auto-fill, locks respected
@@ -285,10 +351,16 @@ npm run league -- lineups 1 20260214              # auto-fill, locks respected
 
 ### Membership and invites
 
-`app_user` doubles as the Auth.js user table rather than sitting beside a second
-one. The project already carries a crosswalk because four sources mint their own
-player ids; there was no reason to repeat that for humans. Sessions, accounts
-and magic-link tokens hang off it in `auth_*` tables.
+`app_user` is the one identity table: the username somebody signs in with, the
+address an invite is sent to, and the `league_member.user_id` a roster hangs off
+are all the same row. The project already carries a crosswalk because four
+sources mint their own player ids; there was no reason to repeat that for
+humans. Sessions hang off it in `auth_session`.
+
+A row can exist before its person can sign in — `create` mints the commissioner's
+seat, and `acceptInvite` mints a manager's — so every row carries a username
+from the moment it is written and a `password_hash` only once somebody sets one.
+`passwd` is what turns a seat into an account.
 
 Teams are created **unowned**. A manager takes one by redeeming an invite, so
 ownership is something a person did rather than something the seed script
@@ -416,12 +488,14 @@ npm run dev        # http://localhost:3000
 Two things that will waste your afternoon otherwise:
 
 - **`AUTH_URL` in `.env.local` pins the port.** `next dev` falls through to the
-  next free port if 3000 is taken, and the magic link is built from `AUTH_URL`,
-  not from the port actually in use — so the link lands on a dead port and
-  sign-in silently fails. Either free 3000 or move `AUTH_URL` with it.
-- **`AUTH_SECRET` is per-machine.** It lives in gitignored `.env.local`; a fresh
-  clone has to generate one:
-  `node -e 'console.log(require("crypto").randomBytes(32).toString("base64"))'`
+  next free port if 3000 is taken, and the invite link on `/commissioner` is
+  built from `AUTH_URL`, not from the port actually in use — so the link the
+  commissioner copies lands on a dead port. Either free 3000 or move `AUTH_URL`
+  with it. Sign-in itself no longer depends on it.
+- **Next allows one `next dev` per directory.** A second one exits with
+  "Another next dev server is already running" and names the PID of the first.
+  To run a second copy — a scratch database, say — build and `npx next start
+  --port 3006` instead.
 
 ### Browsing a finished season
 
@@ -448,30 +522,52 @@ code the CLI runs, so a screen cannot disagree with a settlement.
 
 ### Auth
 
-Magic links, no passwords. In a private twenty-person league the invite and the
-sign-in are the same mechanism: an email to an address the commissioner already
-named.
+A username and a password, in `app_user`. Sign-in used to be a magic link, on
+the reasoning that in a private twenty-person league the invite and the sign-in
+are the same mechanism. That reasoning holds right up until you want to sign in:
+a league is played on a phone late at night, and a round trip through an inbox
+is a worse door than a password manager. It also meant development was one
+unconfigured mail provider away from nobody being able to get in at all.
 
-`app_user` doubles as the Auth.js user table rather than sitting beside a second
-one, so `league_member.user_id` and a session point at the same row. The adapter
-in `apps/web/lib/adapter.ts` maps Auth.js onto this schema's snake_case columns;
-redeeming a link is a `DELETE ... RETURNING`, so two clicks race in Postgres
-rather than in Node.
+**The invite link stays.** It hands over a *team*, not a session — redeeming one
+is where a manager picks their username. What it no longer proves is ownership
+of the mailbox it was addressed to, so the token is now the whole credential.
+For a link a commissioner passes to somebody they already know, that is the
+trade being made deliberately, and it is the one thing this change made weaker.
 
-With no `AUTH_RESEND_KEY` set the link is printed to the server log instead of
-emailed — development should not be blocked on a verified sending domain.
+Passwords are scrypt at Node's documented interactive cost, stored as
+`scrypt$N$r$p$salt$hash` so the parameters travel with the hash and raising them
+later leaves every existing password verifiable. A sign-in that finds no such
+username still verifies against a throwaway hash, so a wrong name and a wrong
+password take the same time — otherwise the form is a way to find out who is in
+the league, and it answers with one sentence for both.
+
+Sessions are rows in `auth_session`, keyed by 32 random bytes in an httpOnly
+cookie. Auth.js is gone: it supports credentials only alongside JWT sessions,
+which would have meant a token that stays valid until it expires no matter what
+the server later thinks of it. Signing out is a `DELETE`, so a lost phone is one
+statement away from harmless. What is left is `apps/web/lib/auth.ts`, and it is
+short enough to read in a sitting.
+
+`npm run league -- passwd <username|email> <password>` is the reset, and the way
+a seat that has never had a password becomes an account. There is no self-serve
+password reset and no mail: a twenty-person league has a commissioner.
 
 ### Screens
 
 | route | |
 |---|---|
+| `/home` | the live matchup, tonight's slate, and what needs you |
 | `/league` | the week's matchup, scored live from stored player scores; games past the cap dimmed, not hidden |
 | `/team` | tonight's startable players, with per-game locks and slot validation |
 | `/draft` | the draft room — clock, best available, your queue, the board |
 | `/players` | the pool, ranked by season Player-Score, with ownership |
 | `/players/:id` | the game log, each night broken into its six blocks |
+| `/waivers` | the wire, your sealed claims, and every team's budget |
+| `/trades` | propose, answer, review, and the history |
 | `/standings` | settled weeks only |
 | `/commissioner` | invites, revocation, and who holds which seat — commissioner only |
+| `/commissioner/settings` | every number the league runs on — commissioner only |
 | `/join/:token` | redeeming an invite |
 
 Totals on `/league` are recomputed from `player_game_score` rather than read from
@@ -522,17 +618,25 @@ every seat claimed there is no team to hand over, and an invite with nothing
 behind it looks exactly like a good one right up until the manager clicks it.
 The team selector lists only unclaimed seats for the same reason.
 
-`/join/:token` is the other half. It insists on signing in first and takes the
-address from the session rather than from a form field, which is the point: a
-magic link is proof that whoever holds the invite also holds the mailbox it was
-addressed to. `acceptInvite` compares the two at fixed length, so a stolen link
-is worth nothing without the inbox. Signing in from that page carries the token
-in `callbackUrl`, so the invite is still there when the manager comes back.
+`/join/:token` is the other half, and for a new manager it is also where their
+account begins: the link is what says they are allowed one, so choosing a
+username and taking the team are the same submit. The account is registered
+against the address the invite names rather than one the form collects — the
+commissioner already named it, and an editable field would only let a manager
+put their account beyond the reach of the invite that made it.
 
-The page says which of the four states it is in — spent, expired, addressed to
-somebody else, or ready — rather than failing the same way for all of them. Only
-"spent" is deliberately vague: already redeemed, revoked and mistyped look
-identical, since telling them apart only helps someone guessing.
+An invited address that already has an account is sent to `/signin?next=…`
+instead, so a manager in a second league signs in rather than being offered a
+username that would fail on the way in.
+
+The page says which of the five states it is in — spent, expired, signed in as
+somebody else, already a member, or ready — rather than failing the same way for
+all of them. Only "spent" is deliberately vague: already redeemed, revoked and
+mistyped look identical, since telling them apart only helps someone guessing.
+
+A failed registration keeps the invite. "That username is taken" is a sentence
+under the field, and the link is still live — the account is only created and
+the team only claimed when both halves succeed.
 
 Redemption is a button, not something that happens on page load. It claims a
 team and burns the link; a link preview fetcher should not be able to spend
@@ -658,11 +762,365 @@ top is guard-heavy — which is the whole point of the slot-aware autopick.
   players the Phase 2 script seeded, so its draft has to be set up on a league
   that has none.
 
+## Phase 5 — waivers and free agency
+
+`roster_slot` and `transaction` have modelled the claim/release lifecycle since
+Phase 2, and `claimPlayer` / `releasePlayer` have enforced it. What was missing
+is the part that makes a claim a contest rather than a race: a blind bid, a
+moment when every bid is opened at once, and a rule for who wins.
+
+```
+packages/league/src/waivers.ts       the wire, the bids, and the run that opens them
+packages/db/migrations/007_waivers.sql
+apps/web/app/waivers                 the wire, your claims, every budget
+```
+
+```sh
+npm run league -- waivers state 1                 # reading settles what was due
+npm run league -- waivers drop 1 <teamId> <playerId>
+npm run league -- waivers bid 1 <teamId> <playerId> <bid> [dropPlayerId]
+npm run league -- waivers add 1 <teamId> <playerId> [dropPlayerId]
+npm run league -- waivers claims 1 [teamId]
+npm run league -- waivers run 1 2026-02-16T09:00:00Z   # open the bids due by then
+```
+
+Each team gets a season FAAB budget (`$100` by default). A bid is sealed until
+the run that opens it; the highest wins; ties go to waiver priority, and the
+team that wins a tie rolls to the back of the line.
+
+### The wire is the scarce thing
+
+A dropped player does not go back into the pool. He lands on the wire and stays
+there until the run named by `clears_at` — bid for until then, and an ordinary
+free agent afterwards. Everyone else who is unowned can simply be added.
+
+That split is the whole design. Dropping straight to free agency rewards
+whoever happens to be awake at 3am, which is the behaviour waivers exist to
+remove; putting *every* unowned player behind a bid would mean a manager cannot
+replace an injured starter before Saturday. So the auction covers exactly the
+players somebody just gave up on, and there is no code path that produces the
+other outcome — the drop and the waiver period are one action.
+
+### Settled on read, again
+
+There is no worker here either. A claim carries `runs_at`, the run that will
+open it, and the first reader past that moment resolves the batch:
+
+```sh
+npm run league -- waivers state 1     # reading settles what was due
+```
+
+Two properties fall out of that, the same two the draft clock gets. A league
+nobody visited for a week comes back with the rosters it would have had if
+somebody had watched every run, because each batch resolves against the state
+the batch before it left rather than against the moment somebody finally looked
+— and each award is dated to its own run, so the tenure starts on the right
+night. And the whole thing is testable by passing a different `now`.
+
+Everything serialises on the `league` row, which is this module's equivalent of
+the draft row. Two managers who open the page at 09:00:01 queue up in Postgres
+rather than both being awarded the same player.
+
+### What one run actually does
+
+Claims are ordered by bid, then priority, then the team's own sequence, and each
+is answered against the state the ones before it left behind:
+
+```
+Team 7   $31  Stefan Vaaks       won
+Team 9   $31  Stefan Vaaks       lost      Team 7 won the tie on waiver priority
+Team 5   $14  Stefan Vaaks       lost      outbid — Team 7 paid $31
+Team 2   $60  Silas Mabrey       lost      only $10 left in the budget
+Team 4   $50  Silas Mabrey       invalid   the roster is full at 13 and no player was named to drop
+```
+
+Four ways to lose, and each one says which. A manager outbid by $17 and one
+beaten on a coin flip should not read the same sentence — a blind auction that
+only ever reports "somebody else got him" is a black box. The winning bid
+becomes public at the run; sealing it only ever mattered beforehand.
+
+A team's own `sequence` never outranks another team's money — a rival's higher
+bid wins whatever order you put yours in. It decides which of *your* claims
+takes the last roster spot, or the last of the budget, which is what a manager
+with four bids and room for two is really being asked.
+
+### Two things that are easy to get wrong
+
+- **A drop has to clear the lineups it can no longer stand behind.** Lineups can
+  be set for nights that have not happened yet, so a player dropped on Tuesday
+  can still be sitting in Thursday's starting five — and settling would count
+  his points for a team that no longer owns him. `release` deletes the entries
+  whose games have not tipped off and leaves the ones that have: those points
+  were earned by the team that started him, which is the same reason tenures
+  close rather than delete.
+- **Waivers run on the app's clock, not the wall clock — the opposite of the
+  draft.** A draft writes rosters dated by its own `opens_on`, so pinning its
+  clock only stops the deadline passing. A waiver claim writes a *dated tenure*
+  and is read back against the same pinned date the rest of the app browses.
+  Take the wall clock and a drop in a pinned February season is dated September,
+  which is to say the player never leaves the roster on any night anybody can
+  see.
+
+### Budgets are a ledger, not a balance
+
+Spend is summed from won claims rather than stored on the team, for the same
+reason matchup totals are recomputed from player scores: a ledger and a balance
+can disagree, and one of them then has to be wrong. The submit-time check and
+the run-time check are the same arithmetic over the same rows.
+
+Priority is stored, because it is a consequence of history rather than a
+function of the standings. It is renumbered to 1..n on every run, so a team
+created after the migration is not left holding a null.
+
+## Phase 6 — trades
+
+`transaction.kind` has carried a `trade` value since Phase 2, and `roster_slot`
+has always closed one tenure and opened another on a date, so the ownership move
+was never the missing part. What was missing is everything around it: an offer
+somebody can refuse, a moment it stops being refusable, and a window in which
+the rest of the league can see what was agreed before it happens.
+
+```
+packages/league/src/trades.ts       the offer, the window, and the run that moves the players
+packages/db/migrations/008_trades.sql
+apps/web/app/trades                 propose, answer, review, and the history
+```
+
+```sh
+npm run league -- trades list 1 [teamId]              # reading executes what was due
+npm run league -- trades offer 1 <from> <to> <give,ids> <get,ids> ["why"]
+npm run league -- trades accept 1 <tradeId> <teamId>  # or reject
+npm run league -- trades withdraw 1 <tradeId> <teamId>
+npm run league -- trades veto 1 <tradeId> "reason"
+npm run league -- trades run 1 2026-02-17T18:30:00Z   # execute what the clock has reached
+```
+
+An offer stands for `tradeOfferDays` (3) and then goes stale. Accepting it is
+the last say either manager gets: from there the deal sits in the open for
+`tradeReviewHours` (24), and then the players move — unless the commissioner
+stops it first.
+
+### The window is the whole design
+
+Both managers have already agreed, so the window is not about them. It is the
+rest of the league's chance to see what was agreed, and the commissioner's
+chance to stop it while stopping it is still cheap.
+
+That is why the veto only works *inside* it. A veto after the players have moved
+would be an unwind, and unwinding a trade means rewriting who owned whom on
+nights that have already been scored — which is the one thing the whole dated
+`roster_slot` design exists to make impossible. The answer to a commissioner who
+hears about a deal late is "too late", and the window is what makes that answer
+rare rather than routine.
+
+The reason is stored and shown. A veto is the most contested thing a
+commissioner does, and one delivered without a sentence is what leagues actually
+fall out over. Setting `tradeReviewHours` to zero turns the window off and
+executes on acceptance, which is a legitimate way to run a league that trusts
+itself.
+
+### Settled on read, a third time
+
+There is no worker here either, for the same reason there is none for the draft
+clock or the waiver run. An accepted trade carries `executes_at`, and the first
+reader past that moment moves the players — dated to that moment rather than to
+the moment somebody finally looked:
+
+```sh
+npm run league -- trades list 1     # reading executes what was due
+```
+
+Everything serialises on the `league` row, the same one the waiver run holds. A
+league nobody visited for a week comes back with the rosters it would have had,
+each deal executed on the night it was due and against the state the one before
+it left behind. Offers nobody answered are expired in the same pass — a stale
+offer is a thing the clock owes an answer to as much as an agreed one is.
+
+### Four ways a deal does not happen
+
+Rejected, withdrawn, expired, vetoed — and one more that is not anybody's
+decision. Between the handshake and the execution either roster can change, so
+the deal is checked twice against exactly the same arithmetic: once at
+acceptance, so a manager finds out now, and once at execution, because a day is
+long enough for a player in it to be dropped or traded elsewhere.
+
+```
+Blue: Player 1  ⇄  Orange: Player 4     vetoed     a swap back the day after is not a trade
+Orange: Player 4  ⇄  Blue: Player 1     expired    nobody answered before it expired
+Orange: Player 5  ⇄  Blue: Player 2     invalid    Player 5 is on Green now
+```
+
+A deal that could not be honoured says so rather than disappearing: both
+managers agreed to something, and are owed the sentence naming the man it broke
+on. And it leaves nothing behind — each trade executes inside its own savepoint,
+because half of a two-for-one is not a smaller trade, it is two teams robbed.
+
+Shopping one player to two teams is ordinary and is not a mistake. Both may
+accept; the first deal to execute takes him and the second is voided naming the
+team that got there first.
+
+### One rule, one copy
+
+A trade closes a tenure, which means it owes the lineup rule that Phase 5
+learned the hard way: a player traded on Tuesday can still be sitting in
+Thursday's starting five for the team that gave him up, and settling would count
+his points for them. That rule now lives once, as `clearFutureLineups` next to
+`releasePlayer`, and the waiver path calls it too. Nights that have already
+tipped off stay exactly as they were.
+
+The other shared rule is the ordering. Every tenure closes before any opens:
+doing it player by player would put a two-for-one over the roster limit halfway
+through, and a straight swap would hit the league-wide ownership index while the
+man is briefly on both teams. Neither is a state the deal passes through, so
+neither exists.
+
+## Phase 7 — the league settings screen, and a trade deadline
+
+Every number this system runs on has lived in `league.settings` since Phase 2,
+and nothing edited any of them: changing the games cap or the FAAB budget meant
+an UPDATE by hand. The storage was never the missing part. What was missing is
+the part that knows which changes a league already in progress can survive.
+
+```
+packages/league/src/settings.ts     the rules, the refusals, and the re-score
+apps/web/app/commissioner/settings  the screen
+```
+
+```sh
+npm run league -- settings 1                       # every number, and the league's own state
+npm run league -- settings 1 gamesCap=8 faabBudget=200
+npm run league -- settings 1 starters=G2,F2,C1,FLEX2
+npm run league -- settings 1 tradeDeadline=2026-03-01     # or tradeDeadline=none
+```
+
+No migration. `settings` is jsonb and every reader already merges it over
+`DEFAULT_SETTINGS`, so the deadline is a new key rather than a new column, and a
+league that has never heard of it reads `null`.
+
+### Three kinds of setting
+
+The difference between them is the whole module.
+
+**Ones that only bind the future.** The waiver hour, the offer life, the review
+window. Change them and the next bid or deal follows the new rule — but a bid
+already sealed carries its own `runs_at` and an agreed trade its own
+`executes_at`, because those moments are written down when they are made rather
+than worked out when they are read. That is not a bug to go and fix. It is the
+only reason a sealed bid can be sealed at all, so the change is made and the
+consequence is *said*: "1 sealed bid will still open at the hour it was filed
+for."
+
+**Ones a league in progress can contradict.** A roster limit below a roster
+somebody already holds, or a FAAB budget below what somebody already spent, is
+not a rule — it is a league in a state it had no way to reach. Both are refused,
+and the refusal names the team:
+
+```
+refused: Team 1 holds 4 players and that shape leaves room for 2. Somebody has to
+         be dropped before the roster can shrink.
+refused: Team 2 has already spent $140 of the budget, so $100 is a season nobody
+         could have played.
+```
+
+Every reason comes back at once rather than one per attempt. A form that refuses
+one field and then refuses the next on resubmission is a form somebody fills in
+four times.
+
+The scoring period is the third refusal and the flattest one: it is read exactly
+once, when `generateSchedule` draws the weeks, and those weeks are rows in
+`matchup` afterwards. Changing it later would move nothing, so saying so is more
+honest than saving a number that does nothing.
+
+**One that is scoring.** The games cap decides which started games counted, so a
+week settled under a cap of nine is not the score the league plays by once the
+cap is eight. Standings read `matchup.home_points`; `/league` recomputes live
+from player scores. Move the cap and those two stop agreeing.
+
+So moving it re-scores every already-settled week, in the same transaction as
+the change:
+
+```
+Games cap       9 → 3
+  1 settled week was re-scored under the new cap, so the standings and the
+  matchup screen still agree.
+```
+
+Settlement was built re-runnable for exactly this — totals are recomputed from
+player scores rather than accumulated. `settled_at` is deliberately left where
+it was: the week was settled when it was settled, and a cap change re-scores it
+rather than re-dates it.
+
+The one thing that is never done is the thing the scoring config already
+forbids. A settled score is not quietly rewritten; it is rewritten *loudly*,
+with the count in the result, a line in the transaction log, and the sentence on
+the screen before the button is pressed.
+
+### The screen says the number before it takes it
+
+The roster limit is the number that actually bites, and it is not a field — it
+is `starters + bench + ir`. So it is derived on screen as the slots move, beside
+the fullest roster in the league:
+
+```
+1 starting slot, 0 on the bench, 0 on IR — a roster limit of 1. Team 1 already
+holds 4, so this will be refused until somebody is dropped.
+```
+
+A commissioner adding a bench seat is really asking "how many players is that",
+and answering it afterwards with a rejection is answering it too late. The
+server refuses the same submission with the same arithmetic — the bounds live in
+`SETTING_FIELDS` next to the rules that enforce them, so the form, the CLI and
+the action cannot disagree about what is allowed.
+
+Every change is a `settings` row in the transaction log, and the screen reads
+them back. A rule nobody can see being changed is the one a league argues about.
+
+### The trade deadline
+
+A date on the league rather than a count of days, which is the shape `settings`
+did not carry until now. Nothing else stopped a team out of contention from
+selling in March.
+
+It binds the **handshake**, not the execution. Trading closes after the deadline
+day — inclusive, compared in roster days, the same unit every tenure in this
+system is dated in — so nothing new can be offered and nothing standing can be
+agreed. But a deal agreed on deadline day still executes when its review window
+closes, even if that is the day after. The window belongs to the league and the
+commissioner; voiding a deal two managers legitimately struck because somebody
+else's review period straddled midnight would punish them for a setting they do
+not control.
+
+Rejecting an offer still works after the deadline. An inbox nobody can clear is
+worse than a stale offer.
+
+An offer that outlives the deadline is expired by the next reader, dated to the
+deadline rather than to whenever somebody looked — the fifth way a deal does not
+happen, and settled on read like the other four:
+
+```
+   1  expired   Team 1: Player 3  ⇄  Team 2: Player 7
+      the trade deadline passed
+```
+
+Two clocks can reach one offer and the honest answer is whichever got there
+first. An offer nobody answered in January died of neglect whatever a March
+deadline says; one that would have stood until Saturday died of the deadline on
+Thursday. The deadline pass runs first and only claims offers that were still
+alive when it arrived; the ordinary expiry takes the rest, dated to its own
+`expires_at`.
+
 ## Next
 
-Waivers. `roster_slot` and `transaction` already model the claim/release
-lifecycle and `claimPlayer` / `releasePlayer` enforce it, but nothing yet
-schedules or resolves a FAAB bid.
+The design backlog — drawing the games cap, and the persisted critique snapshot
+in `.impeccable/critique/`, which predates `/commissioner`, `/draft`, `/waivers`,
+`/trades` and `/commissioner/settings`.
 
-After that, the rest of the design backlog — drawing the games cap, and the
-persisted critique snapshot in `.impeccable/critique/`.
+Then the gaps a settings screen does not close. A trade cannot include FAAB
+dollars or draft picks, only players, and there is no counter-offer — countering
+is a rejection plus a new offer. The draft order cannot be edited once drawn.
+The commissioner cannot rename or add a team from the app, or change a member's
+role. A manager cannot change their own password or username from a screen, only
+the commissioner can, and only from the CLI.
+
+And nothing emails anybody. A manager offered a deal overnight, or whose claim
+settled at 9am, finds out by opening the app.

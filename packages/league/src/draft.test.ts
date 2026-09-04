@@ -28,6 +28,7 @@ const at = (seconds: number) => new Date(T0.getTime() + seconds * 1000);
  */
 const PLAYERS = 80;
 const archetypeOf = (id: number): Archetype => (id <= 40 ? "lead" : id <= 60 ? "wing" : "big");
+const roleOf = (id: number): string => (id <= 40 ? "Pure PG" : id <= 60 ? "Wing F" : "C");
 const STAT_DAY = "2026-01-05";
 
 /** Resets the draft between tests without rebuilding the whole fixture. */
@@ -72,7 +73,7 @@ before(async () => {
       [id, `Player ${id}`, `player ${id}`]);
     await db.query(
       `INSERT INTO player_game_stat (player_id, played_on, season, role, minutes, stats, source)
-       VALUES ($1,$2,2026,'Wing F',30,'{}'::jsonb,'torvik')`, [id, STAT_DAY]);
+       VALUES ($1,$2,2026,$3,30,'{}'::jsonb,'torvik')`, [id, STAT_DAY, roleOf(id)]);
     await db.query(
       `INSERT INTO player_game_score
          (player_id, played_on, config_id, archetype, blocks, raw, multiplier, minutes_gate, score)
@@ -100,14 +101,14 @@ test("the snake reverses every round, and the numbering is continuous", () => {
 });
 
 test("unfilled slots are the ones a roster genuinely cannot cover", () => {
-  assert.deepEqual(unfilledSlots([]), ["G", "F", "C", "FLEX"]);
+  assert.deepEqual(unfilledSlots([]), ["G", "F", "B", "FLEX"]);
   // Two guards close G; nothing else moves.
-  assert.deepEqual(unfilledSlots(["lead", "combo"]), ["F", "C", "FLEX"]);
-  // A pile of guards is still a team with no centre, which is the whole reason
+  assert.deepEqual(unfilledSlots(["Pure PG", "Combo G"]), ["F", "B", "FLEX"]);
+  // A pile of guards is still a team with no big, which is the whole reason
   // the auto-picker asks this question.
-  assert.ok(unfilledSlots(["lead", "combo", "lead", "combo"]).includes("C"));
-  // A swing covers both forward and centre, so one closes C.
-  assert.ok(!unfilledSlots(["lead", "combo", "wing", "wing", "swing"]).includes("C"));
+  assert.ok(unfilledSlots(["Pure PG", "Combo G", "Pure PG", "Combo G"]).includes("B"));
+  // A PF/C covers both forward and big, so one closes B.
+  assert.ok(!unfilledSlots(["Pure PG", "Combo G", "Wing F", "Wing F", "PF/C"]).includes("B"));
 });
 
 test("creating a draft materialises every pick, unclaimed", async () => {
@@ -321,18 +322,16 @@ test("an auto-drafted league ends up with rosters that can field a lineup", asyn
   }
 
   // The board was guard-heavy on purpose. Every team should still be able to
-  // put someone at centre, which is what the slot-aware autopick is for.
-  const { rows } = await db.query<{ fantasy_team_id: string; archetype: Archetype }>(
-    `SELECT dp.fantasy_team_id, s.archetype
+  // field a big, which is what the slot-aware autopick is for.
+  const { rows } = await db.query<{ fantasy_team_id: string; role: string | null }>(
+    `SELECT dp.fantasy_team_id, st.role
        FROM draft_pick dp
-       JOIN player_game_score s ON s.player_id = dp.player_id AND s.config_id = $1
-      WHERE dp.draft_id = $2`,
-    [configId, draft.id]);
+       JOIN player_game_stat st ON st.player_id = dp.player_id
+      WHERE dp.draft_id = $1`,
+    [draft.id]);
   for (const teamId of TEAMS) {
-    const archetypes = rows.filter((r) => Number(r.fantasy_team_id) === teamId)
-      .map((r) => r.archetype);
-    const lineup = autoFill(
-      archetypes.map((archetype, i) => ({ playerId: i, archetype, projected: 0 })));
+    const roles = rows.filter((r) => Number(r.fantasy_team_id) === teamId).map((r) => r.role);
+    const lineup = autoFill(roles.map((role, i) => ({ playerId: i, role, projected: 0 })));
     assert.deepEqual(validateLineup(lineup), [], `team ${teamId} fields a legal lineup`);
     assert.equal(lineup.filter((l) => l.slot !== "BENCH").length, 7,
       `team ${teamId} fills all seven starting slots`);

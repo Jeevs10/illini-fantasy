@@ -31,7 +31,7 @@ before(async () => {
   ({ id: configId } = await upsertScoringConfig(db, "game", GAME_CONFIG));
 
   await db.query("INSERT INTO team (id, name, normalised) VALUES (1,'Illinois','illinois')");
-  await db.query("INSERT INTO app_user (id, email, display_name) VALUES (1,'a@b.c','A')");
+  await db.query("INSERT INTO app_user (id, email, display_name, username) VALUES (1,'a@b.c','A','abc')");
   await db.query(
     `INSERT INTO league (id, name, season, config_id, settings) VALUES (1,'L',2026,$1,$2)`,
     [configId, JSON.stringify(DEFAULT_SETTINGS)]);

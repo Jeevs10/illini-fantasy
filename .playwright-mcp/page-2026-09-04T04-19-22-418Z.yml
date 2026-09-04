@@ -1,0 +1,399 @@
+- generic [active] [ref=f1e1]:
+  - banner [ref=f1e2]:
+    - generic [ref=f1e3]:
+      - link "Illini Fantasy" [ref=f1e4] [cursor=pointer]:
+        - /url: /home
+        - generic [aria-hidden] [ref=f1e5]: IF
+        - text: Illini Fantasy
+      - navigation "Sections" [ref=f1e6]:
+        - link "Home" [ref=f1e7] [cursor=pointer]:
+          - /url: /home
+        - link "My Team" [ref=f1e8] [cursor=pointer]:
+          - /url: /team
+        - link "Matchup" [ref=f1e9] [cursor=pointer]:
+          - /url: /league
+        - link "Players" [ref=f1e10] [cursor=pointer]:
+          - /url: /players
+        - link "Standings" [ref=f1e11] [cursor=pointer]:
+          - /url: /standings
+        - link "Waivers" [ref=f1e12] [cursor=pointer]:
+          - /url: /waivers
+        - link "Trades" [ref=f1e13] [cursor=pointer]:
+          - /url: /trades
+        - link "Draft" [ref=f1e14] [cursor=pointer]:
+          - /url: /draft
+        - link "Commissioner" [ref=f1e15] [cursor=pointer]:
+          - /url: /commissioner
+      - combobox "Which league" [ref=f1e17] [cursor=pointer]:
+        - option "Illini Fantasy" [selected]
+        - option "Draft Night"
+      - generic [ref=f1e18]:
+        - generic [ref=f1e19]: Commissioner
+        - button "Sign out" [ref=f1e20] [cursor=pointer]
+  - main [ref=f1e21]:
+    - generic [ref=f1e22]:
+      - generic [ref=f1e23]:
+        - heading "Team 1" [level=1] [ref=f1e24]
+        - paragraph [ref=f1e25]:
+          - generic [ref=f1e26]: Illini Fantasy
+          - generic [ref=f1e27]: 0–1 · 7th
+          - generic [ref=f1e28]: 12 of 13 rostered
+      - generic [ref=f1e29]:
+        - link "Set lineup" [ref=f1e30] [cursor=pointer]:
+          - /url: /team
+        - link "Free agents" [ref=f1e31] [cursor=pointer]:
+          - /url: /players?free=1
+    - generic [ref=f1e33]:
+      - generic [ref=f1e34]:
+        - generic [ref=f1e35]: Week 15
+        - generic [ref=f1e36]: Feb 8 – Feb 14
+        - generic [ref=f1e37]: Final
+        - generic [ref=f1e38]: Best 9 count
+      - generic [ref=f1e39]:
+        - generic [ref=f1e40]:
+          - generic [ref=f1e41]:
+            - generic [aria-hidden] [ref=f1e42]: T5
+            - generic [ref=f1e43]:
+              - text: Team 5
+              - generic [ref=f1e44]: Opponent
+          - generic [ref=f1e45]: "679.4"
+          - generic [ref=f1e46]: Final
+        - generic [ref=f1e47]: VS
+        - generic [ref=f1e49]:
+          - generic [ref=f1e50]:
+            - generic [aria-hidden] [ref=f1e51]: T1
+            - generic [ref=f1e52]:
+              - text: Team 1
+              - generic [ref=f1e53]: You
+          - generic [ref=f1e54]: "649.4"
+          - generic [ref=f1e55]: Final
+      - generic [ref=f1e56]:
+        - img "Team 5 679.4, Team 1 649.4" [ref=f1e57]
+        - generic [ref=f1e60]:
+          - generic [ref=f1e61]: 9 of 22 count
+          - generic [ref=f1e62]: Trailing by 30.0
+          - generic [ref=f1e63]: 9 of 18 count
+        - link "Full matchup" [ref=f1e64] [cursor=pointer]:
+          - /url: /league
+    - generic [ref=f1e65]:
+      - generic [ref=f1e66]:
+        - generic [ref=f1e67]:
+          - heading "Tonight" [level=2] [ref=f1e68]
+          - link "Set lineup →" [ref=f1e69] [cursor=pointer]:
+            - /url: /team
+        - generic [ref=f1e70]:
+          - generic [ref=f1e71]:
+            - generic [ref=f1e72]:
+              - generic [ref=f1e73]:
+                - generic [ref=f1e74]: Starters scoring
+                - text: "458.0"
+              - generic [ref=f1e75]:
+                - generic [ref=f1e76]: Projected
+                - text: "458.0"
+            - generic [ref=f1e77]: 7 starting
+          - generic [ref=f1e78]:
+            - generic [ref=f1e79]: F
+            - generic [ref=f1e81]:
+              - link "Baye Ndongo" [ref=f1e82] [cursor=pointer]:
+                - /url: /players/659
+              - generic [ref=f1e83]:
+                - generic [ref=f1e84]: vs Notre Dame
+                - generic [ref=f1e86]:
+                  - time [ref=f1e87]: 12:00 PM
+                  - text: ET
+            - generic [ref=f1e88]:
+              - generic [ref=f1e89]: Final
+              - generic [ref=f1e90]:
+                - generic [ref=f1e91]: "53.7"
+                - generic [ref=f1e92]: pts
+          - generic [ref=f1e93]:
+            - generic [ref=f1e94]: FLEX
+            - generic [ref=f1e96]:
+              - link "Aday Mara" [ref=f1e97] [cursor=pointer]:
+                - /url: /players/2203
+              - generic [ref=f1e98]:
+                - generic [ref=f1e99]: vs UCLA
+                - generic [ref=f1e101]:
+                  - time [ref=f1e102]: 12:45 PM
+                  - text: ET
+            - generic [ref=f1e103]:
+              - generic [ref=f1e104]: Final
+              - generic [ref=f1e105]:
+                - generic [ref=f1e106]: "71.1"
+                - generic [ref=f1e107]: pts
+          - generic [ref=f1e108]:
+            - generic [ref=f1e109]: FLEX
+            - generic [ref=f1e111]:
+              - link "Sam Hoiberg" [ref=f1e112] [cursor=pointer]:
+                - /url: /players/1524
+              - generic [ref=f1e113]:
+                - generic [ref=f1e114]: vs Northwestern
+                - generic [ref=f1e116]:
+                  - time [ref=f1e117]: 1:00 PM
+                  - text: ET
+            - generic [ref=f1e118]:
+              - generic [ref=f1e119]: Final
+              - generic [ref=f1e120]:
+                - generic [ref=f1e121]: "81.5"
+                - generic [ref=f1e122]: pts
+          - generic [ref=f1e123]:
+            - generic [ref=f1e124]: C
+            - generic [ref=f1e126]:
+              - link "JT Toppin" [ref=f1e127] [cursor=pointer]:
+                - /url: /players/2079
+              - generic [ref=f1e128]:
+                - generic [ref=f1e129]: vs Arizona
+                - generic [ref=f1e131]:
+                  - time [ref=f1e132]: 6:30 PM
+                  - text: ET
+            - generic [ref=f1e133]:
+              - generic [ref=f1e134]: Final
+              - generic [ref=f1e135]:
+                - generic [ref=f1e136]: "83.3"
+                - generic [ref=f1e137]: pts
+          - generic [ref=f1e138]:
+            - generic [ref=f1e139]: G
+            - generic [ref=f1e141]:
+              - link "Jacari White" [ref=f1e142] [cursor=pointer]:
+                - /url: /players/1544
+              - generic [ref=f1e143]:
+                - generic [ref=f1e144]: vs Ohio State
+                - generic [ref=f1e146]:
+                  - time [ref=f1e147]: 8:00 PM
+                  - text: ET
+            - generic [ref=f1e148]:
+              - generic [ref=f1e149]: Final
+              - generic [ref=f1e150]:
+                - generic [ref=f1e151]: "45.4"
+                - generic [ref=f1e152]: pts
+          - generic [ref=f1e153]:
+            - generic [ref=f1e154]: G
+            - generic [ref=f1e156]:
+              - link "Labaron Philon" [ref=f1e157] [cursor=pointer]:
+                - /url: /players/1761
+              - generic [ref=f1e158]:
+                - generic [ref=f1e159]: vs South Carolina
+                - generic [ref=f1e161]:
+                  - time [ref=f1e162]: 8:30 PM
+                  - text: ET
+            - generic [ref=f1e163]:
+              - generic [ref=f1e164]: Final
+              - generic [ref=f1e165]:
+                - generic [ref=f1e166]: "60.2"
+                - generic [ref=f1e167]: pts
+          - generic [ref=f1e168]:
+            - generic [ref=f1e169]: F
+            - generic [ref=f1e171]:
+              - link "Graham Ike" [ref=f1e172] [cursor=pointer]:
+                - /url: /players/689
+              - generic [ref=f1e173]:
+                - generic [ref=f1e174]: vs Santa Clara
+                - generic [ref=f1e176]:
+                  - time [ref=f1e177]: 10:40 PM
+                  - text: ET
+            - generic [ref=f1e178]:
+              - generic [ref=f1e179]: Final
+              - generic [ref=f1e180]:
+                - generic [ref=f1e181]: "63.0"
+                - generic [ref=f1e182]: pts
+          - generic [ref=f1e183]:
+            - generic [ref=f1e184]: BN
+            - generic [ref=f1e186]:
+              - link "Blake Buchanan" [ref=f1e187] [cursor=pointer]:
+                - /url: /players/850
+              - generic [ref=f1e188]:
+                - generic [ref=f1e189]: vs Kansas
+                - generic [ref=f1e191]:
+                  - time [ref=f1e192]: 1:00 PM
+                  - text: ET
+            - generic [ref=f1e193]:
+              - generic [ref=f1e194]: Final
+              - generic [ref=f1e195]:
+                - generic [ref=f1e196]: "64.5"
+                - generic [ref=f1e197]: pts
+          - generic [ref=f1e198]:
+            - generic [ref=f1e199]: BN
+            - generic [ref=f1e201]:
+              - link "Ebuka Okorie" [ref=f1e202] [cursor=pointer]:
+                - /url: /players/1917
+              - generic [ref=f1e203]:
+                - generic [ref=f1e204]: vs Wake Forest
+                - generic [ref=f1e206]:
+                  - time [ref=f1e207]: 4:00 PM
+                  - text: ET
+            - generic [ref=f1e208]:
+              - generic [ref=f1e209]: Final
+              - generic [ref=f1e210]:
+                - generic [ref=f1e211]: "59.9"
+                - generic [ref=f1e212]: pts
+          - generic [ref=f1e213]:
+            - generic [ref=f1e214]: BN
+            - generic [ref=f1e216]:
+              - link "Pasha Goodarzi" [ref=f1e217] [cursor=pointer]:
+                - /url: /players/734
+              - generic [ref=f1e218]:
+                - generic [ref=f1e219]: vs Grand Canyon
+                - generic [ref=f1e221]:
+                  - time [ref=f1e222]: 5:00 PM
+                  - text: ET
+            - generic [ref=f1e223]:
+              - generic [ref=f1e224]: Final
+              - generic [ref=f1e225]:
+                - generic [ref=f1e226]: "50.6"
+                - generic [ref=f1e227]: pts
+          - generic [ref=f1e228]:
+            - generic [ref=f1e229]: BN
+            - generic [ref=f1e231]:
+              - link "Fletcher Loyer" [ref=f1e232] [cursor=pointer]:
+                - /url: /players/1633
+              - generic [ref=f1e233]:
+                - generic [ref=f1e234]: vs Iowa
+                - generic [ref=f1e236]:
+                  - time [ref=f1e237]: 5:00 PM
+                  - text: ET
+            - generic [ref=f1e238]:
+              - generic [ref=f1e239]: Final
+              - generic [ref=f1e240]:
+                - generic [ref=f1e241]: "59.8"
+                - generic [ref=f1e242]: pts
+          - generic [ref=f1e243]:
+            - generic [ref=f1e244]: BN
+            - generic [ref=f1e246]:
+              - link "Gicarri Harris" [ref=f1e247] [cursor=pointer]:
+                - /url: /players/1646
+              - generic [ref=f1e248]:
+                - generic [ref=f1e249]: vs Iowa
+                - generic [ref=f1e251]:
+                  - time [ref=f1e252]: 5:00 PM
+                  - text: ET
+            - generic [ref=f1e253]:
+              - generic [ref=f1e254]: Final
+              - generic [ref=f1e255]:
+                - generic [ref=f1e256]: "81.6"
+                - generic [ref=f1e257]: pts
+        - generic [ref=f1e258]:
+          - heading "Around the league" [level=2] [ref=f1e259]
+          - link "All matchups →" [ref=f1e260] [cursor=pointer]:
+            - /url: /league
+        - generic [ref=f1e261]:
+          - link "Team 4 646.4 – 665.0 Team 6" [ref=f1e262] [cursor=pointer]:
+            - /url: /league
+            - generic [ref=f1e263]:
+              - generic [aria-hidden] [ref=f1e264]: T4
+              - generic [ref=f1e265]: Team 4
+            - generic [ref=f1e266]:
+              - generic [ref=f1e267]: "646.4"
+              - generic [ref=f1e268]: –
+              - generic [ref=f1e269]: "665.0"
+            - generic [ref=f1e270]:
+              - generic [aria-hidden] [ref=f1e271]: T6
+              - generic [ref=f1e272]: Team 6
+          - link "Team 3 674.6 – 635.8 Team 7" [ref=f1e273] [cursor=pointer]:
+            - /url: /league
+            - generic [ref=f1e274]:
+              - generic [aria-hidden] [ref=f1e275]: T3
+              - generic [ref=f1e276]: Team 3
+            - generic [ref=f1e277]:
+              - generic [ref=f1e278]: "674.6"
+              - generic [ref=f1e279]: –
+              - generic [ref=f1e280]: "635.8"
+            - generic [ref=f1e281]:
+              - generic [aria-hidden] [ref=f1e282]: T7
+              - generic [ref=f1e283]: Team 7
+          - link "Team 2 666.1 – 681.6 Team 8" [ref=f1e284] [cursor=pointer]:
+            - /url: /league
+            - generic [ref=f1e285]:
+              - generic [aria-hidden] [ref=f1e286]: T2
+              - generic [ref=f1e287]: Team 2
+            - generic [ref=f1e288]:
+              - generic [ref=f1e289]: "666.1"
+              - generic [ref=f1e290]: –
+              - generic [ref=f1e291]: "681.6"
+            - generic [ref=f1e292]:
+              - generic [aria-hidden] [ref=f1e293]: T8
+              - generic [ref=f1e294]: Team 8
+          - link "Team 10 644.1 – 597.3 Team 9" [ref=f1e295] [cursor=pointer]:
+            - /url: /league
+            - generic [ref=f1e296]:
+              - generic [aria-hidden] [ref=f1e297]: T10
+              - generic [ref=f1e298]: Team 10
+            - generic [ref=f1e299]:
+              - generic [ref=f1e300]: "644.1"
+              - generic [ref=f1e301]: –
+              - generic [ref=f1e302]: "597.3"
+            - generic [ref=f1e303]:
+              - generic [aria-hidden] [ref=f1e304]: T9
+              - generic [ref=f1e305]: Team 9
+      - generic [ref=f1e306]:
+        - generic [ref=f1e307]:
+          - generic [ref=f1e308]:
+            - heading "Needs you" [level=2] [ref=f1e309]
+            - generic [ref=f1e310]: "2"
+          - generic [ref=f1e311]:
+            - generic [ref=f1e312]:
+              - generic [ref=f1e318]:
+                - generic [ref=f1e319]: 1 benched game already tipped off
+                - generic [ref=f1e320]: About 49.4 projected points sat out tonight. Tomorrow's lineup can be set now.
+              - link "Work ahead" [ref=f1e322] [cursor=pointer]:
+                - /url: /team
+            - generic [ref=f1e323]:
+              - generic [ref=f1e331]:
+                - generic [ref=f1e332]: 1 roster spot open
+                - generic [ref=f1e333]: An empty spot never scores. Free agents can be added outright.
+              - link "Browse" [ref=f1e335] [cursor=pointer]:
+                - /url: /players?free=1
+        - generic [ref=f1e336]:
+          - generic [ref=f1e337]:
+            - heading "Standings" [level=2] [ref=f1e338]
+            - link "Full table →" [ref=f1e339] [cursor=pointer]:
+              - /url: /standings
+          - generic [ref=f1e340]:
+            - generic [ref=f1e341]:
+              - generic [ref=f1e342]: "1"
+              - generic [aria-hidden] [ref=f1e343]: T8
+            - generic [ref=f1e344]:
+              - generic [ref=f1e345]: Team 8
+              - generic [ref=f1e346]: 1–0
+            - generic [ref=f1e348]: "682"
+          - generic [ref=f1e350]:
+            - generic [ref=f1e351]:
+              - generic [ref=f1e352]: "2"
+              - generic [aria-hidden] [ref=f1e353]: T5
+            - generic [ref=f1e354]:
+              - generic [ref=f1e355]: Team 5
+              - generic [ref=f1e356]: 1–0
+            - generic [ref=f1e358]: "679"
+          - generic [ref=f1e360]:
+            - generic [ref=f1e361]:
+              - generic [ref=f1e362]: "3"
+              - generic [aria-hidden] [ref=f1e363]: T3
+            - generic [ref=f1e364]:
+              - generic [ref=f1e365]: Team 3
+              - generic [ref=f1e366]: 1–0
+            - generic [ref=f1e368]: "675"
+          - generic [ref=f1e370]:
+            - generic [ref=f1e371]:
+              - generic [ref=f1e372]: "4"
+              - generic [aria-hidden] [ref=f1e373]: T6
+            - generic [ref=f1e374]:
+              - generic [ref=f1e375]: Team 6
+              - generic [ref=f1e376]: 1–0
+            - generic [ref=f1e378]: "665"
+          - generic [ref=f1e380]:
+            - generic [ref=f1e381]:
+              - generic [ref=f1e382]: "5"
+              - generic [aria-hidden] [ref=f1e383]: T10
+            - generic [ref=f1e384]:
+              - generic [ref=f1e385]: Team 10
+              - generic [ref=f1e386]: 1–0
+            - generic [ref=f1e388]: "644"
+          - generic [ref=f1e390]:
+            - generic [ref=f1e391]:
+              - generic [ref=f1e392]: "6"
+              - generic [aria-hidden] [ref=f1e393]: T2
+            - generic [ref=f1e394]:
+              - generic [ref=f1e395]: Team 2
+              - generic [ref=f1e396]: 0–1
+            - generic [ref=f1e398]: "666"
+  - button "Open Next.js Dev Tools" [ref=f1e405] [cursor=pointer]
+  - alert [ref=f1e409]

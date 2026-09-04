@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import type { QueuedPlayer } from "@illini/league";
 import { moveQueued, unqueuePlayer, type DraftState } from "./actions.ts";
+import { RoleTag } from "../ui/bits.tsx";
 
 /**
  * The list the clock reads when you are not here.
@@ -22,7 +23,7 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
     <div className="panel">
       <div className="panel-head">
         <h2>Your queue</h2>
-        <span className="tag">{live.length}</span>
+        <span className="pill">{live.length}</span>
       </div>
 
       {players.length === 0 ? (
@@ -41,12 +42,14 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
               <li key={player.playerId} data-taken={!player.available}>
                 <span className="queue-rank num">{i + 1}</span>
                 <span className="queue-who">
-                  <Link href={`/players/${player.playerId}`} className="player-link">
-                    {player.name}
-                  </Link>
+                  <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
+                    <Link href={`/players/${player.playerId}`} className="player-link">
+                      {player.name}
+                    </Link>
+                    <RoleTag role={player.role} />
+                  </span>
                   <span className="sub">
                     {player.teamName ?? "—"}
-                    {player.archetype ? ` · ${player.archetype}` : ""}
                     {` · ${player.averageScore.toFixed(1)} avg`}
                   </span>
                 </span>
@@ -74,7 +77,7 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
                 ) : (
                   // Kept, not silently dropped: a manager should see that the
                   // player they wanted is gone, not just find him missing.
-                  <span className="tag lock" data-missed="true">Taken</span>
+                  <span className="pill" data-missed="true">Taken</span>
                 )}
               </li>
             ))}

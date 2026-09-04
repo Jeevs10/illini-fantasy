@@ -1,9 +1,12 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { playerCard, type GameLogEntry, type PlayerCard } from "@illini/league";
 import type { BlockName } from "@illini/scoring";
 import { db } from "../../../lib/db.ts";
 import { requireViewer } from "../../../lib/session.ts";
+import { Avatar } from "../../ui/identity.tsx";
+import { Bar, Empty, Score, StatTile } from "../../ui/bits.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -32,72 +35,93 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
   const card = await playerCard(db, { playerId: Number(id), configId, season, leagueId });
   if (!card) notFound();
 
-  const best = card.log.length === 0 ? 0 : Math.max(...card.log.map((g) => g.score));
+  const scores = card.log.map((g) => g.score);
+  const best = scores.length === 0 ? 0 : Math.max(...scores);
+  const worst = scores.length === 0 ? 0 : Math.min(...scores);
+  // Oldest first, so the trend reads left to right the way a season does.
+  const trend = [...card.log].reverse();
 
   return (
     <>
-      <div className="pagehead">
-        <h1>{card.name}</h1>
-        <p>
-          <span>{card.teamName ?? "Unaffiliated"}</span>
-          {card.conference ? <span>{card.conference}</span> : null}
-          {card.role ? <span>{card.role}</span> : null}
-          {card.classYear ? <span>{card.classYear}</span> : null}
+      <section className="hero">
+        <Avatar name={card.name} seed={card.playerId} size="xl" />
+        <div className="hero-id">
+          <h1>{card.name}</h1>
+          <p className="meta">
+            <span>{card.teamName ?? "Unaffiliated"}</span>
+            {card.conference ? <span>{card.conference}</span> : null}
+            {card.role ? <span>{card.role}</span> : null}
+            {card.classYear ? <span>{card.classYear}</span> : null}
+          </p>
+        </div>
+        <div className="hero-own">
           {card.ownedBy
-            ? <span className="tag">{card.ownedBy}</span>
-            : <span className="tag free">Free agent</span>}
-        </p>
-      </div>
+            ? <span className="pill">Rostered by {card.ownedBy}</span>
+            : <span className="pill free">Free agent</span>}
+          <Link className="button sm" href="/players">← All players</Link>
+        </div>
+      </section>
 
       <div className="panel">
-        <div className="stats">
-          <Stat label="Games" value={String(card.games)} />
-          <Stat label="Total" value={card.totalScore.toFixed(1)} />
-          <Stat label="Average" value={card.averageScore.toFixed(1)} />
-          <Stat label="Best" value={card.games === 0 ? "—" : best.toFixed(1)} />
+        <div className="tiles">
+          <StatTile label="Games" value={String(card.games)} />
+          <StatTile label="Total" value={card.totalScore.toFixed(1)} />
+          <StatTile label="Average" value={card.averageScore.toFixed(1)} tone="accent" />
+          <StatTile label="Best" value={card.games === 0 ? "—" : best.toFixed(1)} />
+          <StatTile label="Floor" value={card.games === 0 ? "—" : worst.toFixed(1)} />
         </div>
+        {trend.length >= 4 ? (
+          <div className="panel-body" style={{ borderTop: "1px solid var(--line-soft)" }}>
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: "var(--s-2)" }}>
+              <span className="eyebrow">Every scored night, oldest first</span>
+              <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
+                {trend[0]!.playedOn} → {trend[trend.length - 1]!.playedOn}
+              </span>
+            </div>
+            <div className="spark" role="img"
+                 aria-label={`Scores from ${worst.toFixed(1)} to ${best.toFixed(1)} over ${trend.length} games`}>
+              {trend.map((g) => (
+                <span
+                  key={g.playedOn}
+                  data-best={g.score === best || undefined}
+                  style={{ height: `${best === 0 ? 0 : Math.max(6, (g.score / best) * 100)}%` }}
+                  title={`${g.playedOn} — ${g.score.toFixed(1)}`}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="panel">
         <div className="panel-head">
           <div>
             <h2>Game log</h2>
-            <p className="prose">
+            <p>
               Each night&rsquo;s six blocks, the opponent multiplier applied to
               them, and the minutes ramp — so a score can be read rather than
               taken on faith.
             </p>
           </div>
+          <span className="pill">{card.games} scored</span>
         </div>
         {card.log.length === 0 ? (
           <EmptyLog card={card} />
         ) : (
-          card.log.map((game) => <Game key={game.playedOn} game={game} />)
+          card.log.map((game) => <Game key={game.playedOn} game={game} best={best} />)
         )}
       </div>
     </>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="stat">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-    </div>
-  );
-}
-
 function EmptyLog({ card }: { card: PlayerCard }) {
   return (
-    <div className="empty">
-      <h3>No scored games</h3>
-      <p>
-        {card.name} has no games under this league&rsquo;s scoring config yet.
-        Freshmen and transfers appear here once they have played a night that
-        has been ingested.
-      </p>
-    </div>
+    <Empty title="No scored games" glyph="clock">
+      {card.name} has no games under this league&rsquo;s scoring config yet.
+      Freshmen and transfers appear here once they have played a night that has
+      been ingested.
+    </Empty>
   );
 }
 
@@ -108,24 +132,25 @@ function EmptyLog({ card }: { card: PlayerCard }) {
  * model the player filled — not the points they contributed, which depend on
  * the archetype's weights.
  */
-function Game({ game }: { game: GameLogEntry }) {
+function Game({ game, best }: { game: GameLogEntry; best: number }) {
   return (
     <article className="game">
       <div>
         <div className="game-head">
           <span className="game-date">{game.playedOn}</span>
-          <span className="tag">{game.archetype}</span>
-          <span className="game-score num">{game.score.toFixed(1)}</span>
+          <span className="pill ghost">{game.archetype}</span>
+          {game.score === best ? <span className="pill mine">Season best</span> : null}
+          <span className="game-score">
+            <Score value={game.score} size="sm" tone={game.score === best ? "accent" : "default"} />
+          </span>
         </div>
         <p className="game-meta">
           vs {game.opponent ?? "unknown"}
-          {game.opponentStrength !== null
-            ? ` · strength ${game.opponentStrength.toFixed(2)}`
-            : ""}
+          {game.opponentStrength !== null ? ` · strength ${game.opponentStrength.toFixed(2)}` : ""}
           {" · "}{game.minutes.toFixed(0)} min · {game.points} pts, {game.rebounds} reb,{" "}
           {game.assists} ast
         </p>
-        <p className="game-math num">
+        <p className="game-math">
           {game.raw.toFixed(1)} raw × {game.multiplier.toFixed(2)} opponent
           {game.minutesGate < 1 ? ` × ${game.minutesGate.toFixed(2)} minutes` : ""}
           {" = "}{game.score.toFixed(1)}
@@ -137,17 +162,8 @@ function Game({ game }: { game: GameLogEntry }) {
           const value = Math.max(0, Math.min(1, game.blocks[name] ?? 0));
           return (
             <div className="block" key={name}>
-              <span className="label" id={`${game.playedOn}-${name}`}>{name}</span>
-              <span
-                className="bar"
-                role="meter"
-                aria-labelledby={`${game.playedOn}-${name}`}
-                aria-valuenow={Number(value.toFixed(2))}
-                aria-valuemin={0}
-                aria-valuemax={1}
-              >
-                <span style={{ width: `${value * 100}%` }} />
-              </span>
+              <span className="label">{name}</span>
+              <Bar percent={value * 100} label={`${name}, ${value.toFixed(2)} of 1`} />
               <span className="val">{value.toFixed(2)}</span>
             </div>
           );

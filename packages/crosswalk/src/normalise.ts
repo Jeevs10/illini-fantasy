@@ -137,6 +137,29 @@ const TEAM_ALIASES: Record<string, string> = {
 };
 
 /**
+ * Schools whose "College" or "University" is the whole distinction.
+ *
+ * The strip below exists because sources disagree about whether a school's name
+ * carries the word at all — CBBD's "American University" and Torvik's
+ * "American" are one school, as are "Queens University" and "Queens". It is
+ * wrong wherever two *different* programmes differ only by that word: dropping
+ * it files Boston College and Boston University under "boston", pooling two
+ * rosters and two schedules onto one row, and the only visible symptom is that
+ * the merged team appears to play twice on the same night.
+ *
+ * Which of the two a name is cannot be derived — it is a fact about the
+ * schools. Keys here are the normalised form with the word kept. Bare
+ * "Colorado" and "Georgia" stay as they are; it is their much smaller
+ * namesakes, which appear only as opponents on the schedule, that move.
+ */
+const KEEPS_ITS_SUFFIX = new Set([
+  "boston college",
+  "boston university",
+  "colorado college",
+  "georgia college",
+]);
+
+/**
  * Torvik abbreviates "State" to "St.", so the two sources disagree on ~90
  * schools. But a *leading* "St." is Saint, not State — expanding it blindly
  * turned "St. Thomas" into "state thomas". Only a trailing "St" is State.
@@ -161,12 +184,14 @@ export function normaliseTeam(raw: string | null | undefined): string {
     // Aliases are checked before stripping "college"/"university", or an entry
     // like "college of charleston" can never match its own key.
     const aliased = TEAM_ALIASES[current] ?? TEAM_ALIASES[expandStateAbbreviation(current)];
-    const next = normaliseName(
-      aliased ?? current
+    const stripped = KEEPS_ITS_SUFFIX.has(current)
+      ? current
+      : current
         .replace(/\b(university|college)\b/g, "")
         .replace(/^\s*of\s+/, "")
-        .replace(/\s+of\s+/g, " "),
-    ).replace(/&/g, " and ").replace(/\s+/g, " ").trim();
+        .replace(/\s+of\s+/g, " ");
+    const next = normaliseName(aliased ?? stripped)
+      .replace(/&/g, " and ").replace(/\s+/g, " ").trim();
 
     const expanded = expandStateAbbreviation(next);
     if (expanded === current) return current;

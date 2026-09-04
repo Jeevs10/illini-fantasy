@@ -1,23 +1,97 @@
-# Handoff — Phase 4, the draft
+# Handoff — Phase 7, league settings and a trade deadline
 
-Phases 1 through 4 are done and verified against the live Neon branch. The
-README is the reference for how the system works; this file is only what the
-next person needs that the README does not say.
+Phases 1 through 7 are done. The README is the reference for how the system
+works; this file is only what the next person needs that the README does not
+say.
 
 ## State
 
 | | |
 |---|---|
-| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 4 |
-| Tests | 84 passing (`npm test`, needs local Postgres — see README) |
-| Typecheck | clean (`npm run typecheck`) |
+| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 7 |
+| Tests | 159 passing (`npm test`, needs local Postgres — see README) |
+| Typecheck | clean (`npm run typecheck`, and `npx tsc --noEmit` inside `apps/web`) |
 | Build | clean (`npm run build`) |
 | Production data | Neon `floral-shape-81709658`, 5 ingested game days, Feb 10–14 2026 |
-| Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) |
+| Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games |
+| Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) · 4 `Illini Fantasy — 2025-26` (branch only, drafted and played out) |
+
+**Phase 7 needs no migration.** `league.settings` is jsonb and every reader
+merges it over `DEFAULT_SETTINGS`, so `tradeDeadline` is a new key rather than a
+new column and a league that has never heard of it reads `null`. The screen
+still needs 007 and 008 on the branch it runs against, because
+`settingsContext` counts sealed claims and live offers.
+
+**Migrations 007, 008 and 009 are not on the production branch.** Production is
+still at 006, so `/waivers` and `/trades` both fail against it — and now so does
+signing in, since `app_user.username` does not exist there yet. Phase 5 was
+exercised on the Neon branch `phase-5-waivers` (`br-restless-glade-axer0kym`), a
+copy of production with 007 applied; that branch has neither 008 nor 009.
+Migrating production is the owner's call and has deliberately not been made.
+
+009 is not additive-only. It drops `auth_account`, `auth_verification_token` and
+the `email_verified` / `image` columns, and empties `auth_session` — every
+session that exists was minted by Auth.js and lives in a cookie by a name
+nothing reads any more. **Whoever runs it against production signs everybody
+out, and nobody can sign back in until they have a password**, which means
+running `npm run league -- passwd <username> <password>` for each of the three
+existing users and telling them what it is. The username backfill is automatic:
+the local part of the address, numbered on collision (`commish`, `manager.two`,
+`new.manager`).
 
 `npm test` and the web app are separate: the root tsconfig excludes `apps/**`,
 so `npm run typecheck` covers the packages and `npx tsc --noEmit` inside
 `apps/web` covers the app.
+
+## The full season lives on a Neon branch
+
+Production still holds five ingested days, Feb 10–14 2026, because that is all
+the ingest was ever run for. Nothing in the schema or the scoring is bounded by
+it — `scripts/ingest.ts` takes one day at a time and only five were asked for.
+
+The whole 2025-26 season is now on the Neon branch **`full-season-2026`**
+(`br-little-river-axpodv84`), which is a copy of production migrated to 009. It
+carries the source tables for every game day of the season and a league,
+`Illini Fantasy — 2025-26`, that was drafted from the full pool and played out.
+
+To work against it, export both URLs — `scripts/env.ts` fills gaps rather than
+overriding, and the CLI prefers the unpooled one, so exporting only
+`DATABASE_URL` leaves `.env.local` supplying production:
+
+```sh
+export DATABASE_URL="postgresql://neondb_owner:...@ep-curly-frog-ax7nyboz-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
+export DATABASE_URL_UNPOOLED="${DATABASE_URL/-pooler/}"
+```
+
+Rebuilding it from nothing is three commands and about half an hour, nearly all
+of it Torvik's 900 ms throttle:
+
+```sh
+npm run ingest -- setup 2026
+npm run ingest -- range 2026 20251101 20260408
+npm run season
+```
+
+`npm run season -- --drop` removes the league without touching the source data,
+which is the split migration `001_sources` / `003_league` exists to allow.
+
+Three things about it that are decisions rather than accidents:
+
+- **The draft is an auto-draft, so it ranks by season-total Player-Score.**
+  That is hindsight — nobody in November knows the March totals. It is the right
+  hindsight here, because the league exists to show what a full roster of real
+  players scores, not to simulate draft-day ignorance. If you want a blind
+  draft, `autoDraft` is the wrong tool and the fix is a config cut off at the
+  draft date.
+- **Auto-fill runs as of midnight UTC on each night.** Nothing tips before
+  16:00 UTC, so at midnight no game is locked. Running it against the real
+  clock instead would find every game already tipped off, freeze every roster
+  on the bench, and settle a season of zeroes — the lineup lock working exactly
+  as designed, against a season that is entirely in the past.
+- **The two existing leagues are untouched.** `createDraft` refuses a league
+  that already has rostered players, so the season is a third league beside
+  `Illini Fantasy` and `Draft Night`, with the same members and owners copied
+  across so the same three accounts can see it in the picker.
 
 ## Start here
 
@@ -32,33 +106,166 @@ February 2026; against the real clock every game has tipped off, so every
 lineup is correctly frozen and the only interactive control on the site never
 renders. This cost real time to diagnose once already.
 
-Sign-in has no mail credentials, so the magic link is printed to the server log.
-`AUTH_URL` pins the port the link points at — if 3000 is taken, `next dev` moves
-and the link does not.
+That command runs against whatever `.env.local` points at, which is production
+— and production has no `username` column, so sign-in fails there. To click
+through the app, run it against a local copy instead:
+
+```sh
+pg_dump --no-owner --no-privileges -f prod.sql "$DATABASE_URL_UNPOOLED"
+psql "$ADMIN" -c 'CREATE DATABASE illini_local'
+psql "postgresql://postgres:dev@localhost:55432/illini_local" -f prod.sql
+
+export DATABASE_URL=postgresql://postgres:dev@localhost:55432/illini_local
+export DATABASE_URL_UNPOOLED=$DATABASE_URL        # both, or scripts hit production
+npm run migrate                                   # applies 007, 008, 009
+npm run league -- passwd commish illini2026       # and manager.two, new.manager
+```
+
+**Export both URLs.** `scripts/env.ts` fills gaps rather than overriding and the
+CLI prefers `DATABASE_URL_UNPOOLED`, so exporting only `DATABASE_URL` leaves
+`.env.local` supplying the unpooled Neon URL and the script runs against
+production.
+
+`AUTH_URL` no longer affects sign-in — only the invite link `/commissioner`
+prints. Set it to the port you are actually on or the commissioner copies a link
+to a dead port.
+
+## How Phase 7 was verified
+
+Production is three migrations behind, so the same route Phase 6 took:
+
+- The module has 21 tests of its own (`packages/league/src/settings.test.ts`)
+  against a throwaway local database, and the deadline adds 5 to
+  `trades.test.ts` — 159 in the suite, up from 132.
+- The CLI verbs were run end to end against a scratch local database
+  (`illini_phase7`, dropped afterwards): reading the settings, setting several
+  at once, each of the three refusals against real rosters and a real spend, the
+  games-cap re-score against a settled week whose arithmetic is checkable by
+  hand (four players scoring 1–4 a night for five nights: cap 9 → 32, cap 5 →
+  20, cap 3 → 12), and the deadline — offered inside it, refused outside it,
+  agreed on the deadline day and executed the day after, and a standing offer
+  expired by the deadline rather than by neglect.
+- The screens were driven in a browser against that same scratch database,
+  serving the production build on port 3021. The refusal ("Nothing was saved."
+  plus the reason, and no log row), a successful save (the receipt, the
+  re-score note, the new log row), the live roster-limit arithmetic as the slots
+  move, the standings agreeing with the cap afterwards, `/trades` showing the
+  deadline in its meta and standing the propose form down once it passed, and
+  the expired offer reading "the trade deadline passed".
+- Narrow width was checked with the same-origin iframe trick at 390px and 768px
+  (`resize_window` is still non-functional — see below): no horizontal overflow
+  at either, `document.scrollWidth` equal to `innerWidth`, the field rows
+  stacking and the log table wrapping.
+
+Light mode was not opened, the same as Phases 5 and 6. The new CSS uses no
+literal colour — every value is a token that is defined twice, on `:root` and
+again under `prefers-color-scheme: dark` — so it is covered by construction
+rather than by inspection.
+
+Two bugs the exercise caught that the tests as first written did not:
+
+- **Two clocks reached one offer and the wrong one claimed it.** An offer with
+  three days to run and a deadline a day away was reported as "nobody answered
+  before it expired", dated two days after the deadline had already killed it.
+  The expiry passes now run deadline-first, bounded to offers that were still
+  alive when the deadline arrived. There is a test for it.
+- **`.notice` is a flex row.** A `<strong>` between two text fragments becomes
+  three flex items with `gap` between them, so the sentence acquired gaps and an
+  orphaned full stop as soon as it wrapped. Every other notice in the app has a
+  single text child, which is why nothing had shown it before. Wrap the sentence
+  in one `<span>`.
+
+## How Phase 6 was verified
+
+The app could not be exercised against production, which is two migrations
+behind, so:
+
+- The module has 13 tests of its own (`packages/league/src/trades.test.ts`),
+  against a throwaway local database, the same way waivers and the draft do.
+- The CLI verbs were run end to end against a scratch local database — offer,
+  accept, the window, execution dated to its own moment, veto, expiry, the
+  transaction log — and the database was dropped afterwards.
+- The screens were driven in a browser against that same scratch database,
+  serving the production build (`npx next start --port 3005`) rather than
+  `next dev`, because two dev servers for this project were already running and
+  Next refuses a second. Propose, send, accept, review, veto and the settled
+  history all render and act correctly in dark mode at desktop width.
+
+Not checked in a browser: narrow widths (`resize_window` is still
+non-functional here — see below) and light mode.
+
+## How password sign-in was verified
+
+Against a full copy of production restored locally (`illini_local`), migrated to
+009, serving the production build on port 3006 — `next dev` refuses a second
+server for this directory and one was already running on 3002.
+
+- 17 tests in `packages/league/src/accounts.test.ts`: salting, the cost
+  parameters in the stored string, junk hashes verifying nothing, the username
+  and password rules, adopting a commissioner-made seat rather than duplicating
+  it, both `AccountTaken` cases, the derived-username collision, reset, change,
+  rename, and the CHECK constraint refusing what the module would have.
+- In a browser: wrong password (one sentence, username kept, password cleared),
+  right password, the commissioner screen, creating an invite, signing out,
+  redeeming the link as a new manager — including a first attempt with a taken
+  username, which reported it and left the invite live — and signing back in
+  with the credentials just chosen, in mixed case.
+- One bug the tests caught before the browser did: registering against a seat
+  the commissioner had already named overwrote their display name with the
+  local part of their address.
+
+Not checked: narrow widths and light mode, same as Phase 6.
 
 ## Where it stopped
 
-Done through Phase 4: the draft. A materialised snake board, a clock that is
-settled on read rather than by a daemon, per-manager queues, a slot-aware
-autopick, and `/draft` — the room, with the commissioner's start and pause.
-Picks claim through `claimPlayer`, so the draft shares the league's ownership
-index rather than keeping its own.
+Done through Phase 7: the settings screen, and the trade deadline it had to
+learn to hold. Every number in `league.settings` is now editable from
+`/commissioner/settings` and from `npm run league -- settings`, through one
+module that knows which changes a league already in progress can survive — three
+refusals that name the team, notes for everything already in flight that keeps
+the rule it was created under, and a re-score of every settled week when the
+games cap moves.
 
 Not done, in the order I would take them:
 
-1. **Waivers.** `roster_slot` and `transaction` model the claim/release
-   lifecycle and `claimPlayer` / `releasePlayer` enforce it, but nothing
-   schedules or resolves a FAAB bid. This is now the largest gap.
-2. **Draw the games cap** and the rest of the design backlog — see
+1. **Draw the games cap** and the rest of the design backlog — see
    `.impeccable/critique/` for the persisted snapshot, which `/polish` reads
-   automatically. Note that the critique predates `/commissioner` and `/draft`,
-   so its heuristic scores do not cover either.
+   automatically. The critique predates `/commissioner`, `/draft`, `/waivers`,
+   `/trades` and `/commissioner/settings`, so its heuristic scores cover none of
+   the five. This is the largest gap now.
+2. **Settings that vary by week.** The games cap re-scores history because there
+   is one settings blob and no way to say "nine until week 6, eight after". That
+   is the honest fix and it is a real phase: `matchup` would have to carry the
+   settings it settled under, the way `player_game_score` carries its config.
+   The re-score is the right behaviour *given one blob*, and it is worth knowing
+   it is a consequence of that rather than a preference.
+3. **A settings screen for a manager.** Everything on `/commissioner/settings`
+   is the commissioner's. A manager cannot change their own password or username
+   from any screen, and that is the same shape of gap the league settings were
+   until now — `changePassword` and `setUsername` exist and are tested with
+   nothing calling them.
 
-Smaller gaps. The draft: no way to edit the order once drawn, no pick trading,
-and snake or nothing — no keeper or auction format. The commissioner surface: no
-way to rename or add a team from the app, no way to change a member's role, and
-no resend — re-inviting an address is the resend, which is correct but is
-labelled nowhere.
+Smaller gaps. Settings: no way to add a slot the archetypes do not already know
+about, and no per-week playoff configuration — `matchup` has no notion of a
+playoff at all. Trades: no counter-offer, so countering is a rejection plus a new
+offer; nothing emails a manager who was offered a deal overnight; the
+commissioner cannot force a trade through early, only stop it; a trade cannot
+include FAAB dollars or draft picks, only players; and the deadline binds the
+handshake rather than the execution, which is deliberate and is the thing
+somebody will eventually argue about. Waivers: there is no
+post-draft waiver period, so every undrafted player is addable outright from the
+moment the draft ends; and nothing emails a manager whose claim was settled
+overnight. The draft: no way to edit the order once drawn, no pick trading, and
+snake or nothing. The commissioner surface: no way to rename or add a team from
+the app, no way to change a member's role, and no resend — re-inviting an
+address is the resend, which is correct but is labelled nowhere. Accounts: a
+manager cannot change their own password or username from the app, only the
+commissioner can reset one and only from the CLI (`changePassword` and
+`setUsername` exist and are tested, with no screen calling either); there is no
+rate limit on the sign-in form, which for a twenty-person private league is a
+judgement rather than an oversight but is the first thing to add if the app ever
+faces the open internet; and a session lasts thirty days with no sliding
+renewal, since a server component cannot write cookies.
 
 ## The two leagues
 
@@ -76,8 +283,51 @@ The picker is a cookie read by `who()`, and it is a *preference* rather than an
 authorisation: the chosen league has to be one the viewer is actually a member
 of, so a hand-edited cookie selects nothing rather than somebody else's data.
 
+## The interface, rebuilt
+
+The screens were redrawn on a new design system. Nothing about the schema, the
+scoring, the settlement or the transaction rules changed; two read-only view
+functions were added, and every screen was rewritten against them.
+
+- **`/` now redirects to `/home`, not `/league`.** Home is a new screen and is
+  the one that answers "how is my team doing" — the live matchup, tonight's
+  slate, and a "Needs you" list built from state the app already knows (an
+  unfilled slot somebody eligible could take, a benched game that has already
+  tipped off, a standing trade offer, a sealed claim, an empty roster spot).
+  `/league` is still the matchup screen and is now interleaved by rank with the
+  games cap drawn across it as a line.
+- **`packages/league/src/outlook.ts` is new and additive.** `periodOutlook`
+  wraps `scorePeriod` with the games that have *not* been scored yet, so a week
+  in progress can say how many players are on the floor and where it lands if
+  form holds; `scoresOn`, `slateByDay` and `rankedStandings` are the same shape
+  of thing. Nothing in it invents a number — a pending game's projection is the
+  player's own average under the league's config, which is what auto-fill
+  already ranks by. `scorePeriod` and `standings` are untouched, because
+  settlement reads them.
+- **`apps/web/app/ui/` holds the shared parts** — the scorebug, the player row,
+  the avatar, the score, the glyphs, the skeletons. A screen that needs a new
+  kind of row should get a variant there rather than a second idea of what a
+  row is.
+- **The masthead nav is desktop-only.** Below 860px there is a fixed bottom bar
+  with four destinations and a sheet for the rest. `body > *` used to carry
+  `position: relative`, which silently defeated `position: fixed` on all three
+  — if a fixed element starts scrolling with the page, look there first.
+- **The avatars are derived, not stored.** A hue from the team or player id and
+  a monogram from the name. It is presentation, and it is the only thing that
+  makes ten rows of "Team 4" scannable.
+- Verified at 1440×900, 768×1024 and 390×844, in both colour schemes, against
+  the production build as well as `next dev`: no horizontal overflow, no
+  unlabelled controls, no console errors, and every text/background pair at
+  4.5:1 or better.
+
 ## Things that will mislead you
 
+- **Every path that closes a tenure owes `clearFutureLineups`, and closing one
+  does not do it.** Lineups can be set for nights that have not happened, so a
+  player who leaves a roster on Tuesday can still be in Thursday's starting five
+  and would score for a team that no longer owns him. The rule now lives once,
+  in `roster.ts` next to `releasePlayer`; waivers and trades both call it.
+  `releasePlayer` on its own still does not.
 - **A server action that changes what the layout renders must revalidate it.**
   Joining a league updates the viewer's name and, for a commissioner, their nav.
   Without `revalidatePath("/", "layout")` the client router replays the layout it
@@ -93,17 +343,51 @@ of, so a hand-edited cookie selects nothing rather than somebody else's data.
 - **Scores are versioned by the config that produced them.** Editing weights
   creates a new `scoring_config` row rather than mutating one that settled
   matchups reference. Never mutate a config in place.
+- **The games cap is the one setting that rewrites history, and it does it on
+  purpose.** `settings` is a single blob with no per-week version, so a week
+  settled under a cap of nine is no longer the score the league plays by once
+  the cap is eight — the standings read stored points and `/league` recomputes
+  live, and the two would silently disagree. `updateSettings` re-scores every
+  already-settled week in the same transaction, leaving `settled_at` alone. If
+  you add a setting that changes what a settled score *is*, it belongs in that
+  same branch; if you add one that only binds the future, it belongs in the
+  notes instead. Getting that backwards is silent either way.
+- **Everything in flight carries the rule it was created under, and that is not
+  a bug.** `waiver_claim.runs_at`, `waiver_wire.clears_at`, `trade.expires_at`
+  and `trade.executes_at` are all written at creation. Changing the waiver hour
+  does not move a sealed bid; changing the review window does not move an agreed
+  trade. That is the only reason a sealed bid can be sealed at all. The settings
+  module reports each of these as a note rather than "fixing" it.
+- **The trade deadline binds the handshake, not the execution.** A deal agreed
+  on deadline day executes when its review window closes, which may be the day
+  after. Rejecting an offer works after the deadline; accepting one does not.
+  And two clocks can reach one offer — the deadline pass runs before the
+  ordinary expiry and is bounded to offers that were still alive when the
+  deadline arrived, so whichever got there first is the one that gets blamed.
 - **A re-ingest must never touch league data.** That is why the migrations are
   split at `001_sources` / `003_league`, and why `player_game_stat` is only ever
   written by ingest and `player_game_score` only by scoring.
-- **The draft does not use `ILLINI_NOW`, and must not.** Every other clock in
-  the app is the pinned one, so that a finished season browses correctly. The
-  draft is a live event: pinning it means no deadline passes and no autopick is
-  ever made. If you add a draft screen, take `new Date()` deliberately.
-- **Nothing runs the draft clock but a reader.** There is no worker. An open
-  room polls every five seconds; a closed one costs nothing, and the next reader
-  makes every pick that was due at the time it was due. If picks seem not to be
-  happening, the question is who last read the draft, not what crashed.
+- **The draft does not use `ILLINI_NOW`. Waivers and trades do, and must.**
+  This looks like an inconsistency and is not. A draft writes rosters dated by
+  its own `opens_on`, so pinning its clock only stops the deadline passing —
+  which is why the draft takes `new Date()` deliberately. A waiver claim and a
+  trade both write *dated tenures* that are read back against the same pinned
+  date the rest of the app browses, so on the wall clock a drop or a deal in a
+  pinned February season is dated September and the players never change hands
+  on any night you can see. `scripts/league.ts` honours `ILLINI_NOW` for the
+  waiver and trade verbs and ignores it for the draft ones, for exactly this
+  reason.
+- **Nothing runs waivers, trades or the draft clock but a reader.** `/waivers`
+  and `/players` call `settleWaivers` before they render; `/trades` calls
+  `settleTrades`; an open draft room polls. If a batch, a window or a pick seems
+  not to have resolved, the question is who last loaded one of those pages, not
+  what crashed.
+- **A trade executes inside its own savepoint, and needs to.** A deal that
+  cannot be honoured must leave nothing behind — half of a two-for-one is two
+  teams robbed — and a refusal from the ownership index is a Postgres error that
+  aborts the whole transaction unless there is a point to roll back to. Any new
+  code in `settleTrades` that writes before it is sure belongs inside that
+  savepoint.
 - **Three timezone bugs have been fixed in this codebase and they keep coming
   back in new forms:** the CBBD query window, the stored game date, and the
   browser-vs-server tip-off render. If something is off by a day or by hours,
@@ -115,3 +399,308 @@ The 2026-27 season is still not loaded at CBBD (`npm run pool` reports
 coverage). The draft pool currently comes from 2025-26 rosters plus an
 incomplete NCAA CSV. Someone has to poll weekly and switch over when it
 populates, or the draft board is built on last year's teams.
+
+## Planned — Phases 8 through 12: playoffs, positional roles, a Sleeper-informed stat surface
+
+Not started. Written up here so the plan does not live only in a chat
+transcript. Renumbered from Phase 7 up, since Phase 7 above is already taken by
+the settings screen and the trade deadline.
+
+Three gaps, one of which the repo already diagnosed itself.
+
+**The season has no ending.** The league runs a 17-week round robin and stops.
+`league.settings` has carried a comment promising "playoff weeks" since
+migration 003 and nothing implements them, so the last settled week is just the
+last settled week.
+
+**Position is shown as a scoring internal.** Players are labelled with the
+*archetype* the model weights against (`lead`, `combo`, `wing`, `swing`, `big`),
+and roster slots are `G / F / C` with eligibility derived from those
+archetypes — which produces two rules nobody would choose: a Stretch 4 can
+start at centre and a pure centre can start at forward.
+
+**The player card explains the score and nothing else.** Six blocks, the
+opponent multiplier, the minutes ramp. No box line, no rank, no projection, no
+news, and no way to ask who had the best night in the league last Tuesday.
+
+The design critique at `.impeccable/critique/2026-09-03T17-01-12Z__apps-web.md`
+(18/40, taken before `/commissioner`, `/draft`, `/waivers`, `/trades` and
+`/commissioner/settings` existed) names the same things from the other
+direction:
+
+> Nothing about the interface is *college basketball*. No conference structure
+> past a grey sub-label, no sense of a Saturday slate versus a dead Tuesday, and
+> ten teams named "Team 1".."Team 10" with no logo, colour or manager name.
+
+> Three position vocabularies run in parallel with no mapping: role ("Scoring
+> PG"), archetype ("lead"), slot ("G").
+
+So the roles work below is not only a feature request — it closes an open P1.
+So does the pool filter, the sortable tables, and the archetype weights on the
+player card. Where a phase closes a critique finding, it is marked
+**[critique]**.
+
+Four decisions taken up front: roles become **G / F / B** and **govern
+eligibility**; playoffs default to **6 teams, weeks 15–17** with byes for seeds
+1–2 and a third-place game; injuries come from **RotoWire**, whose endpoint is
+already proven in this repo (`scripts/crosswalk.ts`); ingest widens to carry
+the box line and **the season is re-ingested**.
+
+### Two findings that shape the work
+
+**1. The archetype cannot carry the role.** The mapping asked for splits two
+archetypes down the middle:
+
+| Torvik `role` | archetype | new role |
+|---|---|---|
+| Pure PG | `lead` | G |
+| Scoring PG | `lead` | G |
+| Combo G | `combo` | **G** |
+| Wing G | `combo` | **G · F** |
+| Wing F | `wing` | F |
+| Stretch 4 | `swing` | F |
+| PF/C | `big` | **F · B** |
+| C | `big` | **B** |
+
+`combo` covers both Combo G (guard only) and Wing G (guard *and* forward);
+`big` covers both PF/C (forward and big) and C (big only). The role must
+derive from the **Torvik role string**, not the archetype. Checked against the
+database: that string is stored twice — `player_game_stat.role` per game, and
+`player.position`, which `resolveTorvikPlayers`
+(`packages/ingest/src/players.ts:40`) writes from the Torvik role at player
+creation. All 3,525 players have one, all eight values appear, and **no player
+has ever changed role** — so latest-game-role with `player.position` as
+fallback is correct and cheap.
+
+`playerPool` currently picks the role with `max(st.role)`
+(`packages/league/src/roster.ts:220`) — alphabetical, so arbitrary for anyone
+who ever changes. Harmless today, load-bearing after this. It becomes
+most-recent.
+
+**2. The missing stats are missing only from storage.** Ingest writes
+`stats = JSON.stringify(line)` where `line` is the model input
+(`packages/ingest/src/nightly.ts:289`). Confirmed the 27 keys in the database:
+MIN, PTS, REB, AST and eighteen rate stats plus `attempts` — **no steals, no
+blocks, no rebound split, no shooting splits**. Torvik's pslice row already
+carries every one (`COL.steals` 61, `blocks` 62, `offensiveRebounds` 57,
+`defensiveRebounds` 58, `ftMade` 13, `twoMade` 16, `threeMade` 19) plus the bio
+fields (`height` 26, `jersey` 27, `year` 25, `recRank` 34) — all dropped on the
+floor in `toPlayerLine`.
+
+The fix is a `box` sub-object written *beside* the model input rather than
+into `PlayerLine`, so the scorer's input shape is untouched and parity cannot
+drift. Then a re-ingest — safe and nearly free: Torvik responses are cached
+under `.cache/`, `player_game_stat` is only ever written by ingest so no
+league data is reachable, and the scoring config is unchanged so the same
+`config_id` is reused and every score comes out identical (`npm run parity`
+proves it).
+
+Separately, `CbbdRosterPlayer` already returns `jersey`, `height`, `weight`,
+`hometown` and `dateOfBirth`, and `linkCbbdRosters` discards all of it — that
+is a bio strip from a source already fetched and cached.
+
+### Design: what we take from Sleeper, and what we don't
+
+Driven live in the browser against the owner's own Sleeper league — matchup,
+league, players, trend, scores, and the player card. The finding is not
+"Sleeper looks better"; it is that Sleeper is a **dense, chip-driven,
+identity-rich** surface and this app is a **spacious editorial ledger**. The
+token system here (Archivo on its width axis, live-green separated from
+accent-orange, four surface levels) is not being reskinned. Specific
+borrowings:
+
+| Sleeper pattern | What we do | Where |
+|---|---|---|
+| Opposed pairs — your starter and theirs in one row, slot badge between | Rebuild `/league` as head-to-head-by-slot instead of interleaved-by-rank | `app/league/page.tsx` |
+| Win probability per side, two-tone underline | Add to the scorebug beside the score, from settled totals + `periodOutlook` projections, labelled as a model | `app/ui/scorebug.tsx` |
+| "Yet to play (n)" with the slot breakdown | `TeamOutlook.pending` already carries the slots | `app/ui/scorebug.tsx` |
+| Dense filter/sort chip row | Role chips `All / G / F / B`, an `Avg \| Total \| Projected` sort toggle, week selector | `app/players/page.tsx`, `app/draft/pool.tsx` **[critique P2]** |
+| Grouped two-row stat headers | `BOX / SHOOTING / ADVANCED` groups on the stat tables | Phase 10 |
+| Player hero: coloured block, bio strip, rankings strip | Same structure, minus the photo: school colour, CBBD bio fields, the new rank rollup | `app/players/[id]/page.tsx` |
+| Player card as a modal | Intercepting route so any row opens the card without losing lineup state | `app/@card/players/[id]` |
+| Content-level tab strip | Nav is 8 destinations today, 10 after this work — past a flat row | `app/nav.tsx`, `app/ui/tabs.tsx` |
+| Trending up/down | Falls out of the `transaction` log for free | Phase 10 |
+| Game Center leaders rail | The "top single performances" ask | Phase 10 `/leaders` |
+| Row density | `data-density="compact"` on the matchup and pool lists only; ledger screens stay spacious | `app/globals.css`, `app/ui/playerrow.tsx` |
+| Team identity — colour everywhere | ESPN's public teams endpoint carries `color`/`alternateColor`; `source_kind` already lists `'espn'`, `game.espn_id` already exists — an anticipated source, not a new dependency | Phase 12 |
+
+Deliberately not taken: league chat (a real feature, its own phase, not what
+was asked); player photos and school logos (colours carry most of the identity
+benefit and are unambiguously fine; hot-linking trademarked marks is the
+owner's call, so logos go behind an opt-in); player nicknames; Sleeper's
+dark-only palette (this app is theme-aware in both directions and that is
+better).
+
+### Phase 8 — Roles govern the lineup **[critique P1: three vocabularies]**
+
+Migration `010_roles.sql`: `UPDATE lineup_entry SET slot = 'B' WHERE slot =
+'C'`; rewrite `league.settings->'starters'` `C` → `B` for existing leagues. No
+new tables.
+
+`packages/league/src/slots.ts` carries the whole rules change: `Slot` becomes
+`"G" | "F" | "B" | "FLEX" | "BENCH" | "IR"`; a new `Role` type and `ROLE_MAP`
+keyed on the Torvik role string per the table above; `rolesFor(role)` yields
+FLEX-only eligibility for unknown/null rather than guessing; `eligibleSlots` /
+`isEligible` take the role string; `SLOTS_BY_ARCHETYPE` is deleted in favour of
+`SLOTS_BY_ROLE`; `DEFAULT_SETTINGS.starters` becomes `2 G / 2 F / 1 B / 2
+FLEX`. `autoFill`'s scarcity sort needs no change.
+
+Callers: `Startable` gains `role` (the query already selects it); `archetype`
+stays on every shape since it explains the score, not the slot. Then
+`lineups.ts`, `draft.ts` (`unfilledSlots`, `autoDraft`), `app/team/page.tsx:51`,
+`app/home/page.tsx:338`.
+
+UI: a `RoleTag` in `app/ui/bits.tsx` (`G`, `G · F`, `F · B`) replacing the raw
+archetype pills across the pool, draft board/queue and lineup; role filter
+chips on `/players` and the draft pool (`playerPool` takes `roles?: Role[]`); a
+short glossary panel mapping the three vocabularies to each other.
+
+Tests: new `slots.test.ts` over eight role strings × six slots plus the null
+case; `lineups.test.ts` / `draft.test.ts` updated for `B`.
+
+### Phase 9 — Playoffs
+
+Design decision: **a playoff matchup is a matchup.** `scorePeriod` is already
+date-ranged and knows nothing about the regular season, so extending `matchup`
+means the scorebug, `/league`, `/home`, `periodOutlook` and settlement all work
+on a bracket unchanged. A separate `playoff_matchup` table would fork every
+one.
+
+Migration `011_playoffs.sql`: `matchup` gains `round text` (NULL = regular
+season), `bracket text` (`winners` | `consolation` | `third`), `seq`,
+`home_seed`, `away_seed`, and pointer pairs `home_from`/`away_from` (self-FK)
+with `home_from_result`/`away_from_result` (`winner` | `loser`);
+`home_team_id`/`away_team_id` drop `NOT NULL`. The whole bracket is
+materialised at creation with empty team ids and pointers, the same choice
+`006_draft.sql` makes for `draft_pick` — "who picks 47th" is a fact to read
+rather than a calculation repeated in three places. A bye is not a row: seeds
+1–2 are seeded straight into their semi-final.
+
+`packages/league/src/playoffs.ts` (new): `bracketShape` (pure, tested alone —
+6 teams gives QF1 4v5, QF2 3v6, SF1 1×winnerQF1, SF2 2×winnerQF2, FINAL, THIRD
+loserSF1×loserSF2); `createBracket` (refuses if any target week is already
+settled, like `createDraft` refuses a rostered league); `settlePlayoffs`
+(settle-on-read like `settleWaivers`/`settleTrades`, seeds from
+`rankedStandings`, propagates winners/losers, idempotent); tiebreak `"seed" |
+"pointsFor"` (default seed); `reseed` option; `playoffPicture` (cut line +
+clinched/alive/eliminated); `bracketView`.
+
+`standings` and `rankedStandings`'s "before" query both need `AND round IS
+NULL` or a playoff loss pollutes the regular-season record. `weekMatchups`
+returns `round`/seeds so the scorebug says *Semifinal* not *Week 16*.
+`LeagueSettings` gains `playoffTeams`, `playoffStartWeek`, `playoffRoundWeeks`,
+`thirdPlace`, `consolation`, `reseed`, `playoffTiebreak` — **these become new
+`SETTING_FIELDS` entries in the settings module that already exists
+(`packages/league/src/settings.ts`) rather than a new screen**, since Phase 7
+already built `/commissioner/settings` and the CLI verb for exactly this kind
+of number.
+
+UI: `/playoffs` — bracket as columns of matchup cards (seed, school-colour
+avatar, live total, winner marked, `TBD`), playoff picture above until seeded,
+CSS connector lines. `/standings` rules off after the cut line and tags status.
+`Playoffs` joins the nav with a `trophy` glyph. CLI: `npm run league -- bracket
+<leagueId>` / `-- playoffs <leagueId>`, honouring `ILLINI_NOW` like waivers and
+trades, not the draft.
+
+Tests: `playoffs.test.ts` — shape for 4/6/8 teams, seeding, propagation, byes,
+third-place, both tiebreaks, reseeding, idempotency, and that a playoff week
+never reaches `standings`.
+
+### Phase 10 — The stat surface
+
+Ingest: `adapt.ts` gains `toBoxScore(row)` (steals, blocks, rebound split,
+made/attempted FG/3P/FT) and `toBio(row)` (height, jersey, class, recruit
+rank); `nightly.ts` stores `{ ...line, box }`; `linkCbbdRosters` stops
+discarding `jersey`/`height`/`weight`/`hometown`/`dateOfBirth`. Then `npm run
+ingest -- range 2026 20251101 20260408`, from cache.
+
+Migration `012_leaders.sql`: bio columns on `player`; a `player_rank` rollup
+keyed `(config_id, played_on, player_id)` with season-to-date total, games,
+overall rank, rank within role — rebuilt by one re-runnable `INSERT … SELECT`
+with window functions, no Torvik call, `npm run ingest -- ranks 2026`.
+
+`packages/league/src/leaders.ts` (new): `topPerformances` (best single games
+in a window with owner attribution, off the existing `pgsc_score_idx`);
+`trendingPlayers` (adds/drops off the `transaction` log); `playerRankTrend`
+(from `player_rank`); `playerWeekProjection` (scheduled games × the player's
+average under this config — the same figure `periodOutlook`/`autoFill` already
+rank by, nothing new invented); `seasonAverages`/`statPercentiles`.
+
+UI: `/leaders` (Day/Week/Month/Season segmented, role chips, ranked single-game
+performances, a game-day leaders rail). Player card: rankings strip under the
+hero; a rank trend line chart (inverted axis, rank 1 at top); season-averages
+strip; grouped `BOX / SHOOTING / ADVANCED` tables with percentile bars; week
+projection beside the average; **the six blocks now show the archetype's
+weights beside them** — closes the critique's finding that the one thing
+distinguishing a lead from a big is missing from the page that exists to
+explain the score; `opponentStrength` gets a scale and direction, another
+critique item. New `app/ui/charts.tsx` (line/area, percentile bar, inline SVG,
+both themes); `.spark` bounded rather than unbounded **[critique P2]**.
+
+### Phase 11 — Injuries and news
+
+RotoWire is proven in this repo: `scripts/crosswalk.ts:25` already calls
+`rotowire.com/cbasketball/tables/injury-report.php?team=ALL&pos=ALL&conf=ALL&site=other&slateID=null`,
+no key needed, `{ ID, player, team, position, injury, status }`, and the
+README records this repo matching it at 92.5% with 4.9% genuinely unexplained.
+`source_kind` already has `'rotowire'`, `player_availability` already has the
+right columns and is read/written by nothing, and the team aliases in
+`packages/crosswalk/src/normalise.ts:54` were built from RotoWire's own team
+names.
+
+`packages/sources/src/rotowire.ts` (client shaped like `TorvikClient`, same
+cache/throttle convention); `packages/ingest/src/injuries.ts` (resolve through
+`@illini/crosswalk`, link RotoWire ids into `player_source_id` the way
+`resolveTorvikPlayers` does, push misses to `match_review`, write
+`player_availability` with a fixed status vocabulary: out / doubtful /
+questionable / probable / available; `npm run ingest -- injuries`). Read side:
+`availabilityFor`, an injury glyph in the row/pool/lineup/matchup, an
+availability panel on the player card, and a "Needs you" item on `/home` when
+an `out` player is in tonight's lineup.
+
+RotoWire's table carries status and body part, not prose. Probe for a news
+endpoint during implementation rather than promise one; absent that, the panel
+shows status, body part and date.
+
+### Phase 12 — Retrofit the five existing screens
+
+Everything in the design table above not already delivered by 8–10, against
+`/home`, `/team`, `/league`, `/standings`, `/players`:
+
+- Team identity: `013_identity.sql` adds `team.primary_color` /
+  `secondary_color` / `abbreviation`; an `espn` ingest step fills them through
+  the existing alias machinery; `Avatar` and the player row take a
+  school-colour rail and ring. Logos behind an opt-in.
+- `/league` rebuilt as opposed pairs, games cap **drawn** — nine counted, ruled
+  off with the cap total, rest behind a disclosure **[critique P1]**.
+- Win probability and yet-to-play breakdown on the scorebug.
+- Content tab strip; player card as a modal from any row.
+- Compact row density on matchup and pool lists.
+- Remaining one-line critique P2s: sortable tables, team rows as links,
+  `error.tsx` no longer printing `error.message` raw, per-select disabled state
+  instead of one shared `busy`, route-specific `loading.tsx` skeletons.
+
+### Migrations, and where they can go
+
+010–013 sit on top of 009. Production is still at 006 and 007–009 are
+deliberately unapplied (see above), so these reach the local copy and the Neon
+branches and nowhere else — the owner's call, unchanged by this plan.
+
+### Verification, when this starts
+
+Same shape as every phase above: `npm test` with new suites
+(`slots.test.ts`, `playoffs.test.ts`, `leaders.test.ts`), `npm run typecheck`
+plus `npx tsc --noEmit` inside `apps/web`, `npm run parity` and `npm run
+backtest` after the ingest widening (to prove the `box` sub-object left the
+scorer's inputs untouched), and a browser pass at 1440×900 / 768×1024 / 390×844
+in both colour schemes via the same-origin iframe trick (`resize_window` is
+still non-functional here). The bracket needs a played-out season to be worth
+looking at — `full-season-2026` (147 game days, a drafted and settled league)
+is the right target rather than three rounds of zeroes against production's
+five ingested days.
+
+### Order
+
+8 → 9 → 10 → 11 → 12, each independently shippable, committed at each phase
+boundary. Phase 8 goes first and alone because it is the only one that changes
+existing rules.

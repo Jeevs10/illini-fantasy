@@ -2,7 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { membershipsFor, type Membership } from "@illini/league";
-import { auth } from "../auth.ts";
+import { sessionUser } from "./auth.ts";
 import { db } from "./db.ts";
 
 /** The cookie naming which league the viewer is currently looking at. */
@@ -10,6 +10,7 @@ export const LEAGUE_COOKIE = "illini_league";
 
 export interface Viewer {
   userId: number;
+  username: string;
   email: string;
   name: string;
   /** The league being viewed. */
@@ -31,20 +32,19 @@ export interface Viewer {
  */
 export type Who =
   | { state: "anonymous" }
-  | { state: "no-league"; userId: number; email: string; name: string }
+  | { state: "no-league"; userId: number; username: string; email: string; name: string }
   | { state: "member"; viewer: Viewer };
 
 export const who = cache(async (): Promise<Who> => {
-  const session = await auth();
-  const user = session?.user;
-  if (!user?.id) return { state: "anonymous" };
+  const user = await sessionUser();
+  if (!user) return { state: "anonymous" };
 
-  const userId = Number(user.id);
-  const email = user.email ?? "";
-  const name = user.name ?? "";
+  const { id: userId, username, email, name } = user;
 
   const memberships = await membershipsFor(db, userId);
-  if (memberships.length === 0) return { state: "no-league", userId, email, name };
+  if (memberships.length === 0) {
+    return { state: "no-league", userId, username, email, name };
+  }
 
   // Which league, when there is more than one. The cookie is a preference, not
   // an authorisation: the chosen league has to be one the viewer is actually a
@@ -53,7 +53,10 @@ export const who = cache(async (): Promise<Who> => {
   const preferred = Number((await cookies()).get(LEAGUE_COOKIE)?.value);
   const membership = memberships.find((m) => m.leagueId === preferred) ?? memberships[0]!;
 
-  return { state: "member", viewer: { userId, email, name, membership, memberships } };
+  return {
+    state: "member",
+    viewer: { userId, username, email, name, membership, memberships },
+  };
 });
 
 /** The signed-in manager and the league they are looking at. */

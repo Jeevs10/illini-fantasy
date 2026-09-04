@@ -34,24 +34,62 @@ const hashToken = (token: string): string =>
   createHash("sha256").update(token).digest("hex");
 
 /**
+ * A free username derived from an address.
+ *
+ * Every `app_user` carries a username; only some carry a password. A row can be
+ * made before its person ever signs in — the commissioner seat `league create`
+ * mints, an invite redeemed from the CLI — and giving it a name up front means
+ * setting a password later is the only step left, rather than a rename as well.
+ */
+export async function suggestUsername(db: Queryable, email: string): Promise<string> {
+  const cleaned = (email.split("@")[0] ?? "")
+    .toLowerCase().replace(/[^a-z0-9._-]/g, "").replace(/^[^a-z0-9]+/, "").slice(0, 20);
+  const base = cleaned.length >= 3 ? cleaned : "manager";
+
+  const { rows } = await db.query<{ username: string }>(
+    "SELECT username FROM app_user WHERE username LIKE $1", [`${base}%`]);
+  const taken = new Set(rows.map((r) => r.username));
+
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n += 1) if (!taken.has(`${base}${n}`)) return `${base}${n}`;
+}
+
+/**
  * Registers a user by email, returning the existing row if there is one.
  *
- * Email is the identity — the same key the magic link is sent to — so a second
- * sign-in never mints a second person.
+ * Email is the identity here — it is what an invite is addressed to — so a
+ * second redemption never mints a second person. The username is what they sign
+ * in with, and is only derived when the row is new: renaming somebody because
+ * an invite was re-sent would lock them out of their own account.
  */
 export async function upsertUser(
   db: Queryable, { email, displayName }: { email: string; displayName?: string },
-): Promise<{ id: number; email: string; displayName: string }> {
+): Promise<{ id: number; email: string; displayName: string; username: string }> {
   const address = email.trim().toLowerCase();
-  const { rows } = await db.query<{ id: string; email: string; display_name: string }>(
-    `INSERT INTO app_user (email, display_name) VALUES ($1, $2)
-     ON CONFLICT (email) DO UPDATE SET display_name =
-       COALESCE(NULLIF(EXCLUDED.display_name, ''), app_user.display_name)
-     RETURNING id, email, display_name`,
-    [address, displayName?.trim() || address.split("@")[0]],
-  );
-  const row = rows[0]!;
-  return { id: Number(row.id), email: row.email, displayName: row.display_name };
+  const name = displayName?.trim() || address.split("@")[0];
+
+  // Two rows racing for one derived username is possible and rare; the unique
+  // index catches it and the second attempt picks the next free name.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const { rows } = await db.query<{
+        id: string; email: string; display_name: string; username: string;
+      }>(
+        `INSERT INTO app_user (email, display_name, username) VALUES ($1, $2, $3)
+         ON CONFLICT (email) DO UPDATE SET display_name =
+           COALESCE(NULLIF(EXCLUDED.display_name, ''), app_user.display_name)
+         RETURNING id, email, display_name, username`,
+        [address, name, await suggestUsername(db, address)],
+      );
+      const row = rows[0]!;
+      return {
+        id: Number(row.id), email: row.email,
+        displayName: row.display_name, username: row.username,
+      };
+    } catch (error) {
+      if ((error as { code?: string }).code !== "23505" || attempt >= 3) throw error;
+    }
+  }
 }
 
 export async function roleOf(db: Db, leagueId: number, userId: number): Promise<Role | null> {

@@ -14,27 +14,40 @@ export const label = (day: string): string => {
   return `${WEEKDAY.format(d)} ${DAYMONTH.format(d)}`;
 };
 
+export const window7 = (today: string): { from: string; to: string } =>
+  ({ from: shift(today, -1), to: shift(today, 5) });
+
 /**
  * Yesterday through the next five nights.
  *
- * Per-game locks make working ahead the only safe habit, so the day a manager
- * wants is usually not today. Without this the only way to reach tomorrow was
- * to hand-edit the query string.
+ * Per-game locks make working ahead the only safe habit, so the night a manager
+ * wants is usually not tonight. The count under each date is how many of their
+ * players are scheduled that night: without it this is seven identical buttons
+ * and a college slate is uneven enough that most of them are empty.
  */
-export function DayStrip({ day, today }: { day: string; today: string }) {
+export function DayStrip({
+  day, today, slate,
+}: { day: string; today: string; slate: Map<string, number> }) {
   const days = Array.from({ length: 7 }, (_, i) => shift(today, i - 1));
   return (
     <nav className="daystrip" aria-label="Choose a night">
-      {days.map((d) => (
-        <Link
-          key={d}
-          href={`/team?date=${d}`}
-          data-active={d === day}
-          aria-current={d === day ? "date" : undefined}
-        >
-          {d === today ? "Tonight" : label(d)}
-        </Link>
-      ))}
+      {days.map((d) => {
+        const games = slate.get(d) ?? 0;
+        const date = new Date(`${d}T00:00:00Z`);
+        return (
+          <Link
+            key={d}
+            href={`/team?date=${d}`}
+            data-active={d === day}
+            aria-current={d === day ? "date" : undefined}
+            aria-label={`${label(d)} — ${games} game${games === 1 ? "" : "s"}`}
+          >
+            <span className="dow">{d === today ? "Tonight" : WEEKDAY.format(date)}</span>
+            <span className="dnum">{d === today ? DAYMONTH.format(date).split(" ")[1] : DAYMONTH.format(date).split(" ")[1]}</span>
+            <span className="games">{games === 0 ? "—" : games}</span>
+          </Link>
+        );
+      })}
     </nav>
   );
 }

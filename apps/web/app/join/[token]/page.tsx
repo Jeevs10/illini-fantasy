@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { inviteByToken } from "@illini/league";
-import { signOut } from "../../../auth.ts";
+import {
+  PASSWORD_MIN, USERNAME_MAX, USERNAME_RULE, accountByEmail, inviteByToken,
+} from "@illini/league";
 import { db } from "../../../lib/db.ts";
 import { who } from "../../../lib/session.ts";
 import { Confirm } from "./confirm.tsx";
-import { signInToJoin } from "./actions.ts";
+import { Register } from "./register.tsx";
+import { signOutToJoin } from "./actions.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +17,9 @@ const DAY = new Intl.DateTimeFormat("en-US", {
 /**
  * Redeeming an invite.
  *
- * The commissioner hands out a link; this is where it lands. Signing in is
- * required first, because the address is what the invite is addressed to and a
- * magic link is the only thing here that proves it.
+ * The commissioner hands out a link; this is where it lands. For somebody new
+ * it is also where their account begins — the link is what says they are
+ * allowed one, so signing up and joining are the same submit.
  */
 export default async function Join({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -39,25 +41,46 @@ export default async function Join({ params }: { params: Promise<{ token: string
   }
 
   const found = await who();
+  const signInHere = `/signin?next=${encodeURIComponent(`/join/${token}`)}`;
 
   if (found.state === "anonymous") {
+    // An address the commissioner invited may already have an account — a
+    // manager in a second league, or a seat reset. Offering them a fresh
+    // username would only fail on the way in.
+    const existing = await accountByEmail(db, invite.email);
+
+    if (existing) {
+      return (
+        <Shell title={`Join ${invite.leagueName}`}>
+          <p className="muted">
+            <strong>{invite.email}</strong> already has an account here. Sign in
+            as <strong>{existing.username}</strong> and this page will pick the
+            invite back up.
+          </p>
+          <Link className="button" href={signInHere}>Sign in to claim the team</Link>
+        </Shell>
+      );
+    }
+
     return (
       <Shell title={`Join ${invite.leagueName}`}>
         <p className="muted">
-          This invite is addressed to <strong>{invite.email}</strong>
-          {invite.fantasyTeamName ? <> and hands over <strong>{invite.fantasyTeamName}</strong></> : null}.
-          Confirm the address is yours and a sign-in link arrives by email.
+          You are taking over{" "}
+          <strong>{invite.fantasyTeamName ?? "the next unclaimed team"}</strong> as{" "}
+          {invite.role === "commissioner" ? "a commissioner" : "a manager"}, under{" "}
+          <strong>{invite.email}</strong>. Pick a username and a password and the
+          team is yours.
         </p>
-        <form action={signInToJoin} className="joinform">
-          <input type="hidden" name="token" value={token} />
-          <input type="hidden" name="email" value={invite.email} />
-          <input type="email" value={invite.email} readOnly aria-label="Invited address" />
-          <button className="primary" type="submit">Email me a link</button>
-        </form>
-        <p className="fineprint">
-          The link comes back to this page, so the invite is still here when you
-          return.
-        </p>
+        <Register
+          token={token}
+          email={invite.email}
+          suggestedName={invite.email.split("@")[0] ?? ""}
+          rules={{
+            usernameMax: USERNAME_MAX,
+            usernameRule: USERNAME_RULE,
+            passwordMin: PASSWORD_MIN,
+          }}
+        />
       </Shell>
     );
   }
@@ -69,13 +92,11 @@ export default async function Join({ params }: { params: Promise<{ token: string
       <Shell title="Signed in as somebody else">
         <p className="muted">
           This invite belongs to <strong>{invite.email}</strong>, and you are
-          signed in as <strong>{signedInAs}</strong>. An invite is not
-          transferable — whoever holds the mailbox holds the team.
+          signed in as <strong>{signedInAs}</strong>. An invite names one seat
+          and one person — sign out and take it as the address it was sent to.
         </p>
-        <form action={async () => {
-          "use server";
-          await signOut({ redirectTo: `/join/${encodeURIComponent(token)}` });
-        }}>
+        <form action={signOutToJoin}>
+          <input type="hidden" name="token" value={token} />
           <button type="submit">Sign out and use {invite.email}</button>
         </form>
       </Shell>

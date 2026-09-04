@@ -1,113 +1,143 @@
 import Link from "next/link";
-import { playerPool } from "@illini/league";
+import {
+  playerPool, rosterLimit, rosterOn, settleWaivers, waiverWire, type PositionRole,
+} from "@illini/league";
 import { db } from "../../lib/db.ts";
-import { requireViewer } from "../../lib/session.ts";
+import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
+import { Pool, type PoolRow } from "./pool.tsx";
+import { Glyph } from "../ui/glyphs.tsx";
+import { Empty, RoleGlossary } from "../ui/bits.tsx";
 
 export const dynamic = "force-dynamic";
 
 const PAGE = 50;
+const ROLES: PositionRole[] = ["G", "F", "B"];
 
 export default async function PlayersPage({
   searchParams,
-}: { searchParams: Promise<{ q?: string; free?: string; page?: string }> }) {
-  const { q, free, page } = await searchParams;
+}: { searchParams: Promise<{ q?: string; free?: string; page?: string; role?: string }> }) {
+  const { q, free, page, role } = await searchParams;
   const viewer = await requireViewer();
-  const { leagueId, season, configId } = viewer.membership;
+  const { leagueId, season, configId, fantasyTeamId, settings } = viewer.membership;
+  const now = viewNow();
 
+  // The pool is a place a manager arrives before the waivers page, so it has to
+  // settle too — otherwise a player awarded at last night's run still reads as
+  // free here, and the Add button on him would be refused.
+  await settleWaivers(db, { leagueId, now });
+
+  const roleFilter = ROLES.includes(role as PositionRole) ? (role as PositionRole) : null;
   const offset = Math.max(0, Number(page ?? 0)) * PAGE;
   const availableOnly = free === "1";
-  const players = await playerPool(db, {
-    leagueId, season, configId,
-    limit: PAGE + 1, offset, availableOnly, search: q,
-  });
+  const [players, wire, roster] = await Promise.all([
+    playerPool(db, {
+      leagueId, season, configId, limit: PAGE + 1, offset, availableOnly, search: q,
+      roles: roleFilter ? [roleFilter] : undefined,
+    }),
+    waiverWire(db, { leagueId, now }),
+    fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, viewDate()),
+  ]);
+  const onWaivers = new Set(wire.map((w) => w.playerId));
   const hasMore = players.length > PAGE;
-  const rows = players.slice(0, PAGE);
+  const rows: PoolRow[] = players.slice(0, PAGE)
+    .map((p) => ({ ...p, onWaivers: onWaivers.has(p.playerId) }));
 
   const query = (over: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
-    for (const [key, value] of Object.entries({ q, free, page, ...over })) {
+    for (const [key, value] of Object.entries({ q, free, page, role, ...over })) {
       if (value) params.set(key, value);
     }
     const s = params.toString();
     return s ? `/players?${s}` : "/players";
   };
 
+  const full = roster.length >= rosterLimit(settings);
+
   return (
     <>
       <div className="pagehead">
-        <h1>Player pool</h1>
-        <p><span>Ranked by season Player-Score under this league&rsquo;s config</span></p>
-      </div>
-
-      <form className="controls" action="/players">
-        <input type="search" name="q" defaultValue={q ?? ""} placeholder="Search a name" />
-        {availableOnly ? <input type="hidden" name="free" value="1" /> : null}
-        <button type="submit">Search</button>
-        <Link className="button" href={query({ free: availableOnly ? undefined : "1", page: undefined })}>
-          {availableOnly ? "Showing free agents" : "Show free agents only"}
-        </Link>
-      </form>
-
-      <div className="panel">
-        <div className="scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Player</th>
-                <th>School</th>
-                <th>Role</th>
-                <th className="r">GP</th>
-                <th className="r">Total</th>
-                <th className="r">Avg</th>
-                <th>Owner</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((player, i) => (
-                <tr key={player.playerId}>
-                  <td className="faint num">{offset + i + 1}</td>
-                  <td>
-                    <Link href={`/players/${player.playerId}`} className="player-link">
-                      {player.name}
-                    </Link>
-                  </td>
-                  <td>
-                    {player.teamName ?? "—"}
-                    {player.conference ? <span className="sub">{player.conference}</span> : null}
-                  </td>
-                  <td className="muted">{player.role ?? "—"}</td>
-                  <td className="r num">{player.games}</td>
-                  <td className="r num">{player.totalScore.toFixed(1)}</td>
-                  <td className="r num">{player.averageScore.toFixed(1)}</td>
-                  <td>
-                    {player.ownedBy
-                      ? <span className="tag">{player.ownedBy}</span>
-                      : <span className="tag free">Free</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div>
+          <h1>Players</h1>
+          <p className="meta">
+            <span>Ranked by season Player-Score under this league&rsquo;s config</span>
+            {wire.length > 0 ? <span>{wire.length} on waivers</span> : null}
+            {fantasyTeamId !== null
+              ? <span>{roster.length} of {rosterLimit(settings)} rostered</span>
+              : null}
+          </p>
         </div>
-        {rows.length === 0 ? (
-          <div className="empty">
-            <h3>No players match</h3>
-            <p>
-              {q ? `Nothing named "${q}"` : "No players"}
-              {availableOnly ? " is unowned in this league." : " has scored games this season."}
-            </p>
-            <div className="controls">
-              <Link className="button" href="/players">Clear filters</Link>
-            </div>
-          </div>
-        ) : null}
       </div>
 
-      <nav className="controls">
+      <RoleGlossary />
+
+      {/* The controls stay put while fifty rows scroll under them: a filter you
+          have to scroll back up to change is a filter nobody changes. */}
+      <div className="stickybar">
+        <form className="controls" action="/players" style={{ flexWrap: "nowrap", gap: "var(--s-2)" }}>
+          <span className="searchfield">
+            <span className="glyph"><Glyph name="search" size={17} /></span>
+            <input type="search" name="q" defaultValue={q ?? ""} placeholder="Search a name"
+                   aria-label="Search players by name" />
+          </span>
+          {availableOnly ? <input type="hidden" name="free" value="1" /> : null}
+          {roleFilter ? <input type="hidden" name="role" value={roleFilter} /> : null}
+          <button type="submit">Search</button>
+        </form>
+        <div className="controls" style={{ marginTop: "var(--s-2)" }}>
+          <nav className="segmented" aria-label="Availability">
+            <Link href={query({ free: undefined, page: undefined })} data-active={!availableOnly}>
+              Everyone
+            </Link>
+            <Link href={query({ free: "1", page: undefined })} data-active={availableOnly}>
+              Free agents
+            </Link>
+          </nav>
+          <nav className="segmented" aria-label="Role">
+            <Link href={query({ role: undefined, page: undefined })} data-active={!roleFilter}>
+              All
+            </Link>
+            {ROLES.map((r) => (
+              <Link key={r} href={query({ role: r, page: undefined })} data-active={roleFilter === r}>
+                {r}
+              </Link>
+            ))}
+          </nav>
+          {q ? (
+            <Link className="button sm" href={query({ q: undefined, page: undefined })}>
+              Clear &ldquo;{q}&rdquo; ×
+            </Link>
+          ) : null}
+          {full && fantasyTeamId !== null ? (
+            <span className="pill warn">Roster full — drop first</span>
+          ) : null}
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="panel">
+          <Empty title="No players match" glyph="search"
+                 action={<Link className="button" href="/players">Clear filters</Link>}>
+            {q ? `Nothing named “${q}”` : "No players"}
+            {availableOnly ? " is unowned in this league." : " has scored games this season."}
+          </Empty>
+        </div>
+      ) : (
+        <Pool
+          players={rows}
+          offset={offset}
+          full={full}
+          canAct={fantasyTeamId !== null}
+          best={Math.max(...rows.map((r) => r.averageScore), 0)}
+        />
+      )}
+
+      <nav className="controls" aria-label="Pages">
         {offset > 0 ? (
           <Link className="button" href={query({ page: String(offset / PAGE - 1) })}>← Previous</Link>
         ) : null}
+        <span className="faint" style={{ fontSize: "var(--t-sm)" }}>
+          {offset + 1}–{offset + rows.length}
+        </span>
         {hasMore ? (
           <Link className="button" href={query({ page: String(offset / PAGE + 1) })}>Next →</Link>
         ) : null}

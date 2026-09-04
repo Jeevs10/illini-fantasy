@@ -1,64 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Archetype } from "@illini/scoring";
-import { autoFill, validateLineup, eligibleSlots, DEFAULT_SETTINGS, type LineupSlot } from "./slots.ts";
+import { DEFAULT_SETTINGS } from "./slots.ts";
 import { roundRobin, weeksFrom } from "./schedule.ts";
 
-const p = (id: number, archetype: Archetype, projected = 30) => ({ playerId: id, archetype, projected });
-
-test("archetypes map to the slots the scoring model implies", () => {
-  assert.deepEqual(eligibleSlots("lead"), ["G", "FLEX"]);
-  assert.ok(eligibleSlots("big").includes("C"));
-  // Stretch fours cover both forward and centre, which is the whole point of
-  // the archetype.
-  assert.ok(eligibleSlots("swing").includes("F"));
-  assert.ok(eligibleSlots("swing").includes("C"));
-});
-
-test("autoFill produces a legal lineup from a mixed roster", () => {
-  const roster = [
-    p(1, "lead", 40), p(2, "combo", 38), p(3, "combo", 20),
-    p(4, "wing", 35), p(5, "wing", 25), p(6, "swing", 30),
-    p(7, "big", 33), p(8, "big", 18),
-  ];
-  const lineup = autoFill(roster);
-  assert.deepEqual(validateLineup(lineup), []);
-  const starters = lineup.filter((l) => l.slot !== "BENCH");
-  assert.equal(starters.length, 7, "2G + 2F + 1C + 2FLEX");
-});
-
-test("autoFill fills the scarce centre slot before spending bigs on FLEX", () => {
-  const roster = [
-    p(1, "lead", 50), p(2, "lead", 49), p(3, "combo", 48), p(4, "combo", 47),
-    p(5, "wing", 46), p(6, "wing", 45), p(7, "big", 10),
-  ];
-  const lineup = autoFill(roster);
-  assert.deepEqual(validateLineup(lineup), []);
-  const centre = lineup.find((l) => l.slot === "C");
-  assert.equal(centre?.playerId, 7, "the only eligible centre must fill C, low score notwithstanding");
-});
-
-test("a guard cannot be started at centre", () => {
-  const lineup: LineupSlot[] = [{ playerId: 1, archetype: "lead", slot: "C" }];
-  const violations = validateLineup(lineup);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0]!.message, /cannot start at C/);
-});
-
-test("overfilling a slot and double-starting a player are both caught", () => {
-  const over: LineupSlot[] = [
-    { playerId: 1, archetype: "lead", slot: "G" },
-    { playerId: 2, archetype: "combo", slot: "G" },
-    { playerId: 3, archetype: "combo", slot: "G" },
-  ];
-  assert.match(validateLineup(over)[0]!.message, /3 players in G, room for 2/);
-
-  const twice: LineupSlot[] = [
-    { playerId: 1, archetype: "lead", slot: "G" },
-    { playerId: 1, archetype: "lead", slot: "FLEX" },
-  ];
-  assert.ok(validateLineup(twice).some((v) => /two slots/.test(v.message)));
-});
+// Role-to-slot eligibility, auto-fill and lineup validation now live in
+// slots.test.ts, against the Torvik role strings that actually govern them.
 
 test("round robin pairs everyone once per round, with no repeats", () => {
   const rounds = roundRobin([1, 2, 3, 4, 5, 6]);

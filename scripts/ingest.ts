@@ -12,7 +12,9 @@
  */
 import { connect, migrate } from "@illini/db";
 import { CbbdClient, TorvikClient } from "@illini/sources";
-import { ingestNight, syncSchedule, syncTeams, syncRatings, linkCbbdRosters } from "@illini/ingest";
+import {
+  ingestNight, opponentsOn, syncSchedule, syncTeams, syncRatings, linkCbbdRosters,
+} from "@illini/ingest";
 import { loadEnv } from "./env.ts";
 
 loadEnv();
@@ -59,8 +61,20 @@ try {
     console.log(`cbbd linked ${links.linked}, queued for review ${links.queued}`);
   } else if (command === "night" || command === "range") {
     const dates = command === "night" ? [a!] : dateRange(a!, b!);
+
+    // A range loads the whole schedule once and reads each night back out of
+    // it. `night` still asks CBBD for its own day, because a single night is
+    // usually being caught up on its own and the schedule may not be there yet.
+    if (command === "range") {
+      const games = await syncSchedule(db, cbbd, season, a!, b!);
+      console.log(`schedule ${games} games ${iso(a!)} to ${iso(b!)}`);
+    }
+
     for (const date of dates) {
-      const r = await ingestNight(db, { torvik, cbbd, season, date });
+      const r = await ingestNight(db, {
+        torvik, cbbd, season, date,
+        opponents: command === "range" ? await opponentsOn(db, season, iso(date)) : undefined,
+      });
       console.log(
         `${r.date}  stats ${String(r.statsWritten).padStart(5)}  scored ${String(r.scoresWritten).padStart(5)}` +
         (r.withoutOpponent ? `  no-opponent ${r.withoutOpponent}` : ""),
