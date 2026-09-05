@@ -22,11 +22,15 @@ export interface TeamPeriod {
 /**
  * Scores one fantasy team over a scoring period.
  *
- * The games cap is applied by keeping the highest-scoring started games, which
- * is what every major fantasy platform does. The alternative — counting
- * chronologically until the cap is hit — punishes a manager for the order the
- * schedule happened to fall in, which is exactly the schedule luck the cap
- * exists to remove.
+ * The cap is a cap on *starters*, not on games: each starter's best night this
+ * week is what is eligible to count, one per player, ranked against the other
+ * starters' best nights and cut off at `gamesCap`. Pooling every started game
+ * together and keeping the top N individual scores — the previous rule here —
+ * let a starter with several hot games crowd out a different starter's only
+ * game of the week, so a rostered, started player could contribute nothing
+ * despite having played. A player's other, non-best games this week never
+ * counted anyway once his best one did, so this is strictly which games
+ * compete for the cap, not a new kind of game.
  *
  * Takes any queryable rather than the pool, for the same reason `claimPlayer`
  * does: a caller already inside a transaction — `settlePlayoffs` scoring
@@ -54,24 +58,32 @@ export async function scorePeriod(
       WHERE l.fantasy_team_id = $1
         AND l.played_on BETWEEN $3 AND $4
         AND l.slot NOT IN ('BENCH', 'IR')
-      ORDER BY s.score DESC`,
+      ORDER BY l.played_on`,
     [fantasyTeamId, configId, from, to],
   );
 
-  const games: CountedGame[] = rows.map((r, i) => ({
+  const games: CountedGame[] = rows.map((r) => ({
     playerId: Number(r.player_id),
     playerName: r.name,
     playedOn: r.played_on,
     slot: r.slot,
     score: Number(r.score),
-    counted: i < settings.gamesCap,
+    counted: false,
   }));
+
+  const bestByPlayer = new Map<number, CountedGame>();
+  for (const g of games) {
+    const best = bestByPlayer.get(g.playerId);
+    if (!best || g.score > best.score) bestByPlayer.set(g.playerId, g);
+  }
+  const ranked = [...bestByPlayer.values()].sort((a, b) => b.score - a.score);
+  for (const g of ranked.slice(0, settings.gamesCap)) g.counted = true;
 
   return {
     fantasyTeamId,
     total: games.filter((g) => g.counted).reduce((a, g) => a + g.score, 0),
     gamesPlayed: games.length,
-    gamesCounted: Math.min(games.length, settings.gamesCap),
+    gamesCounted: Math.min(bestByPlayer.size, settings.gamesCap),
     games,
   };
 }

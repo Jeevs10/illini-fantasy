@@ -295,11 +295,13 @@ test("every reason at once, so the form is filled in once", async () => {
 test("moving the games cap leaves an already-settled week exactly as it was", async () => {
   await playAWeek();
 
-  // Under the cap of four, team 1 keeps its four best nights of players 1–4
-  // (4,4,4,4 — every player scores his id every night) and team 2 keeps 8,8,8,8.
+  // The cap is a cap on starters, not on games: every player scores his own
+  // id every night, so each of the four starters' single best game is just
+  // his id, and all four fit under a cap of four. Team 1 keeps 4+3+2+1=10,
+  // team 2 keeps 8+7+6+5=26.
   const before = await standings(db, 1);
-  assert.equal(before.find((r) => r.name === "Team 1")!.pointsFor, 16);
-  assert.equal(before.find((r) => r.name === "Team 2")!.pointsFor, 32);
+  assert.equal(before.find((r) => r.name === "Team 1")!.pointsFor, 10);
+  assert.equal(before.find((r) => r.name === "Team 2")!.pointsFor, 26);
 
   const result = await updateSettings(db, {
     leagueId: 1, byUserId: commish, patch: { gamesCap: 2 }, now: NOW });
@@ -309,8 +311,8 @@ test("moving the games cap leaves an already-settled week exactly as it was", as
   // The week already carries the cap of four it settled under, so a cap of
   // two now has nothing left to touch.
   const after = await standings(db, 1);
-  assert.equal(after.find((r) => r.name === "Team 1")!.pointsFor, 16);
-  assert.equal(after.find((r) => r.name === "Team 2")!.pointsFor, 32);
+  assert.equal(after.find((r) => r.name === "Team 1")!.pointsFor, 10);
+  assert.equal(after.find((r) => r.name === "Team 2")!.pointsFor, 26);
 });
 
 test("a settled matchup records the config and settings it was scored under", async () => {

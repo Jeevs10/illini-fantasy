@@ -71,9 +71,20 @@ export function gameState(
   return "upcoming";
 }
 
-/** The best `cap` of a pool of scores, summed. The cap rule, in one place. */
-function bestOf(values: number[], cap: number): number {
-  return [...values].sort((a, b) => b - a).slice(0, cap).reduce((a, b) => a + b, 0);
+/**
+ * Where the period lands if every pending game scores its projection — each
+ * player's own best value this week, played or projected, ranked against
+ * every other starter's best and cut off at `cap`. Mirrors `scorePeriod`'s
+ * per-player cap exactly, so a live total never implies a different rule than
+ * the one the week actually settles under.
+ */
+function bestPerPlayer(entries: { playerId: number; value: number }[], cap: number): number {
+  const byPlayer = new Map<number, number>();
+  for (const { playerId, value } of entries) {
+    const best = byPlayer.get(playerId);
+    if (best === undefined || value > best) byPlayer.set(playerId, value);
+  }
+  return [...byPlayer.values()].sort((a, b) => b - a).slice(0, cap).reduce((a, b) => a + b, 0);
 }
 
 interface FrozenStarter { name: string; slot: string }
@@ -266,8 +277,11 @@ export async function periodOutlook(
     pending,
     live,
     upcoming: pending.length - live,
-    projected: bestOf(
-      [...scored.games.map((g) => g.score), ...pending.map((g) => g.projected)],
+    projected: bestPerPlayer(
+      [
+        ...scored.games.map((g) => ({ playerId: g.playerId, value: g.score })),
+        ...pending.map((g) => ({ playerId: g.playerId, value: g.projected })),
+      ],
       settings.gamesCap,
     ),
   };

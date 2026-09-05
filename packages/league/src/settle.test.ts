@@ -102,6 +102,36 @@ test("the games cap keeps the best games, not the earliest", async () => {
     "a dropped game outscored a counted one — the cap is taking the wrong games");
 });
 
+test("a starter who played once is not crowded out by another starter's hot week", async () => {
+  // Player 12 starts three nights, player 1 starts one — both are started
+  // players all week, but under the old "pool every game, keep the top N"
+  // rule, player 12's three high-scoring nights alone would fill a cap of
+  // two and player 1's night would count for nothing despite having played.
+  for (const day of ["2026-11-02", "2026-11-03", "2026-11-04"]) {
+    await db.query(
+      `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot)
+       VALUES (3,$1,12,'FLEX')`, [day]);
+  }
+  await db.query(
+    `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot)
+     VALUES (3,'2026-11-05',1,'FLEX')`);
+
+  const period = await scorePeriod(db, {
+    fantasyTeamId: 3, configId, from: "2026-11-02", to: "2026-11-08",
+    settings: { ...DEFAULT_SETTINGS, gamesCap: 2 },
+  });
+
+  assert.equal(period.gamesPlayed, 4);
+  assert.equal(period.gamesCounted, 2);
+  const player1Game = period.games.find((g) => g.playerId === 1)!;
+  assert.ok(player1Game.counted, "player 1's only game of the week should count");
+  assert.equal(
+    period.games.filter((g) => g.playerId === 12 && g.counted).length, 1,
+    "only one of player 12's three games — his best — should compete for the cap",
+  );
+  assert.ok(Math.abs(period.total - (player1Game.score + scoreOf(22))) < 1e-9);
+});
+
 test("settling a week is re-runnable and does not double-count", async () => {
   await generateSchedule(db, 1, "2026-11-02", 3);
   const first = await settleWeek(db, 1, 1);
