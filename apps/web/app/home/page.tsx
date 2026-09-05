@@ -198,7 +198,7 @@ function bug(id: number, name: string, o: TeamOutlook, mineId: number | null): B
   return {
     fantasyTeamId: id, name,
     total: o.total, projected: o.projected,
-    gamesCounted: o.gamesCounted, gamesPlayed: o.gamesPlayed,
+    gamesPlayed: o.gamesPlayed,
     live: o.live, upcoming: o.upcoming,
     pendingSlots: bySlot(o.pending),
     mine: id === mineId,
