@@ -76,6 +76,90 @@ export async function topPerformances(
   }));
 }
 
+export interface LeagueWeek {
+  week: number;
+  startsOn: string;
+  endsOn: string;
+}
+
+/**
+ * The scoring weeks this league has actually settled, oldest first — what a
+ * week picker pages through. `round IS NULL` excludes the playoff bracket,
+ * which numbers its own rounds starting back at 1 and would otherwise collide
+ * with the regular season's week numbers.
+ */
+export async function playedWeeks(db: Db, { leagueId }: { leagueId: number }): Promise<LeagueWeek[]> {
+  const { rows } = await db.query<{ week: number; starts_on: string; ends_on: string }>(
+    `SELECT week, to_char(min(starts_on), 'YYYY-MM-DD') AS starts_on,
+            to_char(max(ends_on), 'YYYY-MM-DD') AS ends_on
+       FROM matchup
+      WHERE league_id = $1 AND round IS NULL AND settled_at IS NOT NULL
+      GROUP BY week
+      ORDER BY week`,
+    [leagueId],
+  );
+  return rows.map((r) => ({ week: Number(r.week), startsOn: r.starts_on, endsOn: r.ends_on }));
+}
+
+export interface WeeklyLeader {
+  playerId: number;
+  playerName: string;
+  teamName: string | null;
+  role: string | null;
+  games: number;
+  totalScore: number;
+  ownedBy: string | null;
+}
+
+/**
+ * Cumulative score over one scoring week, not a single night's best — the
+ * other half of `topPerformances`. `ownedBy` is evaluated as of the week's
+ * last day, same reasoning `topPerformances` uses per night.
+ */
+export async function weeklyLeaders(
+  db: Db,
+  { leagueId, configId, from, to, roles, limit = 25 }: {
+    leagueId: number; configId: number; from: string; to: string;
+    roles?: PositionRole[]; limit?: number;
+  },
+): Promise<WeeklyLeader[]> {
+  const rawRoles = roles && roles.length > 0
+    ? KNOWN_ROLES.filter((raw) => rolesFor(raw).some((r) => roles.includes(r)))
+    : null;
+
+  const { rows } = await db.query<{
+    player_id: string; name: string; team_name: string | null; role: string | null;
+    games: string; total_score: string; owned_by: string | null;
+  }>(
+    `SELECT s.player_id, p.name, t.name AS team_name, max(st.role) AS role,
+            count(*) AS games, sum(s.score) AS total_score,
+            (SELECT ft.name FROM roster_slot r JOIN fantasy_team ft ON ft.id = r.fantasy_team_id
+              WHERE r.league_id = $6 AND r.player_id = s.player_id
+                AND r.acquired_on <= $3
+                AND (r.released_on IS NULL OR r.released_on > $3)
+              LIMIT 1) AS owned_by
+       FROM player_game_score s
+       JOIN player p ON p.id = s.player_id
+       JOIN player_game_stat st ON st.player_id = s.player_id AND st.played_on = s.played_on
+       LEFT JOIN team t ON t.id = p.team_id
+      WHERE s.config_id = $1 AND s.played_on BETWEEN $2 AND $3
+        AND ($5::text[] IS NULL OR st.role = ANY($5))
+      GROUP BY s.player_id, p.name, t.name
+      ORDER BY total_score DESC
+      LIMIT $4`,
+    [configId, from, to, limit, rawRoles, leagueId],
+  );
+  return rows.map((r) => ({
+    playerId: Number(r.player_id),
+    playerName: r.name,
+    teamName: r.team_name,
+    role: r.role,
+    games: Number(r.games),
+    totalScore: Number(r.total_score),
+    ownedBy: r.owned_by,
+  }));
+}
+
 export interface TrendingPlayer {
   playerId: number;
   playerName: string;
