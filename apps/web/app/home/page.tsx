@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   availabilityFor, claimsFor, eligibleSlots, gameState, leagueActivity, listTrades,
-  periodOutlook, rankedStandings, rosterLimit, rosterOn, scoresOn, startableOn, weekMatchups,
+  rankedStandings, rosterLimit, rosterOn, scoresOn, startableOn, weekMatchups,
   type PlayerAvailability, type Slot, type Startable, type TeamOutlook,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -26,7 +26,7 @@ export default async function HomePage() {
   const day = viewDate();
   const now = viewNow();
 
-  const matchups = await weekMatchups(db, { leagueId, configId, on: day, settings });
+  const matchups = await weekMatchups(db, { leagueId, configId, on: day, settings, now });
   const mine = matchups.find(
     (m) => m.home.fantasyTeamId === fantasyTeamId || m.away.fantasyTeamId === fantasyTeamId);
 
@@ -40,16 +40,9 @@ export default async function HomePage() {
   ]);
 
   const availability = await availabilityFor(db, tonight.map((p) => p.playerId));
-
-  const [tonightScores, outlooks] = await Promise.all([
-    fantasyTeamId === null ? new Map<number, number>() : scoresOn(db, { fantasyTeamId, day, configId }),
-    mine
-      ? Promise.all([
-          periodOutlook(db, { fantasyTeamId: mine.home.fantasyTeamId, configId, from: mine.startsOn, to: mine.endsOn, settings, now }),
-          periodOutlook(db, { fantasyTeamId: mine.away.fantasyTeamId, configId, from: mine.startsOn, to: mine.endsOn, settings, now }),
-        ])
-      : Promise.resolve(null),
-  ]);
+  const tonightScores = fantasyTeamId === null
+    ? new Map<number, number>() : await scoresOn(db, { fantasyTeamId, day, configId });
+  const outlooks: [TeamOutlook, TeamOutlook] | null = mine ? [mine.home, mine.away] : null;
 
   const others = matchups.filter((m) => m !== mine);
   const seat = standingsTable.find((r) => r.fantasyTeamId === fantasyTeamId) ?? null;
@@ -116,16 +109,24 @@ export default async function HomePage() {
                 const sum = m.home.total + m.away.total;
                 const homeLeads = sum > 0 && m.home.total > m.away.total;
                 const awayLeads = sum > 0 && m.away.total > m.home.total;
+                const remaining = m.home.live + m.home.upcoming + m.away.live + m.away.upcoming;
                 return (
                   <Link className="minibug" key={m.matchupId} href="/league">
                     <span className="side">
                       <Avatar name={m.home.name} seed={m.home.fantasyTeamId} size="xs" />
                       <span className="nm">{m.home.name}</span>
                     </span>
-                    <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
-                      <span className="score score-xs sc" data-lead={homeLeads}>{m.home.total.toFixed(1)}</span>
-                      <span className="dash">–</span>
-                      <span className="score score-xs sc" data-lead={awayLeads}>{m.away.total.toFixed(1)}</span>
+                    <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                      <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
+                        <span className="score score-xs sc" data-lead={homeLeads}>{m.home.total.toFixed(1)}</span>
+                        <span className="dash">–</span>
+                        <span className="score score-xs sc" data-lead={awayLeads}>{m.away.total.toFixed(1)}</span>
+                      </span>
+                      {remaining > 0 ? (
+                        <span className="sub" style={{ fontSize: 10, whiteSpace: "nowrap" }}>
+                          Proj {m.home.projected.toFixed(1)} – {m.away.projected.toFixed(1)}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="side them">
                       <Avatar name={m.away.name} seed={m.away.fantasyTeamId} size="xs" />

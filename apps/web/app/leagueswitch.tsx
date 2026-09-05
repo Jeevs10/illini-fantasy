@@ -15,8 +15,15 @@ export function LeagueSwitch({
   return (
     <form className="leagueswitch" action={switchLeague}>
       <select
+        // Uncontrolled, so it needs a fresh DOM node — not just a fresh
+        // `defaultValue` prop — whenever the server-selected league changes,
+        // or the picker's own label freezes at whatever it showed on first
+        // mount even after a successful switch. `key` on `current` is what
+        // remounts it.
+        key={current}
         name="leagueId"
         aria-label="Which league"
+        title={leagues.find((l) => l.leagueId === current)?.leagueName}
         defaultValue={String(current)}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >

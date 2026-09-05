@@ -150,11 +150,12 @@ export function SettingsForm({
                     {field.help}
                     {key === "gamesCap" && context.settledWeeks > 0 ? (
                       <>
-                        {" "}<strong>
-                          Changing it re-scores the {context.settledWeeks} week
-                          {context.settledWeeks === 1 ? "" : "s"} already settled
-                        </strong>, so the standings and the matchup screen keep
-                        telling the same story.
+                        {" "}The {context.settledWeeks} week
+                        {context.settledWeeks === 1 ? "" : "s"} already settled{" "}
+                        <strong>
+                          keep{context.settledWeeks === 1 ? "s" : ""} the score settled under
+                        </strong> — this only changes what happens the next time a week is
+                        settled.
                       </>
                     ) : null}
                     {key === "periodDays" && context.scheduleDrawn ? (

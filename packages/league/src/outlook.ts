@@ -1,5 +1,5 @@
 import type { Db } from "@illini/db";
-import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
+import { autoFill, DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
 import { scorePeriod, standings, type StandingsRow, type TeamPeriod } from "./settle.ts";
 
 /**
@@ -18,6 +18,20 @@ import { scorePeriod, standings, type StandingsRow, type TeamPeriod } from "./se
  * games cap to the same pool. If the model is wrong about a player, this is
  * wrong in exactly the way the rest of the app already is, which is the only
  * honest kind of projection to show.
+ *
+ * A night nobody has set a lineup for yet — most of a week still to come —
+ * has no `lineup_entry` row to read a slot from. Rather than call that "no
+ * game" and let the projection go quiet exactly where it matters most, such a
+ * night is filled in from the roster's *current* starters — today's actual
+ * slots, or the same `autoFill` a manager would run right now if today is
+ * also undecided — and only those specific players are projected forward.
+ * A different, currently-benched player having a great matchup on some later
+ * night is not substituted in: the projection follows the team a manager has
+ * actually assembled, not a fresh optimal lineup re-guessed one night at a
+ * time, which by the end of a week would have cycled through most of the
+ * roster and stopped meaning "the starters." Only nights still ahead of `now`
+ * are filled in this way — a past night with no lineup is a settled fact
+ * (nobody started anyone), not a gap to fill in after the fact.
  */
 
 export type GameState = "upcoming" | "live" | "final";
@@ -62,6 +76,125 @@ function bestOf(values: number[], cap: number): number {
   return [...values].sort((a, b) => b - a).slice(0, cap).reduce((a, b) => a + b, 0);
 }
 
+interface FrozenStarter { name: string; slot: string }
+
+/**
+ * The team's current starters — a fixed set of named players, not a nightly
+ * re-optimisation.
+ *
+ * If today's lineup has already been decided, that decision *is* the current
+ * roster; no guessing required. Otherwise this runs the same `autoFill` a
+ * manager would run right now, but over the whole roster rather than
+ * tonight's slate — a depth chart ranked by production, independent of
+ * whether tonight happens to be one of this team's game nights.
+ */
+async function currentStarters(
+  db: Db, { fantasyTeamId, configId, settings, now }: {
+    fantasyTeamId: number; configId: number; settings: LeagueSettings; now: Date;
+  },
+): Promise<Map<number, FrozenStarter>> {
+  const today = now.toISOString().slice(0, 10);
+
+  const { rows: decidedToday } = await db.query<{ player_id: string; name: string; slot: string }>(
+    `SELECT l.player_id, p.name, l.slot
+       FROM lineup_entry l JOIN player p ON p.id = l.player_id
+      WHERE l.fantasy_team_id = $1 AND l.played_on = $2 AND l.slot NOT IN ('BENCH', 'IR')`,
+    [fantasyTeamId, today],
+  );
+  if (decidedToday.length > 0) {
+    return new Map(decidedToday.map((r) => [Number(r.player_id), { name: r.name, slot: r.slot }]));
+  }
+
+  const { rows: roster } = await db.query<{
+    player_id: string; name: string; role: string | null; projected: number | null;
+  }>(
+    `SELECT r.player_id, p.name,
+            (SELECT st.role FROM player_game_stat st
+              WHERE st.player_id = r.player_id AND st.role IS NOT NULL
+              ORDER BY st.played_on DESC LIMIT 1) AS role,
+            (SELECT avg(sc.score) FROM player_game_score sc
+              WHERE sc.player_id = r.player_id AND sc.config_id = $2 AND sc.played_on < $3) AS projected
+       FROM roster_slot r JOIN player p ON p.id = r.player_id
+      WHERE r.fantasy_team_id = $1
+        AND r.acquired_on <= $3
+        AND (r.released_on IS NULL OR r.released_on > $3)`,
+    [fantasyTeamId, configId, today],
+  );
+
+  const filled = autoFill(
+    roster.map((r) => ({
+      playerId: Number(r.player_id), role: r.role,
+      projected: r.projected === null ? 0 : Number(r.projected),
+    })),
+    settings,
+  );
+  const names = new Map(roster.map((r) => [Number(r.player_id), r.name]));
+  const starters = new Map<number, FrozenStarter>();
+  for (const f of filled) {
+    if (f.slot === "BENCH" || f.slot === "IR") continue;
+    starters.set(f.playerId, { name: names.get(f.playerId)!, slot: f.slot });
+  }
+  return starters;
+}
+
+/**
+ * The current starters' remaining games in a range that no lineup has been
+ * set for yet — nothing invented for a player outside that fixed set, even
+ * one whose real team plays that night.
+ */
+async function pendingForCurrentStarters(
+  db: Db, { fantasyTeamId, configId, from, to, starters }: {
+    fantasyTeamId: number; configId: number; from: string; to: string;
+    starters: Map<number, FrozenStarter>;
+  },
+): Promise<PendingGame[]> {
+  const playerIds = [...starters.keys()];
+  if (playerIds.length === 0) return [];
+
+  const { rows } = await db.query<{
+    player_id: string; played_on: string; tipoff: Date | null;
+    opponent: string | null; projected: number | null;
+  }>(
+    `SELECT player_id, played_on, tipoff, opponent, projected FROM (
+       SELECT DISTINCT ON (p.id, g.played_on)
+              p.id AS player_id, to_char(g.played_on, 'YYYY-MM-DD') AS played_on,
+              g.tipoff, opp.name AS opponent, form.projected
+         FROM player p
+         JOIN game g ON (g.home_team_id = p.team_id OR g.away_team_id = p.team_id)
+         LEFT JOIN player_game_score s
+           ON s.player_id = p.id AND s.played_on = g.played_on AND s.config_id = $2
+         LEFT JOIN team opp
+           ON opp.id = CASE WHEN g.home_team_id = p.team_id THEN g.away_team_id ELSE g.home_team_id END
+         LEFT JOIN LATERAL (
+           SELECT avg(sc.score) AS projected FROM player_game_score sc
+            WHERE sc.player_id = p.id AND sc.config_id = $2 AND sc.played_on < g.played_on
+         ) form ON true
+        WHERE p.id = ANY($3::bigint[])
+          AND g.played_on BETWEEN $4 AND $5
+          AND s.score IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM lineup_entry le
+             WHERE le.fantasy_team_id = $1 AND le.played_on = g.played_on
+          )
+        ORDER BY p.id, g.played_on, g.tipoff NULLS LAST
+     ) t`,
+    [fantasyTeamId, configId, playerIds, from, to],
+  );
+
+  return rows.map((r) => {
+    const starter = starters.get(Number(r.player_id))!;
+    return {
+      playerId: Number(r.player_id),
+      playerName: starter.name,
+      playedOn: r.played_on,
+      slot: starter.slot,
+      tipoff: r.tipoff === null ? null : r.tipoff.toISOString(),
+      opponent: r.opponent,
+      projected: r.projected === null ? 0 : Number(r.projected),
+    };
+  });
+}
+
 export async function periodOutlook(
   db: Db,
   { fantasyTeamId, configId, from, to, settings = DEFAULT_SETTINGS, now = new Date() }: {
@@ -103,7 +236,7 @@ export async function periodOutlook(
     [fantasyTeamId, configId, from, to],
   );
 
-  const pending: PendingGame[] = rows.map((r) => ({
+  const decided: PendingGame[] = rows.map((r) => ({
     playerId: Number(r.player_id),
     playerName: r.name,
     playedOn: r.played_on,
@@ -112,6 +245,19 @@ export async function periodOutlook(
     opponent: r.opponent,
     projected: r.projected === null ? 0 : Number(r.projected),
   }));
+
+  const today = now.toISOString().slice(0, 10);
+  const frozen = today > to ? [] : await currentStarters(db, { fantasyTeamId, configId, settings, now })
+    .then((starters) => pendingForCurrentStarters(db, {
+      fantasyTeamId, configId, from: today > from ? today : from, to, starters,
+    }));
+
+  const pending = [...decided, ...frozen].sort((a, b) => {
+    if (a.tipoff === b.tipoff) return a.playerName.localeCompare(b.playerName);
+    if (a.tipoff === null) return 1;
+    if (b.tipoff === null) return -1;
+    return a.tipoff.localeCompare(b.tipoff);
+  });
 
   const live = pending.filter((g) => g.tipoff !== null && new Date(g.tipoff) <= now).length;
 

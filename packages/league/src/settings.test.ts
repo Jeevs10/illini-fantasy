@@ -292,7 +292,7 @@ test("every reason at once, so the form is filled in once", async () => {
 
 // --- the one that is scoring -----------------------------------------------
 
-test("moving the games cap re-scores every settled week", async () => {
+test("moving the games cap leaves an already-settled week exactly as it was", async () => {
   await playAWeek();
 
   // Under the cap of four, team 1 keeps its four best nights of players 1–4
@@ -304,40 +304,32 @@ test("moving the games cap re-scores every settled week", async () => {
   const result = await updateSettings(db, {
     leagueId: 1, byUserId: commish, patch: { gamesCap: 2 }, now: NOW });
 
-  assert.deepEqual(result.rescored, [1]);
-  assert.match(result.notes[0]!, /1 settled week was re-scored/);
+  assert.match(result.notes[0]!, /1 settled week keeps the score settled under/);
 
+  // The week already carries the cap of four it settled under, so a cap of
+  // two now has nothing left to touch.
   const after = await standings(db, 1);
-  assert.equal(after.find((r) => r.name === "Team 1")!.pointsFor, 8);
-  assert.equal(after.find((r) => r.name === "Team 2")!.pointsFor, 16);
+  assert.equal(after.find((r) => r.name === "Team 1")!.pointsFor, 16);
+  assert.equal(after.find((r) => r.name === "Team 2")!.pointsFor, 32);
 });
 
-test("re-scoring leaves the week settled when it was settled", async () => {
+test("a settled matchup records the config and settings it was scored under", async () => {
   await playAWeek();
+  const { rows } = await db.query<{ config_id: string; settings: LeagueSettings }>(
+    "SELECT config_id, settings FROM matchup WHERE id = 1");
+  assert.equal(Number(rows[0]!.config_id), configId);
+  assert.equal(rows[0]!.settings.gamesCap, 4);
+});
+
+test("an unsettled week is left alone by a cap change", async () => {
+  await playAWeek();
+  await db.query(
+    "UPDATE matchup SET settled_at = NULL, home_points = NULL, away_points = NULL, " +
+    "config_id = NULL, settings = NULL");
   await updateSettings(db, { leagueId: 1, byUserId: commish, patch: { gamesCap: 2 }, now: NOW });
-  const { rows } = await db.query<{ settled_at: Date }>("SELECT settled_at FROM matchup");
-  assert.equal(rows[0]!.settled_at.toISOString(), "2026-01-12T09:00:00.000Z");
-});
-
-test("an unsettled week is left for settlement to score", async () => {
-  await playAWeek();
-  await db.query("UPDATE matchup SET settled_at = NULL, home_points = NULL, away_points = NULL");
-  const result = await updateSettings(db, {
-    leagueId: 1, byUserId: commish, patch: { gamesCap: 2 }, now: NOW });
-  assert.deepEqual(result.rescored, []);
   const { rows } = await db.query<{ home_points: number | null }>(
     "SELECT home_points FROM matchup");
   assert.equal(rows[0]!.home_points, null);
-});
-
-test("a refused change re-scores nothing", async () => {
-  await playAWeek();
-  await assert.rejects(
-    updateSettings(db, {
-      leagueId: 1, byUserId: commish, patch: { gamesCap: 2, waiverHour: 99 }, now: NOW }),
-    SettingsRefusedError);
-  const after = await standings(db, 1);
-  assert.equal(after.find((r) => r.name === "Team 1")!.pointsFor, 16);
 });
 
 // --- what is already in flight ---------------------------------------------

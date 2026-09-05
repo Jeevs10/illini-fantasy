@@ -410,9 +410,63 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
   font-weight: 600;
   font-size: var(--t-sm);
   min-height: 36px;
-  max-width: 15ch;
+  max-width: 22ch;
 }
 .leagueswitch select option { color: var(--ink); background: var(--surface); }
+
+/* Who you are, and the plumbing tabs (draft, account, commissioner) that don't
+   belong beside the season's own sections. */
+.profilemenu { position: relative; flex: none; }
+.profilemenu-trigger {
+  display: flex; align-items: center; gap: var(--s-2);
+  background: none; border: 0; min-height: 36px;
+  padding-inline: var(--s-2);
+  color: color-mix(in srgb, var(--on-deep) 82%, transparent);
+  font-size: var(--t-sm); font-weight: 600;
+  white-space: nowrap; cursor: pointer;
+  border-radius: var(--r-sm);
+  transition: color var(--d-1) var(--e-out), background-color var(--d-1) var(--e-out);
+}
+.profilemenu-trigger:hover,
+.profilemenu-trigger[aria-expanded="true"] {
+  color: var(--on-deep);
+  background: color-mix(in srgb, var(--on-deep) 8%, transparent);
+}
+.profilemenu-chevron {
+  display: grid; place-items: center;
+  transform: rotate(90deg);
+  transition: transform var(--d-1) var(--e-out);
+}
+.profilemenu-chevron[data-open="true"] { transform: rotate(-90deg); }
+.profilemenu-panel {
+  position: absolute; top: calc(100% + var(--s-2)); right: 0;
+  z-index: 60;
+  min-width: 12rem;
+  display: grid; gap: 2px;
+  padding: var(--s-2);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  animation: menudrop var(--d-2) var(--e-out) both;
+}
+@keyframes menudrop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.profilemenu-panel a, .profilemenu-panel button {
+  display: flex; align-items: center; gap: var(--s-2);
+  min-height: 38px;
+  padding-inline: var(--s-3);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm); font-weight: 600;
+  color: var(--ink-2);
+  background: none; border: 0; width: 100%; text-align: left;
+  text-decoration: none; cursor: pointer;
+}
+.profilemenu-panel a:hover, .profilemenu-panel button:hover {
+  color: var(--ink); background: var(--sunken);
+}
+.profilemenu-panel a svg { color: var(--ink-3); }
+.profilemenu-panel hr { border: 0; border-top: 1px solid var(--line-soft); margin: var(--s-1) 0; }
 
 /* The page itself. Bottom padding leaves room for the mobile bar. */
 .page {
@@ -537,7 +591,7 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 .modal-close {
   position: sticky; top: var(--s-3); float: right; margin: var(--s-3) var(--s-3) 0 0;
   z-index: 1;
-  width: 34px; height: 34px;
+  width: 44px; height: 44px;
   display: grid; place-items: center;
   border: 1px solid var(--line);
   border-radius: 50%;
@@ -673,6 +727,11 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
     box-shadow: inset 0 0 0 1px hsl(var(--hue) 40% 30%);
   }
 }
+.avatar-photo {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
 .avatar.xs { width: 24px; height: 24px; border-radius: 7px; font-size: 10px; }
 .avatar.sm { width: 28px; height: 28px; border-radius: 8px; font-size: var(--t-xs); }
 .avatar.lg { width: 46px; height: 46px; border-radius: 13px; font-size: var(--t-lg); }
@@ -774,13 +833,14 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
   overflow: hidden;
 }
 .leadbar > span {
-  position: absolute; inset: 0 auto 0 0;
+  position: absolute; inset: 0;
   border-radius: inherit;
+  transform-origin: left;
   background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #ff9d3d));
-  transition: width var(--d-3) var(--e-out);
+  transition: transform var(--d-3) var(--e-out);
 }
 .leadbar > span[data-tone="them"] {
-  inset: 0 0 0 auto;
+  transform-origin: right;
   background: linear-gradient(270deg, var(--deep-2), color-mix(in srgb, var(--deep-2) 70%, #5878b0));
 }
 @media (prefers-color-scheme: dark) {
@@ -1312,7 +1372,7 @@ select:disabled { opacity: .5; cursor: not-allowed; }
 .queue-who { flex: 1; min-width: 0; font-size: var(--t-sm); }
 .queue-who .player-link { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queue-actions { display: flex; gap: var(--s-1); }
-.queue-actions button { min-width: 2.5rem; padding-inline: var(--s-2); min-height: 34px; }
+.queue-actions button { min-width: 2.75rem; padding-inline: var(--s-2); min-height: 44px; }
 
 table.board { min-width: max-content; font-size: var(--t-xs); }
 table.board thead th { padding-inline: var(--s-3); }
@@ -1493,42 +1553,20 @@ table.board tbody th.board-round { border-bottom: 1px solid var(--line-soft); fo
 }
 .spark > span[data-best="true"] { background: var(--accent); }
 
-/* ---- head to head ------------------------------------------------------ */
+/* ---- rosters ------------------------------------------------------ */
 
-/* One rank, two nights. A games cap means the week turns on whose ninth-best
-   game was better, so the two sides are interleaved by rank rather than listed
-   separately — and the cap is a line drawn across both of them. */
-.h2h {
+/* The two teams are fielding different starters against different real
+   games, so pairing them by rank invites a comparison the schedule never
+   asked for. Each roster is its own column, full width on a phone. */
+.rosters {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.5rem minmax(0, 1fr);
-  align-items: center;
-  gap: var(--s-2);
-  padding: var(--s-2) var(--s-4);
-  border-bottom: 1px solid var(--line-soft);
-  transition: background-color var(--d-1) var(--e-out);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-5);
+  align-items: start;
 }
-.h2h:hover { background: var(--surface-2); }
-.h2h[data-over="true"] { opacity: .55; }
-.h2h[data-over="true"]:hover { opacity: 1; }
-.h2h-rank {
-  justify-self: center;
-  font-size: var(--t-xs); font-weight: 700;
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-  background: var(--sunken);
-  border-radius: var(--r-pill);
-  min-width: 22px; height: 22px;
-  display: grid; place-items: center;
+@media (max-width: 720px) {
+  .rosters { grid-template-columns: 1fr; }
 }
-.h2h-cell {
-  display: flex; align-items: center; gap: var(--s-3);
-  min-width: 0;
-  padding-block: var(--s-2);
-}
-.h2h-cell[data-align="right"] { flex-direction: row-reverse; text-align: right; }
-.h2h-cell[data-align="right"] .plr-sub { justify-content: flex-end; }
-.h2h-who { min-width: 0; flex: 1; }
-.h2h-who .plr-name { display: block; }
 
 .capline {
   display: flex; align-items: center; gap: var(--s-3);
@@ -1554,13 +1592,6 @@ summary.capline .chev {
   display: inline-block; transition: transform var(--d-2) var(--e-out);
 }
 details[open] > summary.capline .chev { transform: rotate(90deg); }
-
-@media (max-width: 640px) {
-  .h2h { grid-template-columns: minmax(0, 1fr) 1.9rem minmax(0, 1fr); padding-inline: var(--s-3); gap: var(--s-1); }
-  .h2h-cell { gap: var(--s-2); }
-  .h2h-cell .plr-name { font-size: var(--t-xs); }
-  .h2h-cell .plr-sub { font-size: 10px; }
-}
 
 /* ---- the bracket ------------------------------------------------------ */
 
@@ -1682,7 +1713,6 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 /* Row density. Applied to the matchup and pool lists only — a ledger screen
    like the roster or the lineup stays at the spacious default. */
 [data-density="compact"] .plr { padding-block: var(--s-2); }
-[data-density="compact"] .h2h { padding-block: var(--s-1); }
 [data-density="compact"] .pool-row { padding-block: var(--s-1); }
 
 /* On a phone the numbers move under the name and the row keeps only the rank,

@@ -10,6 +10,7 @@ import { generateSchedule } from "./schedule.ts";
 import { standings } from "./settle.ts";
 import { rankedStandings } from "./outlook.ts";
 import { upsertUser } from "./membership.ts";
+import { updateSettings } from "./settings.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
 
 let db: Db;
@@ -267,6 +268,36 @@ test("settling the bracket propagates winners round by round, and re-running it 
   assert.ok(view);
   assert.equal(view!.hasThird, true);
   assert.ok(view!.matches.every((m) => m.round !== "F" || m.settled));
+});
+
+test("a settled playoff round records the config and settings, and a later cap change leaves it alone", async () => {
+  await makeLeague(9, [91, 92, 93, 94], { playoffTeams: 4, playoffStartWeek: 2, gamesCap: 3 }, 3);
+  await settleChalk(9, 1); // seeds 1..4 = 91..94, ascending, same as LEAGUE1's six-team case
+  await createBracket(db, { leagueId: 9, by: commish });
+
+  // SF: seed 1 (91) v seed 4 (94), seed 2 (92) v seed 3 (93). Chalk again.
+  await playoffScore(91, "2026-11-09", 100);
+  await playoffScore(94, "2026-11-09", 10);
+  await playoffScore(92, "2026-11-09", 100);
+  await playoffScore(93, "2026-11-09", 10);
+  await settlePlayoffs(db, { leagueId: 9, now: new Date("2026-11-16T12:00:00Z") });
+
+  const { rows: settled } = await db.query<{
+    id: string; config_id: string; settings: LeagueSettings; home_points: number;
+  }>("SELECT id, config_id, settings, home_points FROM matchup WHERE league_id = $1 AND round = 'SF'", [9]);
+  assert.equal(settled.length, 2);
+  for (const row of settled) {
+    assert.equal(Number(row.config_id), configId);
+    assert.equal(row.settings.gamesCap, 3);
+  }
+
+  await updateSettings(db, {
+    leagueId: 9, byUserId: commish, patch: { gamesCap: 1 }, now: new Date("2026-11-16T12:00:00Z") });
+
+  const { rows: after } = await db.query<{ home_points: number; settings: LeagueSettings }>(
+    "SELECT home_points, settings FROM matchup WHERE id = $1", [settled[0]!.id]);
+  assert.equal(after[0]!.home_points, settled[0]!.home_points);
+  assert.equal(after[0]!.settings.gamesCap, 3, "the settled round keeps the cap it was scored under");
 });
 
 test("a settled playoff round never leaks into the regular-season table", async () => {

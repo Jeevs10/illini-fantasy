@@ -1,12 +1,14 @@
 import { bracketView, playoffPicture } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewNow } from "../../lib/session.ts";
-import { Empty } from "../ui/bits.tsx";
+import { Empty, SubTabs } from "../ui/bits.tsx";
 import { Bracket } from "./bracket.tsx";
 import { Picture } from "./picture.tsx";
 import { DrawBracket } from "./draw.tsx";
 
 export const dynamic = "force-dynamic";
+
+const VIEWS = [{ href: "/standings", label: "Standings" }, { href: "/playoffs", label: "Playoffs" }];
 
 export default async function PlayoffsPage() {
   const viewer = await requireViewer();
@@ -25,6 +27,7 @@ export default async function PlayoffsPage() {
             <h1>Playoffs</h1>
             <p className="meta"><span>{leagueName}</span></p>
           </div>
+          <SubTabs tabs={VIEWS} active="/playoffs" />
         </div>
         <Picture picture={picture} />
         {role === "commissioner" ? <DrawBracket /> : (

@@ -542,8 +542,10 @@ export async function settlePlayoffs(
       );
 
       await client.query(
-        `UPDATE matchup SET home_points = $2, away_points = $3, winner = $4, settled_at = $5 WHERE id = $1`,
-        [m.id, home.total, away.total, winner, now]);
+        `UPDATE matchup SET home_points = $2, away_points = $3, winner = $4, settled_at = $5,
+                config_id = $6, settings = $7
+           WHERE id = $1`,
+        [m.id, home.total, away.total, winner, now, configId, JSON.stringify(settings)]);
       m.settledAt = now;
       m.homePoints = home.total; m.awayPoints = away.total; m.winner = winner;
       results.push({

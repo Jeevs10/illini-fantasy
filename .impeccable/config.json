@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "apps/web/app/globals.css"
+        ],
+        "createdAt": "2026-09-05T12:45:59.927Z",
+        "reason": "clockbar left-border color is the draft clock's live/paused/urgent/yours-to-pick state indicator, not decorative"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "apps/web/app/globals.css"
+        ],
+        "createdAt": "2026-09-05T12:46:05.310Z",
+        "reason": "User accepted: .bar span width-transition is a mount-time-only sweep target; moving it to transform would fight the sweep animation's fill-mode:both and freeze the bar at 100%"
+      }
+    ]
+  }
+}

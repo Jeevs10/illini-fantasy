@@ -3,7 +3,7 @@ import {
   draftQueue, draftReadiness, draftRoom, playerPool, type PositionRole,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
-import { requireViewer } from "../../lib/session.ts";
+import { requireViewer, viewDate } from "../../lib/session.ts";
 import { Clock } from "./clock.tsx";
 import { Pool } from "./pool.tsx";
 import { Queue } from "./queue.tsx";
@@ -64,7 +64,7 @@ export default async function DraftPage({
   const [available, queue] = await Promise.all([
     done ? Promise.resolve([]) : playerPool(db, {
       leagueId, season, configId, limit: POOL, availableOnly: true, search: q,
-      roles: roleFilter ? [roleFilter] : undefined,
+      roles: roleFilter ? [roleFilter] : undefined, asOf: viewDate(),
     }),
     fantasyTeamId === null ? Promise.resolve([]) : draftQueue(db, { leagueId, fantasyTeamId }),
   ]);

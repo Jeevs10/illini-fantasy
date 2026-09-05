@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Nav } from "./nav.tsx";
 import { LeagueSwitch } from "./leagueswitch.tsx";
-import { SignOut } from "./signout.tsx";
+import { ProfileMenu } from "./profile-menu.tsx";
 import { who } from "../lib/session.ts";
 
 export const metadata: Metadata = {
@@ -48,7 +48,7 @@ export default async function RootLayout({
         {signedIn ? (
           <Nav commissioner={signedIn.commissioner}>
             <LeagueSwitch leagues={signedIn.leagues} current={signedIn.current} />
-            <SignOut name={signedIn.name} />
+            <ProfileMenu name={signedIn.name} commissioner={signedIn.commissioner} />
           </Nav>
         ) : null}
         <main className="page">{children}</main>

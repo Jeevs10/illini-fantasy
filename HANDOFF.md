@@ -13,7 +13,7 @@ say.
 | Typecheck | clean (`npm run typecheck`, and `npx tsc --noEmit` inside `apps/web`) |
 | Build | clean (`npm run build`) |
 | Production data | Neon `floral-shape-81709658`, 5 ingested game days, Feb 10–14 2026 |
-| Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games — **not yet migrated to 013 or re-ingested for the box/bio widening or team identity; see below** |
+| Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games — **not yet migrated to 014 or re-ingested for the box/bio widening, team identity, or per-matchup settings; see below** |
 | Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) · 4 `Illini Fantasy — 2025-26` (branch only, drafted and played out) |
 
 **Phase 11 needs no migration** — `player_availability` and the `rotowire`
@@ -107,12 +107,16 @@ new column and a league that has never heard of it reads `null`. The screen
 still needs 007 and 008 on the branch it runs against, because
 `settingsContext` counts sealed claims and live offers.
 
-**Migrations 007 through 013 are not on the production branch.** Production is
-still at 006, so `/waivers` and `/trades` both fail against it — and now so does
-signing in, since `app_user.username` does not exist there yet. Phase 5 was
-exercised on the Neon branch `phase-5-waivers` (`br-restless-glade-axer0kym`), a
-copy of production with 007 applied; that branch has none of 008 through 013.
-Migrating production is the owner's call and has deliberately not been made.
+**Migrations 007 through 014 are not on the production branch.** Confirmed
+directly against Neon (project `floral-shape-81709658`, branch
+`br-calm-sky-axnpcvde`), not just inferred: production is still at 006, so
+`/waivers` and `/trades` both fail against it — and now so does signing in,
+since `app_user.username` does not exist there yet. Phase 5 was exercised on
+the Neon branch `phase-5-waivers` (`br-restless-glade-axer0kym`), a copy of
+production with 007 applied; that branch has none of 008 through 014.
+Migrating production is the owner's call and has deliberately not been made —
+see "Where it stopped" for the exact commands and why an agent session
+cannot run them itself.
 
 009 is not additive-only. It drops `auth_account`, `auth_verification_token` and
 the `email_verified` / `image` columns, and empties `auth_session` — every
@@ -505,6 +509,85 @@ the Day span.
   them — nobody with Neon credentials has done it, the same standing gap
   `ranks`, `injuries` and migration 012 were already in.
 
+## How settings-per-matchup was verified
+
+Migration `014_matchup_settings.sql` gives `matchup` a `config_id` and a
+`settings` jsonb snapshot, written once by `settleWeek`/`settlePlayoffs` at
+the moment a row actually settles — the same relationship
+`player_game_score.config_id` has always had to a played game. `updateSettings`
+no longer re-scores a settled week when the games cap moves; `rescoreSettled`
+is gone. The bracket-drawn guard that already refused `playoffTeams`/
+`playoffStartWeek`/`playoffRoundWeeks` post-draw now also covers `thirdPlace`/
+`consolation`, both baked into row shape the same way; `reseed`/
+`playoffTiebreak` were deliberately left out of that guard, since neither is
+row shape — both are read fresh by `settlePlayoffs` for whichever round is
+still unsettled, which is real flexibility a commissioner mid-bracket should
+keep.
+
+- **`settings.test.ts`**: the old "moving the games cap re-scores every
+  settled week" test became "moving the games cap leaves an already-settled
+  week exactly as it was" — same fixture, opposite assertion. A new test
+  checks a settled matchup's `config_id`/`settings` directly. 198 tests,
+  unchanged in count — one test retired for one added, net zero, matching a
+  regression net of one file down (`settings.test.ts`) and one up
+  (`playoffs.test.ts`).
+- **`playoffs.test.ts`**: a new test settles a semi-final round, confirms its
+  `config_id`/`settings` match what the league was running, then moves the
+  games cap and confirms the settled round's `home_points` and its own
+  `settings.gamesCap` are untouched.
+- **Migration 014 was run against `illini_local`** (a full restore of
+  production, migrated through 012 from an earlier session): 013 and 014
+  applied cleanly, and the backfill correctly back-filled `config_id`/
+  `settings` onto every already-settled matchup from that database's own
+  `league` row — confirmed directly by querying the table before opening the
+  browser.
+- **The screens were driven in a browser** against that same restore, signed
+  in as the commissioner: `/commissioner/settings` reads "a settled week
+  keeps the games cap it was scored under" rather than the old "re-scores the
+  weeks already in the books," and the per-field warning next to Games Cap
+  says the same thing. Moved the cap from 9 to 3 on a league with one settled
+  week; the save receipt read "1 settled week keeps the score settled under.
+  The new cap applies the next time a week is settled." rather than "N weeks
+  were re-scored," and `/standings` before and after the change showed the
+  identical `pointsFor` for every team — the settled week's score genuinely
+  did not move.
+
+Not done: no screen surfaces a matchup's own `config_id`/`settings` snapshot
+anywhere (nothing asked for it); the games cap is still a single number for
+the whole league rather than one that can vary by week going forward — this
+phase stops the cap from rewriting the past, it does not make the future
+settings-blob per-week, which is a larger and separate feature the original
+note only gestured at ("nine until week 6, eight after").
+
+## How the manager settings screen was verified
+
+`apps/web/app/settings/` is new — `page.tsx`, `form.tsx`, `actions.ts`,
+`loading.tsx` — mirroring `/commissioner/settings`'s server-component +
+client-form + server-action shape and `join/[token]/register.tsx`'s
+username/password field conventions. It calls `changePassword`/`setUsername`
+from `@illini/league`, both of which existed since the password sign-in phase
+and were already fully tested with nothing calling them. A `Dest` for
+`/settings` was added to `nav.tsx`'s `SECONDARY` list (visible to every
+signed-in manager, no commissioner gate), with a new hand-drawn `gear` glyph
+alongside the existing eleven.
+
+- No new package tests — `changePassword`/`setUsername`'s behavior was
+  already covered by `accounts.test.ts`; this phase is UI only.
+- `npx tsc --noEmit` in `apps/web` and `npm run build` both clean, `/settings`
+  listed in the build's route table.
+- **Driven in a browser** against `illini_local`, signed in as the
+  commissioner: wrong current password refused with a generic "That isn't
+  your current password." and the fields left as typed; a correct change
+  succeeded ("Your password has been changed.") and the old session stayed
+  live, as documented; renaming to an already-taken username (`manager.two`)
+  was refused ("manager.two is taken. Pick another."); a real rename
+  succeeded and the confirmation read "You're now signed in as commish2.";
+  signing out and back in as `commish2` with the new password landed on
+  `/home` — the full round trip, not just the individual actions.
+
+Not checked: narrow widths and light mode, the same standing gap as most
+phases.
+
 ## How Phase 7 was verified
 
 Production is three migrations behind, so the same route Phase 6 took:
@@ -593,33 +676,64 @@ Not checked: narrow widths and light mode, same as Phase 6.
 
 ## Where it stopped
 
-Done through Phase 12: the retrofit. A league now has an ending (Phase 9), a
-player card that explains more than the score alone (Phase 10), a manager can
-see everywhere a player's name appears whether RotoWire says he is available
-tonight (Phase 11), and the five original screens now carry team identity, a
+Done through Phase 12: the retrofit, plus two of the three items this section
+used to list as not done. A league now has an ending (Phase 9), a player card
+that explains more than the score alone (Phase 10), a manager can see
+everywhere a player's name appears whether RotoWire says he is available
+tonight (Phase 11), the five original screens now carry team identity, a
 capped-and-collapsed matchup view, a modeled win probability, a player card
 that opens as a modal from any row, and the handful of critique P1/P2 items
-that were still open (Phase 12, below).
+that were still open (Phase 12), a matchup now carries the settings and
+scoring config it actually settled under so a games-cap change stops
+rewriting history, and a manager has their own account screen alongside the
+commissioner's settings screen (both below).
 
-Not done, in the order I would take them:
+Not done:
 
 1. **Migration 013, the ingest widening, and `npm run ingest -- injuries` /
-   `-- identity` on `full-season-2026` and production.** Verified locally
-   only — see "How Phase 10", "How Phase 11" and "How Phase 12 was verified"
-   above/below. Each is a command or two the branch has always used;
-   somebody with Neon credentials has to run them.
-2. **Settings that vary by week.** The games cap re-scores history because there
-   is one settings blob and no way to say "nine until week 6, eight after". That
-   is the honest fix and it is a real phase: `matchup` would have to carry the
-   settings it settled under, the way `player_game_score` carries its config.
-   The re-score is the right behaviour *given one blob*, and it is worth knowing
-   it is a consequence of that rather than a preference. The same gap now
-   applies to the playoff settings a bracket is drawn under.
-3. **A settings screen for a manager.** Everything on `/commissioner/settings`
-   is the commissioner's. A manager cannot change their own password or username
-   from any screen, and that is the same shape of gap the league settings were
-   until now — `changePassword` and `setUsername` exist and are tested with
-   nothing calling them.
+   `-- identity` on `full-season-2026` and production — plus, as of this pass,
+   migration 014.** Confirmed directly against both Neon branches rather than
+   assumed: production (project `floral-shape-81709658`, branch
+   `br-calm-sky-axnpcvde`) is still at 006; `full-season-2026` (branch
+   `br-little-river-axpodv84`) is at 009, both exactly as this file already
+   said. What is new: running the actual migrate/ingest commands from an
+   agent session is auto-blocked by Claude Code's own safety classifier — a
+   hard denial on a Bash command that migrates or writes to a remote
+   database, not a permission prompt that can be answered — so this still
+   needs a human running it. The three existing `app_user` rows on production
+   were also confirmed directly (`commish@illini.test`, `manager.two@illini
+   .test`, `new.manager@illini.test`), so the derived usernames below are not
+   a guess. Commands, unchanged in shape from before, `full-season-2026`
+   first because it is additive-only:
+
+   ```sh
+   # full-season-2026 — 010 through 014, all additive/idempotent
+   export DATABASE_URL="postgresql://neondb_owner:...@ep-curly-frog-ax7nyboz-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
+   export DATABASE_URL_UNPOOLED="${DATABASE_URL/-pooler/}"
+   npm run migrate
+   npm run ingest -- ranks 2026
+   npm run ingest -- injuries 2026
+   npm run ingest -- identity 2026
+   npm run ingest -- range 2026 20251101 20260408
+   npm run ingest -- link 2026
+   npm run parity && npm run backtest
+
+   # production — 007 through 014. 009 is destructive: it empties
+   # auth_session and leaves every existing user with a username but no
+   # password, so `npm run league -- passwd` for each has to follow
+   # `npm run migrate` immediately, before anyone tries to sign in.
+   export DATABASE_URL="postgresql://neondb_owner:...@ep-crimson-truth-ax9idsqe-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
+   export DATABASE_URL_UNPOOLED="${DATABASE_URL/-pooler/}"
+   npm run migrate
+   npm run league -- passwd commish <a password>
+   npm run league -- passwd manager.two <a password>
+   npm run league -- passwd new.manager <a password>
+   npm run ingest -- ranks 2026
+   npm run ingest -- injuries 2026
+   npm run ingest -- identity 2026
+   npm run ingest -- range 2026 20260210 20260214
+   npm run ingest -- link 2026
+   ```
 
 Smaller gaps from Phase 12. Team identity threads through the four core
 queries that already joined `team` for a name (`playerPool`, `rosterOn`,

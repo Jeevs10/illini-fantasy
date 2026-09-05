@@ -3,7 +3,9 @@ import { rankedStandings } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer } from "../../lib/session.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { Bar, Empty, Score } from "../ui/bits.tsx";
+import { Bar, Empty, Score, SubTabs } from "../ui/bits.tsx";
+
+const VIEWS = [{ href: "/standings", label: "Standings" }, { href: "/playoffs", label: "Playoffs" }];
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +34,8 @@ export default async function StandingsPage() {
             {moved ? <span>Movement since last week</span> : null}
           </p>
         </div>
-        <div className="controls">
+        <div className="row" style={{ gap: "var(--s-3)" }}>
+          <SubTabs tabs={VIEWS} active="/standings" />
           <Link className="button" href="/league">This week&rsquo;s matchups</Link>
         </div>
       </div>

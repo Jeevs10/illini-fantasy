@@ -1,7 +1,7 @@
 import type { Db } from "@illini/db";
 import type { Archetype, BlockName } from "@illini/scoring";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
-import { scorePeriod, type TeamPeriod } from "./settle.ts";
+import { periodOutlook, type TeamOutlook } from "./outlook.ts";
 
 /** A league and the team the signed-in user runs in it. */
 export interface Membership {
@@ -49,8 +49,8 @@ export interface MatchupView {
   settled: boolean;
   /** "Quarterfinal", "Semifinal", "Final", "Third place" — null in the regular season. */
   roundLabel: string | null;
-  home: TeamPeriod & { name: string; seed: number | null };
-  away: TeamPeriod & { name: string; seed: number | null };
+  home: TeamOutlook & { name: string; seed: number | null };
+  away: TeamOutlook & { name: string; seed: number | null };
 }
 
 const ROUND_LABELS: Record<string, string> = {
@@ -115,12 +115,16 @@ export async function seasonWeeks(
  * Totals are recomputed rather than read from `matchup.home_points`, so a week
  * in progress reads the same way a settled one does and a Torvik revision shows
  * up without waiting for settlement.
+ *
+ * Every side carries a projection, not just the totals — a week that has not
+ * started yet is still a matchup, and "0 to 0" is not what a manager wants to
+ * see when they navigate forward to it.
  */
 export async function weekMatchups(
   db: Db,
-  { leagueId, configId, on, week, settings = DEFAULT_SETTINGS }: {
+  { leagueId, configId, on, week, settings = DEFAULT_SETTINGS, now = new Date() }: {
     leagueId: number; configId: number; on: string; week?: number;
-    settings?: LeagueSettings;
+    settings?: LeagueSettings; now?: Date;
   },
 ): Promise<MatchupView[]> {
   const target = week ?? (await weekContaining(db, leagueId, on))?.week;
@@ -149,8 +153,8 @@ export async function weekMatchups(
 
   return Promise.all(rows.map(async (r) => {
     const [home, away] = await Promise.all([
-      scorePeriod(db, { fantasyTeamId: Number(r.home_team_id), configId, from: r.starts_on, to: r.ends_on, settings }),
-      scorePeriod(db, { fantasyTeamId: Number(r.away_team_id), configId, from: r.starts_on, to: r.ends_on, settings }),
+      periodOutlook(db, { fantasyTeamId: Number(r.home_team_id), configId, from: r.starts_on, to: r.ends_on, settings, now }),
+      periodOutlook(db, { fantasyTeamId: Number(r.away_team_id), configId, from: r.starts_on, to: r.ends_on, settings, now }),
     ]);
     return {
       matchupId: Number(r.id),

@@ -29,9 +29,9 @@ export interface TeamPeriod {
  * exists to remove.
  *
  * Takes any queryable rather than the pool, for the same reason `claimPlayer`
- * does: a caller already inside a transaction — a games-cap change re-scoring
- * the weeks it just invalidated — has to run on the same connection rather than
- * racing itself from a second one.
+ * does: a caller already inside a transaction — `settlePlayoffs` scoring
+ * several rounds on one connection — has to run on the same connection rather
+ * than racing itself from a second one.
  */
 export async function scorePeriod(
   db: Queryable,
@@ -115,8 +115,10 @@ export async function settleWeek(
     ]);
 
     await db.query(
-      `UPDATE matchup SET home_points = $2, away_points = $3, settled_at = now() WHERE id = $1`,
-      [m.id, home.total, away.total],
+      `UPDATE matchup SET home_points = $2, away_points = $3, settled_at = now(),
+              config_id = $4, settings = $5
+         WHERE id = $1`,
+      [m.id, home.total, away.total, configId, JSON.stringify(settings)],
     );
 
     settled.push({

@@ -14,15 +14,31 @@ export function connect(url = process.env.DATABASE_URL): Db {
 
   // Local Docker has no TLS; anything remote must verify.
   const local = /@(localhost|127\.0\.0\.1)/.test(url);
-  if (local) return new pg.Pool({ connectionString: url });
+  const pool = local
+    ? new pg.Pool({ connectionString: url })
+    : // Neon's URL carries `sslmode=require`, which pg currently treats as
+      // verify-full but will downgrade to libpq semantics in pg v9 — weaker, and
+      // silently so. Pin verify-full explicitly so the behaviour cannot change
+      // underneath us on a dependency bump.
+      new pg.Pool({
+        connectionString: (() => {
+          const parsed = new URL(url);
+          parsed.searchParams.set("sslmode", "verify-full");
+          return parsed.toString();
+        })(),
+      });
 
-  // Neon's URL carries `sslmode=require`, which pg currently treats as
-  // verify-full but will downgrade to libpq semantics in pg v9 — weaker, and
-  // silently so. Pin verify-full explicitly so the behaviour cannot change
-  // underneath us on a dependency bump.
-  const parsed = new URL(url);
-  parsed.searchParams.set("sslmode", "verify-full");
-  return new pg.Pool({ connectionString: parsed.toString() });
+  // node-postgres emits 'error' on the pool when an *idle* client's connection
+  // drops (e.g. the local Docker Postgres recycling a connection under load).
+  // With no listener, that's an unhandled EventEmitter error — it doesn't
+  // just fail one request, it takes the whole process's ability to serve any
+  // query down with it until restarted. Logging and letting the pool drop the
+  // dead client is what node-postgres's own docs prescribe.
+  pool.on("error", (error) => {
+    console.error("Idle Postgres client errored", error);
+  });
+
+  return pool;
 }
 
 /** Applies any migration not yet recorded, in filename order, each in a transaction. */

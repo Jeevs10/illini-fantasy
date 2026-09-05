@@ -7,10 +7,11 @@ import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Pool, type PoolRow } from "./pool.tsx";
 import { Glyph } from "../ui/glyphs.tsx";
-import { Empty, RoleGlossary } from "../ui/bits.tsx";
+import { Empty, RoleGlossary, SubTabs } from "../ui/bits.tsx";
 
 export const dynamic = "force-dynamic";
 
+const VIEWS = [{ href: "/players", label: "Players" }, { href: "/leaders", label: "Leaders" }];
 const PAGE = 50;
 const ROLES: PositionRole[] = ["G", "F", "B"];
 const SORTS: PoolSort[] = ["total", "avg", "games"];
@@ -35,7 +36,7 @@ export default async function PlayersPage({
   const [players, wire, roster] = await Promise.all([
     playerPool(db, {
       leagueId, season, configId, limit: PAGE + 1, offset, availableOnly, search: q,
-      roles: roleFilter ? [roleFilter] : undefined, sort: sortBy,
+      roles: roleFilter ? [roleFilter] : undefined, sort: sortBy, asOf: viewDate(),
     }),
     waiverWire(db, { leagueId, now }),
     fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, viewDate()),
@@ -72,6 +73,7 @@ export default async function PlayersPage({
               : null}
           </p>
         </div>
+        <SubTabs tabs={VIEWS} active="/players" />
       </div>
 
       <RoleGlossary />

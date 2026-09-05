@@ -84,8 +84,8 @@ export function ScoreBug({
         <div className="winprob" title="Modeled from projected final totals, not a fact about who wins">
           <div className="leadbar thin" role="img"
                aria-label={`Model: ${left.name} ${Math.round(leftWinProb * 100)}%, ${right.name} ${Math.round((1 - leftWinProb) * 100)}%`}>
-            <span style={{ width: `${leftWinProb * 100}%` }} data-tone={left.mine ? undefined : "them"} />
-            <span style={{ width: `${(1 - leftWinProb) * 100}%` }} data-tone={right.mine ? undefined : "them"} />
+            <span style={{ transform: `scaleX(${leftWinProb})` }} data-tone={left.mine ? undefined : "them"} />
+            <span style={{ transform: `scaleX(${1 - leftWinProb})` }} data-tone={right.mine ? undefined : "them"} />
           </div>
           <div className="scorebug-legend">
             <span>{Math.round(leftWinProb * 100)}%</span>
@@ -103,8 +103,8 @@ export function ScoreBug({
                : `${left.name} ${left.total.toFixed(1)}, ${right.name} ${right.total.toFixed(1)}`}>
           {unplayed ? null : (
             <>
-              <span style={{ width: `${share}%` }} data-tone={left.mine ? undefined : "them"} />
-              <span style={{ width: `${100 - share}%` }} data-tone={right.mine ? undefined : "them"} />
+              <span style={{ transform: `scaleX(${share / 100})` }} data-tone={left.mine ? undefined : "them"} />
+              <span style={{ transform: `scaleX(${(100 - share) / 100})` }} data-tone={right.mine ? undefined : "them"} />
             </>
           )}
         </div>

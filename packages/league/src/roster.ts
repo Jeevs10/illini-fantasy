@@ -227,10 +227,22 @@ const POOL_ORDER: Record<PoolSort, string> = {
  */
 export async function playerPool(
   db: Queryable,
-  { leagueId, season, configId, limit = 200, offset = 0, availableOnly = false, search, roles, sort = "total" }: {
+  {
+    leagueId, season, configId, limit = 200, offset = 0, availableOnly = false, search, roles,
+    sort = "total", asOf,
+  }: {
     leagueId: number; season: number; configId: number;
     limit?: number; offset?: number; availableOnly?: boolean; search?: string; roles?: PositionRole[];
     sort?: PoolSort;
+    /**
+     * Only count games played on or before this date. Without it the total is
+     * the whole season's box scores regardless of what day the viewer is
+     * looking from — right for a season that has actually finished, wrong for
+     * a league (or the midseason demo) still mid-schedule, where a night that
+     * has not been reached yet must not already be in anyone's average. Pass
+     * the viewer's `viewDate()`.
+     */
+    asOf?: string;
   },
 ): Promise<PoolPlayer[]> {
   // The filter is asked for in the three lineup roles, but what is stored is
@@ -259,6 +271,7 @@ export async function playerPool(
          JOIN player_game_stat st
            ON st.player_id = s.player_id AND st.played_on = s.played_on
         WHERE s.config_id = $3 AND st.season = $2
+          AND ($9::date IS NULL OR st.played_on <= $9)
         GROUP BY s.player_id
      )
      SELECT p.id AS player_id, p.name, t.name AS team_name,
@@ -275,7 +288,7 @@ export async function playerPool(
       ORDER BY ${POOL_ORDER[sort]}
       LIMIT $4 OFFSET $5`,
     [leagueId, season, configId, limit, offset, availableOnly,
-     search?.trim().toLowerCase() || null, rawRoles],
+     search?.trim().toLowerCase() || null, rawRoles, asOf ?? null],
   );
 
   return rows.map((r) => ({

@@ -185,6 +185,32 @@ test("the pool reports who owns whom, and can hide the owned", async () => {
   assert.ok(free.every((p) => p.ownedBy === null));
 });
 
+test("asOf keeps a night the viewer has not reached yet out of the total", async () => {
+  await db.query(
+    `INSERT INTO player_game_stat (player_id, played_on, season, role, minutes, stats, source)
+     VALUES (40,'2026-11-05',2026,'Pure PG',30,'{}'::jsonb,'torvik'),
+            (40,'2026-12-05',2026,'Pure PG',30,'{}'::jsonb,'torvik')`);
+  await db.query(
+    `INSERT INTO player_game_score
+       (player_id, played_on, config_id, archetype, blocks, raw, multiplier, minutes_gate, score)
+     VALUES (40,'2026-11-05',$1,'lead','{}'::jsonb,0,1,1,10),
+            (40,'2026-12-05',$1,'lead','{}'::jsonb,0,1,1,100)`,
+    [configId]);
+
+  const wholeSeason = await playerPool(db, { leagueId: LEAGUE, season: 2026, configId, limit: 500 });
+  const player40Full = wholeSeason.find((p) => p.playerId === 40)!;
+  assert.equal(player40Full.games, 2);
+  assert.equal(player40Full.totalScore, 110, "with no asOf, both nights count");
+
+  // Viewing from a date between the two games — the December night has not
+  // happened yet as far as this viewer's clock is concerned.
+  const midway = await playerPool(db,
+    { leagueId: LEAGUE, season: 2026, configId, limit: 500, asOf: "2026-11-30" });
+  const player40Midway = midway.find((p) => p.playerId === 40)!;
+  assert.equal(player40Midway.games, 1);
+  assert.equal(player40Midway.totalScore, 10, "only the night on or before asOf counts");
+});
+
 test("teamsInLeague reports both sides of a seat", async () => {
   // League 1 was filled by the invite tests above; league 2 was never claimed.
   const filled = await teamsInLeague(db, LEAGUE);

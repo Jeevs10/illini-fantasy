@@ -1,7 +1,6 @@
 import type { Db } from "@illini/db";
 import { requireCommissioner, type Queryable } from "./membership.ts";
 import { rosterLimit } from "./roster.ts";
-import { scorePeriod } from "./settle.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings, type Slot } from "./slots.ts";
 
 /**
@@ -24,12 +23,14 @@ import { DEFAULT_SETTINGS, type LeagueSettings, type Slot } from "./slots.ts";
  *     FAAB budget. A limit below a roster somebody already holds, or a budget
  *     below what somebody already spent, is not a rule — it is a league in a
  *     state it has no way to reach. Those are refused, naming the team.
- *   - **One that is scoring.** The games cap decides which started games count,
- *     so moving it re-scores every week that has already been played. The
- *     codebase's standing rule is that a settled score is never quietly
- *     rewritten — so the weeks are re-scored *here*, in the same transaction,
- *     and the count comes back with the change. The alternative is standings
- *     that disagree with the matchup screen sitting next to them.
+ *   - **One that is scoring, and used to rewrite history.** The games cap
+ *     decides which started games count. It used to re-score every already-
+ *     settled week the moment it moved, in the same transaction, because
+ *     `matchup` had nowhere of its own to say what it had actually been
+ *     scored under. Now it does: `settleWeek`/`settlePlayoffs` snapshot the
+ *     scoring config and the settings onto the row the moment it settles, so
+ *     a settled score simply has nothing left to rewrite. Moving the cap now
+ *     only ever affects a week not yet settled.
  */
 
 /** The settings that are a single whole number. */
@@ -148,8 +149,6 @@ export interface SettingsUpdate {
    * something already in flight that keeps the rule it was created under.
    */
   notes: string[];
-  /** Weeks re-scored because the games cap moved. */
-  rescored: number[];
 }
 
 /**
@@ -164,7 +163,7 @@ export interface SettingsContext {
   largestRoster: { fantasyTeamId: number; teamName: string; size: number } | null;
   /** The most FAAB anybody has already spent, and who. */
   mostSpent: { fantasyTeamId: number; teamName: string; spent: number } | null;
-  /** Weeks already settled. A games-cap change re-scores every one of them. */
+  /** Weeks already settled. Each keeps the cap and config it settled under. */
   settledWeeks: number;
   /** Whether a schedule exists, which is what freezes the scoring period. */
   scheduleDrawn: boolean;
@@ -339,43 +338,6 @@ export function settingLabel(key: string): string {
   return LABELS[key] ?? key;
 }
 
-/**
- * Re-scores every week that has already been settled.
- *
- * Only the points. `settled_at` is left where it was: the week was settled when
- * it was settled, and a cap change re-scores it rather than re-dating it. The
- * standings read those points, so this is what stops a change to the cap from
- * leaving the table and the matchup screen telling two different stories.
- */
-async function rescoreSettled(
-  q: Queryable, leagueId: number, settings: LeagueSettings,
-): Promise<number[]> {
-  const { rows } = await q.query<{
-    id: string; week: number; config_id: string;
-    home_team_id: string; away_team_id: string; starts_on: string; ends_on: string;
-  }>(
-    `SELECT m.id, m.week, l.config_id, m.home_team_id, m.away_team_id,
-            to_char(m.starts_on, 'YYYY-MM-DD') AS starts_on,
-            to_char(m.ends_on, 'YYYY-MM-DD') AS ends_on
-       FROM matchup m JOIN league l ON l.id = m.league_id
-      WHERE m.league_id = $1 AND m.settled_at IS NOT NULL
-      ORDER BY m.week, m.id`,
-    [leagueId]);
-
-  const weeks = new Set<number>();
-  for (const m of rows) {
-    const configId = Number(m.config_id);
-    const home = await scorePeriod(q, {
-      fantasyTeamId: Number(m.home_team_id), configId, from: m.starts_on, to: m.ends_on, settings });
-    const away = await scorePeriod(q, {
-      fantasyTeamId: Number(m.away_team_id), configId, from: m.starts_on, to: m.ends_on, settings });
-    await q.query("UPDATE matchup SET home_points = $2, away_points = $3 WHERE id = $1",
-      [m.id, home.total, away.total]);
-    weeks.add(m.week);
-  }
-  return [...weeks];
-}
-
 export interface SettingsChangeEvent {
   id: number;
   at: string;
@@ -447,7 +409,7 @@ export async function updateSettings(
     const changed = diffSettings(before, after);
     if (changed.length === 0) {
       await client.query("COMMIT");
-      return { settings: before, changed: [], notes: [], rescored: [] };
+      return { settings: before, changed: [], notes: [] };
     }
 
     const problems = settingsProblems(after);
@@ -486,9 +448,14 @@ export async function updateSettings(
     // The bracket is materialised at creation the same way the schedule and the
     // draft board are — its rounds are rows, dated to real weeks. Moving the
     // shape afterwards would leave those rows pointing at a bracket that no
-    // longer describes them.
+    // longer describes them. `thirdPlace`/`consolation` are shape too — whether
+    // those rows exist at all — decided the same moment `playoffTeams` is.
+    // `reseed`/`playoffTiebreak` are deliberately not here: neither is baked
+    // into row shape, and both are read fresh by `settlePlayoffs` for whichever
+    // round is still unsettled, which is exactly the flexibility a commissioner
+    // mid-bracket should keep.
     if (context.bracketDrawn && (moved.has("playoffTeams") || moved.has("playoffStartWeek")
-        || moved.has("playoffRoundWeeks"))) {
+        || moved.has("playoffRoundWeeks") || moved.has("thirdPlace") || moved.has("consolation"))) {
       problems.push(
         "The bracket is already drawn, and its rounds are stored rather than derived. " +
         "Changing its shape now would move nothing.");
@@ -499,15 +466,15 @@ export async function updateSettings(
     await client.query("UPDATE league SET settings = $2 WHERE id = $1",
       [leagueId, JSON.stringify(after)]);
 
-    // The games cap decides which started games counted, so a settled week
-    // scored under the old one is no longer the score this league plays by.
-    const rescored = moved.has("gamesCap") ? await rescoreSettled(client, leagueId, after) : [];
-
     const notes: string[] = [];
-    if (rescored.length > 0) {
+    // `settleWeek`/`settlePlayoffs` snapshot the cap onto a matchup the moment
+    // it settles, so an already-settled week has nothing left for this change
+    // to touch — only a week not yet settled sees the new number.
+    if (moved.has("gamesCap") && context.settledWeeks > 0) {
       notes.push(
-        `${rescored.length} settled week${rescored.length === 1 ? " was" : "s were"} re-scored ` +
-        "under the new cap, so the standings and the matchup screen still agree.");
+        `${context.settledWeeks} settled week${context.settledWeeks === 1 ? "" : "s"} ` +
+        `keep${context.settledWeeks === 1 ? "s" : ""} the score settled under. The new cap ` +
+        "applies the next time a week is settled.");
     }
     // Everything already in flight carries the moment it was created with,
     // because that moment is stored on the row rather than derived on read —
@@ -533,10 +500,10 @@ export async function updateSettings(
     await client.query(
       `INSERT INTO transaction (league_id, kind, payload, created_by)
        VALUES ($1, 'settings', $2, $3)`,
-      [leagueId, JSON.stringify({ changed, rescored }), byUserId]);
+      [leagueId, JSON.stringify({ changed }), byUserId]);
 
     await client.query("COMMIT");
-    return { settings: after, changed, notes, rescored };
+    return { settings: after, changed, notes };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

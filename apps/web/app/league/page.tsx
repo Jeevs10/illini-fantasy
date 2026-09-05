@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { CountedGame, MatchupView, PlayerAvailability, TeamOutlook } from "@illini/league";
-import { availabilityFor, periodOutlook, seasonWeeks, weekMatchups } from "@illini/league";
+import { availabilityFor, seasonWeeks, weekMatchups } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Avatar } from "../ui/identity.tsx";
@@ -19,7 +19,7 @@ export default async function LeaguePage({
 
   const [matchups, season] = await Promise.all([
     weekMatchups(db, {
-      leagueId, configId, on: viewDate(date), settings,
+      leagueId, configId, on: viewDate(date), settings, now,
       week: week ? Number(week) : undefined,
     }),
     seasonWeeks(db, leagueId),
@@ -41,12 +41,7 @@ export default async function LeaguePage({
   const others = matchups.filter((m) => m !== mine);
   const { week: weekNumber, startsOn, endsOn, settled } = matchups[0]!;
 
-  const outlooks = mine
-    ? await Promise.all([
-        periodOutlook(db, { fantasyTeamId: mine.home.fantasyTeamId, configId, from: mine.startsOn, to: mine.endsOn, settings, now }),
-        periodOutlook(db, { fantasyTeamId: mine.away.fantasyTeamId, configId, from: mine.startsOn, to: mine.endsOn, settings, now }),
-      ])
-    : null;
+  const outlooks: [TeamOutlook, TeamOutlook] | null = mine ? [mine.home, mine.away] : null;
   const availability = outlooks
     ? await availabilityFor(db, [...outlooks[0].pending, ...outlooks[1].pending].map((p) => p.playerId))
     : new Map<number, PlayerAvailability>();
@@ -84,7 +79,7 @@ export default async function LeaguePage({
               away={bug(mine.away.fantasyTeamId, mine.away.name, outlooks[1], fantasyTeamId)}
             />
           </div>
-          <HeadToHead
+          <Rosters
             mine={mine} outlooks={outlooks} fantasyTeamId={fantasyTeamId}
             gamesCap={settings.gamesCap} now={now} availability={availability}
           />
@@ -122,14 +117,15 @@ function bySlot(pending: TeamOutlook["pending"]): { slot: string; count: number 
 }
 
 /**
- * The matchup, game against game.
+ * Both rosters for the week, side by side.
  *
- * Ranked rather than chronological, and interleaved rather than side by side:
- * a games cap means the week is decided by whose ninth-best night was better,
- * so the row that decides it should be a row, with the cap drawn across the
- * page under it. Everything below the line is what was left on the table.
+ * Not ranked against each other and not interleaved — the two teams are
+ * fielding different starters against different real games, so pairing them
+ * row-for-row invites a comparison the schedule never asked for. Each side is
+ * its own roster: who is still to play, who is already in the books, and
+ * what the cap left on the table, under the total that roster projects to.
  */
-function HeadToHead({
+function Rosters({
   mine, outlooks, fantasyTeamId, gamesCap, now, availability,
 }: {
   mine: MatchupView; outlooks: [TeamOutlook, TeamOutlook];
@@ -141,24 +137,43 @@ function HeadToHead({
     ? [{ view: mine.home, out: outlooks[0] }, { view: mine.away, out: outlooks[1] }]
     : [{ view: mine.away, out: outlooks[1] }, { view: mine.home, out: outlooks[0] }];
 
-  const depth = Math.max(left.out.games.length, right.out.games.length);
-  const rows = Array.from({ length: depth }, (_, i) => ({
-    rank: i + 1,
-    left: left.out.games[i] ?? null,
-    right: right.out.games[i] ?? null,
-  }));
+  return (
+    <div className="rosters">
+      <RosterPanel side={left} mine={left.view.fantasyTeamId === fantasyTeamId}
+                   gamesCap={gamesCap} now={now} availability={availability} />
+      <RosterPanel side={right} mine={right.view.fantasyTeamId === fantasyTeamId}
+                   gamesCap={gamesCap} now={now} availability={availability} />
+    </div>
+  );
+}
 
-  const pending = [...left.out.pending.map((p) => ({ ...p, side: "left" as const })),
-                   ...right.out.pending.map((p) => ({ ...p, side: "right" as const }))]
-    .sort((a, b) => (a.tipoff ?? "~").localeCompare(b.tipoff ?? "~"));
+function RosterPanel({
+  side, mine, gamesCap, now, availability,
+}: {
+  side: { view: MatchupView["home"]; out: TeamOutlook };
+  mine: boolean; gamesCap: number; now: Date;
+  availability: Map<number, PlayerAvailability>;
+}) {
+  const { view, out } = side;
+  const pending = [...out.pending].sort((a, b) => (a.tipoff ?? "~").localeCompare(b.tipoff ?? "~"));
+  const scored = [...out.games].sort((a, b) => b.score - a.score);
+  const counted = scored.filter((g) => g.counted);
+  const overflow = scored.filter((g) => !g.counted);
 
   return (
     <div className="panel" data-density="compact">
       <div className="panel-head">
-        <div>
-          <h2>Game by game</h2>
-          <p>Best night first. The line is the cap — everything under it was left on the table.</p>
-        </div>
+        <span className="row" style={{ gap: "var(--s-3)", minWidth: 0 }}>
+          <Avatar name={view.name} seed={view.fantasyTeamId} size="md" mine={mine} />
+          <span style={{ minWidth: 0 }}>
+            <h2 style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{view.name}</h2>
+            <p>{out.gamesCounted} of {out.gamesPlayed} played count</p>
+          </span>
+        </span>
+        <span style={{ textAlign: "right", flex: "none" }}>
+          <div className="eyebrow">Projected</div>
+          <Score value={out.projected} size="lg" tone={mine ? "accent" : "default"} />
+        </span>
       </div>
 
       {pending.length > 0 ? (
@@ -167,11 +182,9 @@ function HeadToHead({
           {pending.map((p) => {
             const live = p.tipoff !== null && new Date(p.tipoff) <= now;
             return (
-              <div className="plr" key={`${p.side}-${p.playerId}-${p.playedOn}`} data-state={live ? "live" : undefined}>
+              <div className="plr" key={`${p.playerId}-${p.playedOn}`} data-state={live ? "live" : undefined}>
                 <span className="plr-lead">
-                  <Avatar name={p.side === "left" ? left.view.name : right.view.name}
-                          seed={p.side === "left" ? left.view.fantasyTeamId : right.view.fantasyTeamId}
-                          size="sm" mine={p.side === "left" && homeIsMine === (left.view === mine.home)} />
+                  <span className="slot" data-slot={p.slot} style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{p.slot}</span>
                 </span>
                 <span className="plr-id">
                   <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
@@ -179,7 +192,6 @@ function HeadToHead({
                     <AvailabilityTag status={availability.get(p.playerId)?.status} injury={availability.get(p.playerId)?.injury} compact />
                   </span>
                   <span className="plr-sub">
-                    <span className="slot" data-slot={p.slot} style={{ minWidth: "2.6rem", height: 18, fontSize: 10 }}>{p.slot}</span>
                     <span>{p.opponent ? `vs ${p.opponent}` : "TBD"}</span>
                     <span className="dot" />
                     <span>{p.playedOn}</span>
@@ -198,65 +210,43 @@ function HeadToHead({
         </>
       ) : null}
 
-      <div className="subhead">
-        <h3>Scored</h3>
-        <span className="row" style={{ gap: "var(--s-3)", fontSize: "var(--t-xs)", fontWeight: 700 }}>
-          <span style={{ color: "var(--ink-2)" }}>{left.view.name}</span>
-          <span className="faint">vs</span>
-          <span style={{ color: "var(--ink-2)" }}>{right.view.name}</span>
-        </span>
-      </div>
-
-      {rows.length === 0 ? (
+      <div className="subhead"><h3>Scored</h3></div>
+      {counted.length === 0 && overflow.length === 0 ? (
         <Empty title="No games scored yet" glyph="clock">
-          Nothing in this week has a filed box score. Scores appear the morning
-          after a night is ingested.
+          Nothing has a filed box score yet. Scores appear the morning after a
+          night is ingested.
         </Empty>
       ) : (
-        <div>
-          {rows.slice(0, gamesCap).map((row) => (
-            <div className="h2h" key={row.rank}>
-              <Cell game={row.left} align="left" />
-              <span className="h2h-rank">{row.rank}</span>
-              <Cell game={row.right} align="right" />
-            </div>
-          ))}
-          {depth > gamesCap ? (
+        <>
+          {counted.map((g) => <ScoredRow key={`${g.playerId}-${g.playedOn}`} game={g} />)}
+          {overflow.length > 0 ? (
             <details>
               <summary className="capline">
                 <span aria-hidden="true" className="chev">▸</span>
-                <span>
-                  Cap — best {gamesCap} count · {depth - gamesCap} more, not counted
-                </span>
+                <span>Cap — best {gamesCap} count · {overflow.length} more, not counted</span>
               </summary>
-              {rows.slice(gamesCap).map((row) => (
-                <div className="h2h" data-over="true" key={row.rank}>
-                  <Cell game={row.left} align="left" />
-                  <span className="h2h-rank">{row.rank}</span>
-                  <Cell game={row.right} align="right" />
-                </div>
-              ))}
+              {overflow.map((g) => <ScoredRow key={`${g.playerId}-${g.playedOn}`} game={g} />)}
             </details>
           ) : null}
-        </div>
+        </>
       )}
     </div>
   );
 }
 
-function Cell({ game, align }: { game: CountedGame | null; align: "left" | "right" }) {
-  if (game === null) return <div className="h2h-cell" data-align={align} aria-hidden="true" />;
+function ScoredRow({ game }: { game: CountedGame }) {
   return (
-    <div className="h2h-cell" data-align={align}>
-      <div className="h2h-who">
+    <div className="plr">
+      <span className="plr-lead">
+        <span className="slot" data-slot={game.slot} style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{game.slot}</span>
+      </span>
+      <span className="plr-id">
         <Link className="plr-name" href={`/players/${game.playerId}`}>{game.playerName}</Link>
-        <span className="plr-sub">
-          <span>{game.playedOn}</span>
-          <span className="dot" />
-          <span>{game.slot}</span>
-        </span>
-      </div>
-      <Score value={game.score} size="xs" tone={game.counted ? "default" : "quiet"} />
+        <span className="plr-sub"><span>{game.playedOn}</span></span>
+      </span>
+      <span className="plr-right">
+        <Score value={game.score} size="xs" tone={game.counted ? "default" : "quiet"} />
+      </span>
     </div>
   );
 }
@@ -265,16 +255,24 @@ function MiniBug({ view }: { view: MatchupView }) {
   const sum = view.home.total + view.away.total;
   const homeLeads = sum > 0 && view.home.total > view.away.total;
   const awayLeads = sum > 0 && view.away.total > view.home.total;
+  const remaining = view.home.live + view.home.upcoming + view.away.live + view.away.upcoming;
   return (
     <div className="minibug">
       <Link className="side" href={`/teams/${view.home.fantasyTeamId}`}>
         <Avatar name={view.home.name} seed={view.home.fantasyTeamId} size="xs" />
         <span className="nm">{view.home.name}</span>
       </Link>
-      <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
-        <span className="score score-xs sc" data-lead={homeLeads}>{view.home.total.toFixed(1)}</span>
-        <span className="dash">–</span>
-        <span className="score score-xs sc" data-lead={awayLeads}>{view.away.total.toFixed(1)}</span>
+      <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+        <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
+          <span className="score score-xs sc" data-lead={homeLeads}>{view.home.total.toFixed(1)}</span>
+          <span className="dash">–</span>
+          <span className="score score-xs sc" data-lead={awayLeads}>{view.away.total.toFixed(1)}</span>
+        </span>
+        {remaining > 0 ? (
+          <span className="sub" style={{ fontSize: 10, whiteSpace: "nowrap" }}>
+            Proj {view.home.projected.toFixed(1)} – {view.away.projected.toFixed(1)}
+          </span>
+        ) : null}
       </span>
       <Link className="side them" href={`/teams/${view.away.fantasyTeamId}`}>
         <Avatar name={view.away.name} seed={view.away.fantasyTeamId} size="xs" />

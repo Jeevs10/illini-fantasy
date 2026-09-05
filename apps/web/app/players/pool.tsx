@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import type { PlayerAvailability, PoolPlayer, PoolSort } from "@illini/league";
 import { add, type WaiverActionState } from "../waivers/actions.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { AvailabilityTag, Score } from "../ui/bits.tsx";
+import { AvailabilityTag, RoleTag, Score } from "../ui/bits.tsx";
 import Link from "next/link";
 import { Dot } from "../ui/playerrow.tsx";
 
@@ -56,7 +56,7 @@ export function Pool({
       <div className="pool-head">
         <span aria-hidden="true">#</span>
         <span aria-hidden="true">Player</span>
-        <span className="pool-role" aria-hidden="true">Role</span>
+        <span className="pool-role" aria-hidden="true">Pos</span>
         <SortHead label="GP" sortKey="games" active={sort} href={sortHrefs.games} />
         <SortHead label="Avg" sortKey="avg" active={sort} href={sortHrefs.avg} />
         <SortHead label="Total" sortKey="total" active={sort} href={sortHrefs.total} />
@@ -91,7 +91,7 @@ export function Pool({
             </span>
           </span>
 
-          <span className="pool-role muted">{player.role ?? "—"}</span>
+          <span className="pool-role"><RoleTag role={player.role} /></span>
           <span className="pool-num r faint tnum">{player.games}</span>
           <span className="pool-num r">
             <Score value={player.averageScore} size="xs" />

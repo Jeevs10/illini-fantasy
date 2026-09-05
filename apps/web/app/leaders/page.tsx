@@ -3,10 +3,11 @@ import { topPerformances, type PositionRole } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate } from "../../lib/session.ts";
 import { PlayerRow, Dot } from "../ui/playerrow.tsx";
-import { Empty, Score } from "../ui/bits.tsx";
+import { Empty, Score, SubTabs } from "../ui/bits.tsx";
 
 export const dynamic = "force-dynamic";
 
+const VIEWS = [{ href: "/players", label: "Players" }, { href: "/leaders", label: "Leaders" }];
 const ROLES: PositionRole[] = ["G", "F", "B"];
 
 type Span = "day" | "week" | "month" | "season";
@@ -70,6 +71,7 @@ export default async function LeadersPage({
             <span>Best single-game scores, {from === to ? from : `${from} → ${to}`}</span>
           </p>
         </div>
+        <SubTabs tabs={VIEWS} active="/leaders" />
       </div>
 
       <div className="controls">

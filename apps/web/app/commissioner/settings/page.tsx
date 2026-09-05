@@ -67,13 +67,12 @@ export default async function Settings() {
       <div className="panel">
         <div className="panel-body">
           <p className="prose" style={{ margin: 0 }}>
-            These are the numbers every other screen reads. Most of them only
-            bind what happens next — a bid already sealed opens at the hour it
-            was filed for, and a deal already agreed keeps the window it was
-            agreed under, because those moments are written down when they are
-            made rather than worked out when they are read. The games cap is the
-            exception: it decides which started games counted, so moving it
-            re-scores the weeks that are already in the books.
+            These are the numbers every other screen reads. Every setting only
+            binds what happens next — a bid already sealed opens at the hour it
+            was filed for, a deal already agreed keeps the window it was agreed
+            under, and a settled week keeps the games cap it was scored under —
+            because those moments are written down when they are made rather
+            than worked out when they are read.
           </p>
           {settings.tradeDeadline !== null ? (
             // One span, not three text nodes: `.notice` is a flex row, so a

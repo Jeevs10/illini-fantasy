@@ -155,6 +155,25 @@ export function RoleGlossary() {
 }
 
 /**
+ * The switch between two views the nav now folds into one tab — Standings
+ * with Playoffs, Players with Leaders. A real navigation (two routes, each
+ * bookmarkable and back-button-able) presented as a same-tab toggle, not a
+ * client-side view swap: the two sides read very differently sized data and
+ * neither owes the other its query shape.
+ */
+export function SubTabs({
+  tabs, active,
+}: { tabs: { href: string; label: string }[]; active: string }) {
+  return (
+    <nav className="segmented" aria-label="View">
+      {tabs.map((t) => (
+        <Link key={t.href} href={t.href} data-active={t.href === active}>{t.label}</Link>
+      ))}
+    </nav>
+  );
+}
+
+/**
  * A tip-off, always in Eastern.
  *
  * Not the viewer's zone: formatting from the browser means the server renders
