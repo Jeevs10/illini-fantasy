@@ -185,6 +185,8 @@ export interface PlayerCard {
   playerId: number;
   name: string;
   teamName: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
   conference: string | null;
   classYear: string | null;
   height: string | null;
@@ -210,10 +212,12 @@ export async function playerCard(
   },
 ): Promise<PlayerCard | null> {
   const { rows: players } = await db.query<{
-    id: string; name: string; team_name: string | null; conference: string | null;
+    id: string; name: string; team_name: string | null;
+    primary_color: string | null; secondary_color: string | null; conference: string | null;
     class_year: string | null; height: string | null; jersey: string | null; owned_by: string | null;
   }>(
-    `SELECT p.id, p.name, t.name AS team_name, t.conference, p.class_year, p.height, p.jersey,
+    `SELECT p.id, p.name, t.name AS team_name, t.primary_color, t.secondary_color, t.conference,
+            p.class_year, p.height, p.jersey,
             (SELECT ft.name FROM roster_slot r JOIN fantasy_team ft ON ft.id = r.fantasy_team_id
               WHERE r.player_id = p.id AND r.released_on IS NULL
                 AND ($2::bigint IS NULL OR r.league_id = $2) LIMIT 1) AS owned_by
@@ -269,6 +273,8 @@ export async function playerCard(
     playerId: Number(player.id),
     name: player.name,
     teamName: player.team_name,
+    primaryColor: player.primary_color,
+    secondaryColor: player.secondary_color,
     conference: player.conference,
     classYear: player.class_year,
     height: player.height,

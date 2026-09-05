@@ -1,5 +1,5 @@
 import { insertMany, type Db } from "@illini/db";
-import { CbbdClient } from "@illini/sources";
+import { CbbdClient, EspnClient } from "@illini/sources";
 import { normaliseTeam } from "@illini/crosswalk";
 
 /** name -> id for every team we know, loaded once per pass. */
@@ -76,6 +76,52 @@ dedupeOn: [0, 1, 2],
       defensive_rating = EXCLUDED.defensive_rating,
       strength = EXCLUDED.strength`,
   });
+}
+
+/**
+ * Colour and abbreviation, matched onto known teams by school name.
+ *
+ * Team-level rather than player-level, so `linkSource`'s fuzzy matching and
+ * `match_review` queue do not apply here — ~360 rows is small enough to match
+ * exactly by `normaliseTeam` and skip anything that misses, the same way a
+ * RotoWire player who never matches falls out rather than jamming in a wrong
+ * team. Checked against a full team table: 358 of 362 ESPN schools match this
+ * way; the four misses are pre-existing crosswalk gaps (a CBBD `school` value
+ * that already dropped a suffix ESPN's `location` keeps, e.g. "Boston" for
+ * Boston University) rather than anything this function should paper over.
+ */
+export async function syncTeamIdentity(db: Db, espn: Pick<EspnClient, "teams">): Promise<number> {
+  const teams = await espn.teams();
+  const seen = new Map<string, { primary: string | null; secondary: string | null; abbr: string | null }>();
+  for (const t of teams) {
+    const normalised = normaliseTeam(t.location);
+    if (!normalised || seen.has(normalised)) continue;
+    seen.set(normalised, {
+      primary: t.color ? `#${t.color}` : null,
+      secondary: t.alternateColor ? `#${t.alternateColor}` : null,
+      abbr: t.abbreviation,
+    });
+  }
+  if (seen.size === 0) return 0;
+
+  const normalisedKeys = [...seen.keys()];
+  const primary = normalisedKeys.map((k) => seen.get(k)!.primary);
+  const secondary = normalisedKeys.map((k) => seen.get(k)!.secondary);
+  const abbr = normalisedKeys.map((k) => seen.get(k)!.abbr);
+
+  const { rowCount } = await db.query(
+    `UPDATE team SET
+       primary_color = COALESCE(data.primary_color, team.primary_color),
+       secondary_color = COALESCE(data.secondary_color, team.secondary_color),
+       abbreviation = COALESCE(data.abbreviation, team.abbreviation)
+       FROM (
+         SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[])
+           AS t(normalised, primary_color, secondary_color, abbreviation)
+       ) AS data
+      WHERE team.normalised = data.normalised`,
+    [normalisedKeys, primary, secondary, abbr],
+  );
+  return rowCount ?? 0;
 }
 
 /** Strength for every team as of a date, newest snapshot at or before it. */

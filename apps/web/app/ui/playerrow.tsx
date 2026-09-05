@@ -11,7 +11,7 @@ import { Avatar } from "./identity.tsx";
  * being four different ideas of the same thing.
  */
 export function PlayerRow({
-  playerId, name, meta, right, lead, badge, state, dim, mine, ...rest
+  playerId, name, meta, right, lead, badge, state, dim, mine, rail, ...rest
 }: {
   playerId?: number;
   name: string;
@@ -26,11 +26,18 @@ export function PlayerRow({
   state?: "live" | "empty" | "final";
   dim?: boolean;
   mine?: boolean;
+  /** A school colour, drawn as a rail down the row's left edge. */
+  rail?: string | null;
 } & { children?: never }) {
   return (
-    <div className="plr" data-state={state} data-dim={dim || undefined} data-mine={mine || undefined} {...rest}>
+    <div
+      className="plr" data-state={state} data-dim={dim || undefined} data-mine={mine || undefined}
+      style={rail ? { ["--rail" as string]: rail } : undefined}
+      data-rail={rail ? true : undefined}
+      {...rest}
+    >
       <span className="plr-lead">
-        {lead ?? <Avatar name={name} seed={playerId ?? name} size="sm" />}
+        {lead ?? <Avatar name={name} seed={playerId ?? name} size="sm" ring={rail} />}
       </span>
       <span className="plr-id">
         {(() => {

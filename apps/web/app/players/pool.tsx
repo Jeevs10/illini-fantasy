@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import type { PlayerAvailability, PoolPlayer } from "@illini/league";
+import type { PlayerAvailability, PoolPlayer, PoolSort } from "@illini/league";
 import { add, type WaiverActionState } from "../waivers/actions.ts";
 import { Avatar } from "../ui/identity.tsx";
 import { AvailabilityTag, Score } from "../ui/bits.tsx";
@@ -20,7 +20,7 @@ export type PoolRow = PoolPlayer & { onWaivers: boolean; availability?: PlayerAv
  * appears somewhere the reader is not looking.
  */
 export function Pool({
-  players, offset, full, canAct, best,
+  players, offset, full, canAct, best, sort, sortHrefs,
 }: {
   players: PoolRow[];
   offset: number;
@@ -29,6 +29,11 @@ export function Pool({
   canAct: boolean;
   /** The top average on this page, for the share bars. */
   best: number;
+  /** The active sort, so its column header can say so. */
+  sort: PoolSort;
+  /** One href per sort, pre-built on the server — never a callback into a
+      client component; see Phase 8's note on why that fails at runtime. */
+  sortHrefs: Record<PoolSort, string>;
 }) {
   const [state, submit, pending] = useActionState<WaiverActionState, FormData>(add, {});
 
@@ -39,7 +44,7 @@ export function Pool({
   const share = (v: number) => (best <= floor ? 0 : Math.max(5, ((v - floor) / (best - floor)) * 100));
 
   return (
-    <div className="panel">
+    <div className="panel" data-density="compact">
       <div role="status" aria-live="polite">
         {state.error ?? state.ok ? (
           <div style={{ padding: "var(--s-4) var(--s-4) 0" }}>
@@ -48,18 +53,26 @@ export function Pool({
         ) : null}
       </div>
 
-      <div className="pool-head" aria-hidden="true">
-        <span>#</span><span>Player</span><span className="pool-role">Role</span>
-        <span className="r">GP</span><span className="r">Avg</span><span className="r">Total</span>
-        <span style={{ textAlign: "right" }}>Status</span>
+      <div className="pool-head">
+        <span aria-hidden="true">#</span>
+        <span aria-hidden="true">Player</span>
+        <span className="pool-role" aria-hidden="true">Role</span>
+        <SortHead label="GP" sortKey="games" active={sort} href={sortHrefs.games} />
+        <SortHead label="Avg" sortKey="avg" active={sort} href={sortHrefs.avg} />
+        <SortHead label="Total" sortKey="total" active={sort} href={sortHrefs.total} />
+        <span aria-hidden="true" style={{ textAlign: "right" }}>Status</span>
       </div>
 
       {players.map((player, i) => (
-        <div className="pool-row" key={player.playerId}>
+        <div
+          className="pool-row" key={player.playerId}
+          data-rail={player.primaryColor ? true : undefined}
+          style={player.primaryColor ? { ["--rail" as string]: player.primaryColor } : undefined}
+        >
           <span className="pool-rank tnum">{offset + i + 1}</span>
 
           <span className="plr-lead" style={{ minWidth: 0 }}>
-            <Avatar name={player.name} seed={player.playerId} size="sm" />
+            <Avatar name={player.name} seed={player.playerId} size="sm" ring={player.primaryColor} />
             <span className="plr-id">
               <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
                 <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
@@ -126,5 +139,18 @@ export function Pool({
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** A column header that is also the link to sort by it. */
+function SortHead({
+  label, sortKey, active, href,
+}: { label: string; sortKey: PoolSort; active: PoolSort; href: string }) {
+  const isActive = sortKey === active;
+  return (
+    <Link href={href} className="r pool-sort" data-active={isActive || undefined}
+          aria-current={isActive ? "true" : undefined}>
+      {label}{isActive ? <span aria-hidden="true"> ↓</span> : null}
+    </Link>
   );
 }

@@ -10,6 +10,8 @@ export interface Startable {
   archetype: Archetype;
   /** The Torvik role string — what governs slot eligibility. */
   role: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
   gameId: number;
   /** ISO 8601, or null when the schedule carries a date but no tip-off time. */
   tipoff: string | null;
@@ -59,6 +61,7 @@ export async function startableOn(
 ): Promise<Startable[]> {
   const { rows } = await db.query<{
     player_id: string; name: string; archetype: Archetype | null; role: string | null;
+    primary_color: string | null; secondary_color: string | null;
     game_id: string; tipoff: Date | null; opponent: string | null;
     opponent_strength: number | null; projected: number | null; slot: Slot | null;
   }>(
@@ -91,11 +94,13 @@ export async function startableOn(
             (SELECT st.role FROM player_game_stat st
               WHERE st.player_id = roster.player_id AND st.role IS NOT NULL
               ORDER BY st.played_on DESC LIMIT 1) AS role,
+            own.primary_color, own.secondary_color,
             l.slot
        FROM roster
        JOIN tonight ON tonight.team_id = roster.team_id
        LEFT JOIN form ON form.player_id = roster.player_id
        LEFT JOIN team opp ON opp.id = tonight.opponent_id
+       LEFT JOIN team own ON own.id = roster.team_id
        LEFT JOIN LATERAL (
          SELECT strength FROM team_rating tr
           WHERE tr.team_id = tonight.opponent_id AND tr.season = tonight.season
@@ -122,6 +127,8 @@ export async function startableOn(
       name: r.name,
       archetype: r.archetype ?? archetypeFor(r.role, config),
       role: r.role,
+      primaryColor: r.primary_color,
+      secondaryColor: r.secondary_color,
       gameId: Number(r.game_id),
       tipoff: r.tipoff === null ? null : r.tipoff.toISOString(),
       opponent: r.opponent,

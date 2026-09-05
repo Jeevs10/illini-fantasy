@@ -34,6 +34,17 @@ export function SkelRows({ count = 6 }: { count?: number }) {
   );
 }
 
+/** A row of segmented-control pills, for pages that filter above a list. */
+export function SkelSegmented({ count = 4 }: { count?: number }) {
+  return (
+    <div className="segmented" aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="skel" style={{ width: "6ch", height: "1.5rem", margin: 3 }} />
+      ))}
+    </div>
+  );
+}
+
 export function SkelBug() {
   return (
     <div className="scorebug" style={{ marginBottom: "var(--s-5)" }}>

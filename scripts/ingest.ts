@@ -8,19 +8,21 @@
  *   npm run ingest -- link 2026             crosswalk CBBD onto known players
  *   npm run ingest -- ranks 2026             rebuild the season rank rollup
  *   npm run ingest -- injuries 2026          crosswalk RotoWire's injury report
+ *   npm run ingest -- identity 2026          crosswalk ESPN's team colours
  *
  * `link` runs after at least one night, because Torvik is the identity spine:
  * players exist once they have a stat line, and other sources attach to them.
  * `ranks` reads only player_game_score — no Torvik call — so it is cheap to
- * run again any time the scores it reads have changed. `injuries` needs no
- * key and no season either — RotoWire reports today's slate regardless — but
- * takes one to keep every command's argv shape the same.
+ * run again any time the scores it reads have changed. `injuries` and
+ * `identity` need no key and no season either — RotoWire and ESPN both answer
+ * regardless of what has been ingested — but take one to keep every command's
+ * argv shape the same.
  */
 import { connect, migrate } from "@illini/db";
-import { CbbdClient, RotoWireClient, TorvikClient } from "@illini/sources";
+import { CbbdClient, EspnClient, RotoWireClient, TorvikClient } from "@illini/sources";
 import {
-  ingestNight, opponentsOn, syncSchedule, syncTeams, syncRatings, linkCbbdRosters,
-  rebuildPlayerRanks, ingestInjuries,
+  ingestNight, opponentsOn, syncSchedule, syncTeams, syncRatings, syncTeamIdentity,
+  linkCbbdRosters, rebuildPlayerRanks, ingestInjuries,
 } from "@illini/ingest";
 import { loadEnv } from "./env.ts";
 
@@ -29,7 +31,7 @@ loadEnv();
 const [command, seasonArg, a, b] = process.argv.slice(2);
 const season = Number(seasonArg);
 if (!command || !Number.isFinite(season)) {
-  console.error("usage: ingest <setup|schedule|night|range|link|ranks|injuries> <season> [date] [endDate]");
+  console.error("usage: ingest <setup|schedule|night|range|link|ranks|injuries|identity> <season> [date] [endDate]");
   process.exit(1);
 }
 
@@ -38,6 +40,7 @@ const db = connect(process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL
 const cbbd = new CbbdClient();
 const torvik = new TorvikClient();
 const rotowire = new RotoWireClient();
+const espn = new EspnClient();
 
 const dateRange = (from: string, to: string): string[] => {
   const out: string[] = [];
@@ -76,6 +79,9 @@ try {
       `rotowire linked ${result.linked}, queued for review ${result.queued}, ` +
       `availability written ${result.written} (${result.cleared} cleared)`,
     );
+  } else if (command === "identity") {
+    const matched = await syncTeamIdentity(db, espn);
+    console.log(`espn identity matched ${matched} teams`);
   } else if (command === "night" || command === "range") {
     const dates = command === "night" ? [a!] : dateRange(a!, b!);
 

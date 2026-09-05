@@ -150,6 +150,7 @@ export default async function TeamPage({
               key={player.playerId}
               playerId={player.playerId}
               name={player.name}
+              rail={player.primaryColor}
               meta={
                 <>
                   <span>{player.teamName ?? "—"}</span>

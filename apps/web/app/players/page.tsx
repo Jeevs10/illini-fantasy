@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   availabilityFor, playerPool, rosterLimit, rosterOn, settleWaivers, waiverWire,
-  type PositionRole,
+  type PoolSort, type PositionRole,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
@@ -13,11 +13,12 @@ export const dynamic = "force-dynamic";
 
 const PAGE = 50;
 const ROLES: PositionRole[] = ["G", "F", "B"];
+const SORTS: PoolSort[] = ["total", "avg", "games"];
 
 export default async function PlayersPage({
   searchParams,
-}: { searchParams: Promise<{ q?: string; free?: string; page?: string; role?: string }> }) {
-  const { q, free, page, role } = await searchParams;
+}: { searchParams: Promise<{ q?: string; free?: string; page?: string; role?: string; sort?: string }> }) {
+  const { q, free, page, role, sort } = await searchParams;
   const viewer = await requireViewer();
   const { leagueId, season, configId, fantasyTeamId, settings } = viewer.membership;
   const now = viewNow();
@@ -28,12 +29,13 @@ export default async function PlayersPage({
   await settleWaivers(db, { leagueId, now });
 
   const roleFilter = ROLES.includes(role as PositionRole) ? (role as PositionRole) : null;
+  const sortBy = SORTS.includes(sort as PoolSort) ? (sort as PoolSort) : "total";
   const offset = Math.max(0, Number(page ?? 0)) * PAGE;
   const availableOnly = free === "1";
   const [players, wire, roster] = await Promise.all([
     playerPool(db, {
       leagueId, season, configId, limit: PAGE + 1, offset, availableOnly, search: q,
-      roles: roleFilter ? [roleFilter] : undefined,
+      roles: roleFilter ? [roleFilter] : undefined, sort: sortBy,
     }),
     waiverWire(db, { leagueId, now }),
     fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, viewDate()),
@@ -48,7 +50,7 @@ export default async function PlayersPage({
 
   const query = (over: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
-    for (const [key, value] of Object.entries({ q, free, page, role, ...over })) {
+    for (const [key, value] of Object.entries({ q, free, page, role, sort, ...over })) {
       if (value) params.set(key, value);
     }
     const s = params.toString();
@@ -132,6 +134,12 @@ export default async function PlayersPage({
           full={full}
           canAct={fantasyTeamId !== null}
           best={Math.max(...rows.map((r) => r.averageScore), 0)}
+          sort={sortBy}
+          sortHrefs={{
+            total: query({ sort: undefined, page: undefined }),
+            avg: query({ sort: "avg", page: undefined }),
+            games: query({ sort: "games", page: undefined }),
+          }}
         />
       )}
 

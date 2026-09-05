@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   availabilityFor, claimsFor, eligibleSlots, gameState, leagueActivity, listTrades,
   periodOutlook, rankedStandings, rosterLimit, rosterOn, scoresOn, startableOn, weekMatchups,
-  type PlayerAvailability, type Slot, type Startable,
+  type PlayerAvailability, type Slot, type Startable, type TeamOutlook,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
@@ -163,28 +163,30 @@ export default async function HomePage() {
               </Empty>
             ) : (
               standingsTable.slice(0, 6).map((row) => (
-                <PlayerRow
-                  key={row.fantasyTeamId}
-                  name={row.name}
-                  mine={row.fantasyTeamId === fantasyTeamId}
-                  lead={
-                    <>
-                      <span className="faint tnum" style={{ width: "1.5ch", textAlign: "right", fontSize: "var(--t-sm)" }}>{row.rank}</span>
-                      <Avatar name={row.name} seed={row.fantasyTeamId} size="sm" mine={row.fantasyTeamId === fantasyTeamId} />
-                    </>
-                  }
-                  meta={<span>{row.wins}&ndash;{row.losses}{row.ties ? `–${row.ties}` : ""}</span>}
-                  right={
-                    <>
-                      {row.movement !== null && row.movement !== 0 ? (
-                        <span className="delta" data-dir={row.movement > 0 ? "up" : "down"}>
-                          {row.movement > 0 ? "↑" : "↓"}{Math.abs(row.movement)}
-                        </span>
-                      ) : null}
-                      <span className="score score-xs" style={{ color: "var(--ink-2)" }}>{row.pointsFor.toFixed(0)}</span>
-                    </>
-                  }
-                />
+                <Link key={row.fantasyTeamId} href={`/teams/${row.fantasyTeamId}`}
+                      style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+                  <PlayerRow
+                    name={row.name}
+                    mine={row.fantasyTeamId === fantasyTeamId}
+                    lead={
+                      <>
+                        <span className="faint tnum" style={{ width: "1.5ch", textAlign: "right", fontSize: "var(--t-sm)" }}>{row.rank}</span>
+                        <Avatar name={row.name} seed={row.fantasyTeamId} size="sm" mine={row.fantasyTeamId === fantasyTeamId} />
+                      </>
+                    }
+                    meta={<span>{row.wins}&ndash;{row.losses}{row.ties ? `–${row.ties}` : ""}</span>}
+                    right={
+                      <>
+                        {row.movement !== null && row.movement !== 0 ? (
+                          <span className="delta" data-dir={row.movement > 0 ? "up" : "down"}>
+                            {row.movement > 0 ? "↑" : "↓"}{Math.abs(row.movement)}
+                          </span>
+                        ) : null}
+                        <span className="score score-xs" style={{ color: "var(--ink-2)" }}>{row.pointsFor.toFixed(0)}</span>
+                      </>
+                    }
+                  />
+                </Link>
               ))
             )}
           </div>
@@ -203,18 +205,22 @@ export default async function HomePage() {
   );
 }
 
-function bug(
-  id: number, name: string,
-  o: { total: number; projected: number; gamesCounted: number; gamesPlayed: number; live: number; upcoming: number },
-  mineId: number | null,
-): BugSide {
+function bug(id: number, name: string, o: TeamOutlook, mineId: number | null): BugSide {
   return {
     fantasyTeamId: id, name,
     total: o.total, projected: o.projected,
     gamesCounted: o.gamesCounted, gamesPlayed: o.gamesPlayed,
     live: o.live, upcoming: o.upcoming,
+    pendingSlots: bySlot(o.pending),
     mine: id === mineId,
   };
+}
+
+/** Still-to-play games, grouped by slot for the "N to play" breakdown. */
+function bySlot(pending: TeamOutlook["pending"]): { slot: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const p of pending) counts.set(p.slot, (counts.get(p.slot) ?? 0) + 1);
+  return [...counts.entries()].map(([slot, count]) => ({ slot, count }));
 }
 
 const ordinal = (n: number) =>
@@ -285,6 +291,7 @@ function Tonight({
             playerId={player.playerId}
             name={player.name}
             dim={benched}
+            rail={player.primaryColor}
             state={!benched && state === "live" ? "live" : undefined}
             lead={<span className="slot" data-slot={player.slot}>{benched ? "BN" : player.slot}</span>}
             badge={

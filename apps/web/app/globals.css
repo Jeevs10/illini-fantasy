@@ -344,17 +344,25 @@ p { margin: 0; }
   box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
+/* A destination list that only ever grows. Scrollable rather than wrapping —
+   a masthead nav that wraps to a second row pushes the whole page down every
+   time a phase adds a screen; one that just overflows hides everything past
+   the fold with no way back to it. This can scroll to reach either. */
 .topnav {
   display: flex;
   gap: var(--s-1);
   margin-right: auto;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.topnav::-webkit-scrollbar { display: none; }
 .topnav a {
   position: relative;
   text-decoration: none;
   font-size: var(--t-sm);
   font-weight: 600;
+  flex: none;
   display: inline-flex;
   align-items: center;
   min-height: 38px;
@@ -498,6 +506,53 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 .sheet-links a:hover, .sheet-links a[data-active="true"] { background: var(--sunken); color: var(--ink); }
 .sheet-links .glyph { color: var(--ink-3); }
 
+/* ---- the player card modal --------------------------------------------- */
+
+/* The intercepted route's own shell — a centred card rather than the bottom
+   sheet's full-width strip, since this holds a whole page's worth of content
+   and wants room to breathe, not a thumb-reach list of links. */
+.modal-scrim {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--overlay);
+  animation: fade var(--d-2) var(--e-out) both;
+  border: 0;
+}
+.modal {
+  position: fixed; z-index: 61;
+  inset: 4dvh 50% auto 50%;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - var(--s-5) * 2));
+  max-height: 92dvh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-3);
+  animation: modalpop var(--d-3) var(--e-out) both;
+}
+@keyframes modalpop {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px) scale(.98); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+.modal-close {
+  position: sticky; top: var(--s-3); float: right; margin: var(--s-3) var(--s-3) 0 0;
+  z-index: 1;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--ink-2);
+}
+.modal-close:hover { color: var(--ink); background: var(--surface-2); }
+.modal-body { padding: 0 var(--s-5) var(--s-5); }
+.modal-body .hero { padding-top: var(--s-2); }
+@media (max-width: 640px) {
+  .modal { inset: auto 0 0; width: 100%; max-height: 90dvh; border-radius: var(--r-xl) var(--r-xl) 0 0; }
+  .modal-body { padding: 0 var(--s-4) var(--s-4); }
+}
+
 /* ---- page header ----------------------------------------------------- */
 
 .pagehead {
@@ -623,6 +678,12 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 .avatar.lg { width: 46px; height: 46px; border-radius: 13px; font-size: var(--t-lg); }
 .avatar.xl { width: 62px; height: 62px; border-radius: 18px; font-size: var(--t-xl); }
 .avatar[data-mine="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
+/* A school colour, drawn outside the avatar rather than inside it — the ring
+   is identity a source gave us, not a replacement for the derived monogram. */
+.avatar[data-ring="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring); }
+.avatar[data-ring="true"][data-mine="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 2px var(--surface), 0 0 0 4px var(--ring);
+}
 
 /* ---- badges, pills, chips -------------------------------------------- */
 
@@ -732,6 +793,14 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 /* Nothing played is an empty track, not a level contest. A half-and-half bar
    at 0–0 reads as two teams who fought each other to a draw. */
 .leadbar[data-empty="true"]::after { display: none; }
+.leadbar.thin { height: 5px; }
+.leadbar.thin::after { display: none; }
+
+/* The model's own guess, kept visually distinct from the score bar above it —
+   a thinner track, no centre tick, and its own label so the two are never
+   mistaken for the same fact. */
+.winprob { padding: 0 var(--s-5) var(--s-4); display: grid; gap: var(--s-2); }
+@media (max-width: 560px) { .winprob { padding: 0 var(--s-4) var(--s-3); } }
 
 /* ---- the scorebug ----------------------------------------------------- */
 
@@ -811,7 +880,8 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 }
 .minibug:last-child { border-bottom: 0; }
 .minibug:hover { background: var(--surface-2); color: inherit; }
-.minibug .side { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.minibug .side { display: flex; align-items: center; gap: var(--s-2); min-width: 0; text-decoration: none; color: inherit; }
+.minibug .side:hover .nm { text-decoration: underline; }
 .minibug .side.them { flex-direction: row-reverse; text-align: right; }
 .minibug .nm { font-size: var(--t-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .minibug .sc { color: var(--ink-3); }
@@ -839,6 +909,12 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 .plr[data-dim="true"]:hover { opacity: 1; }
 .plr[data-state="live"] { background: color-mix(in srgb, var(--live-wash) 55%, transparent); }
 .plr[data-state="empty"] { background: color-mix(in srgb, var(--warn-wash) 55%, transparent); }
+/* A school colour along the row's left edge — inset rather than a real border,
+   so it never shifts the row's own padding box. A separate property from the
+   `data-mine` background, so a row can carry both without either winning. */
+.plr[data-rail="true"], .pool-row[data-rail="true"], .lineup-row[data-rail="true"] {
+  box-shadow: inset 3px 0 0 0 var(--rail);
+}
 
 .plr-lead { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
 .plr-id { min-width: 0; }
@@ -1469,6 +1545,15 @@ table.board tbody th.board-round { border-bottom: 1px solid var(--line-soft); fo
   letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3);
   white-space: nowrap;
 }
+/* As a <summary>, the cap line is also the disclosure for what it drew a line
+   under — closed by default, so a games-cap week reads as the nine rows that
+   count rather than forty rows of which two-thirds are dimmed. */
+summary.capline { cursor: pointer; list-style: none; }
+summary.capline::marker, summary.capline::-webkit-details-marker { display: none; }
+summary.capline .chev {
+  display: inline-block; transition: transform var(--d-2) var(--e-out);
+}
+details[open] > summary.capline .chev { transform: rotate(90deg); }
 
 @media (max-width: 640px) {
   .h2h { grid-template-columns: minmax(0, 1fr) 1.9rem minmax(0, 1fr); padding-inline: var(--s-3); gap: var(--s-1); }
@@ -1586,6 +1671,19 @@ table.board tbody th.board-round { border-bottom: 1px solid var(--line-soft); fo
 .pool-inline { display: none; }
 .pool-conf { display: contents; }
 .pool-head .r, .pool-row .r { text-align: right; justify-self: end; }
+.pool-sort {
+  text-decoration: none;
+  border-radius: var(--r-sm);
+  transition: color var(--d-1) var(--e-out);
+}
+.pool-sort:hover { text-decoration: underline; }
+.pool-sort[data-active="true"] { color: var(--accent-ink); }
+
+/* Row density. Applied to the matchup and pool lists only — a ledger screen
+   like the roster or the lineup stays at the spacious default. */
+[data-density="compact"] .plr { padding-block: var(--s-2); }
+[data-density="compact"] .h2h { padding-block: var(--s-1); }
+[data-density="compact"] .pool-row { padding-block: var(--s-1); }
 
 /* On a phone the numbers move under the name and the row keeps only the rank,
    the player and the verb. A seven-column table at 390px is a scrollbar. */

@@ -27,19 +27,30 @@ export function monogram(name: string): string {
 }
 
 export function Avatar({
-  name, seed, size = "md", mine = false,
+  name, seed, size = "md", mine = false, ring,
 }: {
   name: string;
   /** Anything stable — a team id, usually. Falls back to the name. */
   seed?: number | string;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   mine?: boolean;
+  /**
+   * A school colour, drawn as a ring outside the monogram. Additive to the
+   * derived hue rather than a replacement for it — the monogram still says
+   * who, the ring says which school, and a player transferring schools moves
+   * rings without losing the identity his own id already derived.
+   */
+  ring?: string | null;
 }) {
   return (
     <span
       className={`avatar${size === "md" ? "" : ` ${size}`}`}
-      style={{ ["--hue" as string]: hueFor(seed ?? name) }}
+      style={{
+        ["--hue" as string]: hueFor(seed ?? name),
+        ...(ring ? { ["--ring" as string]: ring } : {}),
+      }}
       data-mine={mine || undefined}
+      data-ring={ring ? true : undefined}
       aria-hidden="true"
     >
       {monogram(name)}

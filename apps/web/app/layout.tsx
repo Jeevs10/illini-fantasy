@@ -17,7 +17,9 @@ export const viewport: Viewport = {
   ],
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({
+  children, card,
+}: { children: React.ReactNode; card: React.ReactNode }) {
   // Cached for the request, so asking here for the nav costs nothing on top of
   // the page's own call.
   const viewer = await who();
@@ -50,6 +52,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </Nav>
         ) : null}
         <main className="page">{children}</main>
+        {card}
       </body>
     </html>
   );

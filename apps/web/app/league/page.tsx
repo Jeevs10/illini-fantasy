@@ -109,8 +109,16 @@ function bug(id: number, name: string, o: TeamOutlook, mineId: number | null): B
     total: o.total, projected: o.projected,
     gamesCounted: o.gamesCounted, gamesPlayed: o.gamesPlayed,
     live: o.live, upcoming: o.upcoming,
+    pendingSlots: bySlot(o.pending),
     mine: id === mineId,
   };
+}
+
+/** Still-to-play games, grouped by slot for the "N to play" breakdown. */
+function bySlot(pending: TeamOutlook["pending"]): { slot: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const p of pending) counts.set(p.slot, (counts.get(p.slot) ?? 0) + 1);
+  return [...counts.entries()].map(([slot, count]) => ({ slot, count }));
 }
 
 /**
@@ -145,7 +153,7 @@ function HeadToHead({
     .sort((a, b) => (a.tipoff ?? "~").localeCompare(b.tipoff ?? "~"));
 
   return (
-    <div className="panel">
+    <div className="panel" data-density="compact">
       <div className="panel-head">
         <div>
           <h2>Game by game</h2>
@@ -206,18 +214,30 @@ function HeadToHead({
         </Empty>
       ) : (
         <div>
-          {rows.map((row) => (
-            <div key={row.rank}>
-              <div className="h2h" data-over={row.rank > gamesCap || undefined}>
-                <Cell game={row.left} align="left" />
-                <span className="h2h-rank">{row.rank}</span>
-                <Cell game={row.right} align="right" />
-              </div>
-              {row.rank === gamesCap && depth > gamesCap ? (
-                <div className="capline"><span>Cap — best {gamesCap} count</span></div>
-              ) : null}
+          {rows.slice(0, gamesCap).map((row) => (
+            <div className="h2h" key={row.rank}>
+              <Cell game={row.left} align="left" />
+              <span className="h2h-rank">{row.rank}</span>
+              <Cell game={row.right} align="right" />
             </div>
           ))}
+          {depth > gamesCap ? (
+            <details>
+              <summary className="capline">
+                <span aria-hidden="true" className="chev">▸</span>
+                <span>
+                  Cap — best {gamesCap} count · {depth - gamesCap} more, not counted
+                </span>
+              </summary>
+              {rows.slice(gamesCap).map((row) => (
+                <div className="h2h" data-over="true" key={row.rank}>
+                  <Cell game={row.left} align="left" />
+                  <span className="h2h-rank">{row.rank}</span>
+                  <Cell game={row.right} align="right" />
+                </div>
+              ))}
+            </details>
+          ) : null}
         </div>
       )}
     </div>
@@ -247,19 +267,19 @@ function MiniBug({ view }: { view: MatchupView }) {
   const awayLeads = sum > 0 && view.away.total > view.home.total;
   return (
     <div className="minibug">
-      <span className="side">
+      <Link className="side" href={`/teams/${view.home.fantasyTeamId}`}>
         <Avatar name={view.home.name} seed={view.home.fantasyTeamId} size="xs" />
         <span className="nm">{view.home.name}</span>
-      </span>
+      </Link>
       <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
         <span className="score score-xs sc" data-lead={homeLeads}>{view.home.total.toFixed(1)}</span>
         <span className="dash">–</span>
         <span className="score score-xs sc" data-lead={awayLeads}>{view.away.total.toFixed(1)}</span>
       </span>
-      <span className="side them">
+      <Link className="side them" href={`/teams/${view.away.fantasyTeamId}`}>
         <Avatar name={view.away.name} seed={view.away.fantasyTeamId} size="xs" />
         <span className="nm">{view.away.name}</span>
-      </span>
+      </Link>
     </div>
   );
 }

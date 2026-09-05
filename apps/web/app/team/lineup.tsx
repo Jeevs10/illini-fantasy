@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import type { GameState, LeagueSettings, PlayerAvailability, Slot, Startable } from "@illini/league";
 import { autoFill, moveToSlot, type LineupState } from "./actions.ts";
@@ -27,6 +28,20 @@ export interface LineupPlayer extends Startable {
 }
 
 interface SlotRow { key: string; slot: Slot; player: LineupPlayer | null }
+
+/**
+ * A `<select>` disabled only while its own form is submitting.
+ *
+ * `useFormStatus` reads the nearest enclosing `<form>`, not a `busy` flag
+ * shared across the whole lineup — so choosing a slot for one player no
+ * longer greys out every other player's control while the request is in
+ * flight, the way a single action-state pending flag threaded down as a prop
+ * used to.
+ */
+function SlotSelect(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const { pending } = useFormStatus();
+  return <select {...props} disabled={pending} />;
+}
 
 /**
  * The starting lineup as positions, not as a player list.
@@ -56,7 +71,7 @@ export function Lineup({
   /** Slots each player may take, resolved on the server from their archetype. */
   eligible: Record<number, Slot[]>;
 }) {
-  const [state, submitMove, moving] = useActionState<LineupState, FormData>(moveToSlot, {});
+  const [state, submitMove] = useActionState<LineupState, FormData>(moveToSlot, {});
   const [fillState, submitFill, filling] = useActionState<LineupState, FormData>(autoFill, {});
   // Whichever answer is the more recent. A move refused a moment before an
   // auto-fill succeeded would otherwise leave its complaint on the screen
@@ -105,13 +120,13 @@ export function Lineup({
             <EmptyRow
               key={row.key} slot={row.slot} day={day}
               bench={bench.filter((p) => !p.locked && (eligible[p.playerId] ?? []).includes(row.slot))}
-              submit={submitMove} busy={moving}
+              submit={submitMove}
             />
           ) : (
             <Row
               key={row.key} player={row.player} slot={row.slot} day={day}
               eligible={eligible[row.player.playerId] ?? []}
-              submit={submitMove} busy={moving} revision={latest.at ?? 0}
+              submit={submitMove} revision={latest.at ?? 0}
             />
           )
         ))}
@@ -131,7 +146,7 @@ export function Lineup({
             <Row
               key={player.playerId} player={player} slot="BENCH" day={day}
               eligible={eligible[player.playerId] ?? []}
-              submit={submitMove} busy={moving} onBench revision={latest.at ?? 0}
+              submit={submitMove} onBench revision={latest.at ?? 0}
             />
           ))}
         </div>
@@ -141,10 +156,10 @@ export function Lineup({
 }
 
 function Row({
-  player, slot, day, eligible, submit, busy, revision, onBench = false,
+  player, slot, day, eligible, submit, revision, onBench = false,
 }: {
   player: LineupPlayer; slot: Slot; day: string; eligible: Slot[];
-  submit: (formData: FormData) => void; busy: boolean;
+  submit: (formData: FormData) => void;
   /** Bumped on every answer, so a refused move snaps the control back. */
   revision: number;
   onBench?: boolean;
@@ -156,7 +171,11 @@ function Row({
     : undefined;
 
   return (
-    <div className="lineup-row" data-state={rowState}>
+    <div
+      className="lineup-row" data-state={rowState}
+      data-rail={player.primaryColor ? true : undefined}
+      style={player.primaryColor ? { ["--rail" as string]: player.primaryColor } : undefined}
+    >
       <span className="slot" data-slot={onBench ? "BENCH" : slot}>{onBench ? "BN" : slot}</span>
 
       <span className="plr-id">
@@ -207,17 +226,16 @@ function Row({
           <form action={submit}>
             <input type="hidden" name="day" value={day} />
             <input type="hidden" name="playerId" value={player.playerId} />
-            <select
+            <SlotSelect
               key={`${player.slot}-${revision}`}
               name="slot"
               aria-label={`Move ${player.name}`}
               defaultValue={player.slot}
-              disabled={busy}
               onChange={(event) => event.currentTarget.form?.requestSubmit()}
             >
               <option value="BENCH">Bench</option>
               {eligible.map((s) => <option key={s} value={s}>Start at {s}</option>)}
-            </select>
+            </SlotSelect>
           </form>
         )}
       </span>
@@ -226,10 +244,10 @@ function Row({
 }
 
 function EmptyRow({
-  slot, day, bench, submit, busy,
+  slot, day, bench, submit,
 }: {
   slot: Slot; day: string; bench: LineupPlayer[];
-  submit: (formData: FormData) => void; busy: boolean;
+  submit: (formData: FormData) => void;
 }) {
   return (
     <div className="lineup-row" data-state="empty">
@@ -249,11 +267,10 @@ function EmptyRow({
           <form action={submit}>
             <input type="hidden" name="day" value={day} />
             <input type="hidden" name="slot" value={slot} />
-            <select
+            <SlotSelect
               name="playerId"
               aria-label={`Fill the ${slot} slot`}
               defaultValue=""
-              disabled={busy}
               onChange={(event) => event.currentTarget.form?.requestSubmit()}
             >
               <option value="" disabled>Choose…</option>
@@ -262,7 +279,7 @@ function EmptyRow({
                   {p.name} · {p.projected.toFixed(1)}
                 </option>
               ))}
-            </select>
+            </SlotSelect>
           </form>
         )}
       </span>

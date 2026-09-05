@@ -69,7 +69,9 @@ export default async function StandingsPage() {
                   <span className="plr-lead" style={{ minWidth: 0 }}>
                     <Avatar name={row.name} seed={row.fantasyTeamId} size="sm" mine={mine} />
                     <span className="plr-id">
-                      <span className="plr-name">{row.name}{mine ? <span className="pill mine" style={{ marginLeft: "var(--s-2)" }}>You</span> : null}</span>
+                      <Link href={`/teams/${row.fantasyTeamId}`} className="plr-name">
+                        {row.name}{mine ? <span className="pill mine" style={{ marginLeft: "var(--s-2)" }}>You</span> : null}
+                      </Link>
                       <span className="plr-sub stand-inline">
                         <span>{row.wins}&ndash;{row.losses}{row.ties ? `–${row.ties}` : ""}</span>
                         <span className="dot" />

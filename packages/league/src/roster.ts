@@ -8,6 +8,8 @@ export interface RosteredPlayer {
   playerId: number;
   name: string;
   teamName: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
   role: string | null;
   acquiredOn: string;
   acquiredVia: string;
@@ -43,10 +45,12 @@ export async function rosterOn(
   db: Queryable, fantasyTeamId: number, on: string,
 ): Promise<RosteredPlayer[]> {
   const { rows } = await db.query<{
-    player_id: string; name: string; team_name: string | null; role: string | null;
+    player_id: string; name: string; team_name: string | null;
+    primary_color: string | null; secondary_color: string | null; role: string | null;
     acquired_on: string; acquired_via: string;
   }>(
     `SELECT r.player_id, p.name, t.name AS team_name,
+            t.primary_color, t.secondary_color,
             (SELECT st.role FROM player_game_stat st
               WHERE st.player_id = r.player_id AND st.role IS NOT NULL
               ORDER BY st.played_on DESC LIMIT 1) AS role,
@@ -64,6 +68,8 @@ export async function rosterOn(
     playerId: Number(r.player_id),
     name: r.name,
     teamName: r.team_name,
+    primaryColor: r.primary_color,
+    secondaryColor: r.secondary_color,
     role: r.role,
     acquiredOn: r.acquired_on,
     acquiredVia: r.acquired_via,
@@ -191,6 +197,8 @@ export interface PoolPlayer {
   playerId: number;
   name: string;
   teamName: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
   conference: string | null;
   role: string | null;
   /** What the scoring model most recently called him — the slot eligibility. */
@@ -201,6 +209,16 @@ export interface PoolPlayer {
   ownedBy: string | null;
 }
 
+export type PoolSort = "total" | "avg" | "games";
+
+const POOL_ORDER: Record<PoolSort, string> = {
+  total: "totals.total DESC",
+  // Ties toward more games played — an average from two games outranking one
+  // from twenty is the ordering the games-column exists to let a reader catch.
+  avg: "(totals.total / totals.games) DESC, totals.games DESC",
+  games: "totals.games DESC, totals.total DESC",
+};
+
 /**
  * The player pool, ranked by season Player-Score, with ownership attached.
  *
@@ -209,9 +227,10 @@ export interface PoolPlayer {
  */
 export async function playerPool(
   db: Queryable,
-  { leagueId, season, configId, limit = 200, offset = 0, availableOnly = false, search, roles }: {
+  { leagueId, season, configId, limit = 200, offset = 0, availableOnly = false, search, roles, sort = "total" }: {
     leagueId: number; season: number; configId: number;
     limit?: number; offset?: number; availableOnly?: boolean; search?: string; roles?: PositionRole[];
+    sort?: PoolSort;
   },
 ): Promise<PoolPlayer[]> {
   // The filter is asked for in the three lineup roles, but what is stored is
@@ -222,7 +241,8 @@ export async function playerPool(
     : null;
 
   const { rows } = await db.query<{
-    player_id: string; name: string; team_name: string | null; conference: string | null;
+    player_id: string; name: string; team_name: string | null;
+    primary_color: string | null; secondary_color: string | null; conference: string | null;
     role: string | null; archetype: Archetype | null; games: string; total: number;
     owned_by: string | null;
   }>(
@@ -241,7 +261,8 @@ export async function playerPool(
         WHERE s.config_id = $3 AND st.season = $2
         GROUP BY s.player_id
      )
-     SELECT p.id AS player_id, p.name, t.name AS team_name, t.conference,
+     SELECT p.id AS player_id, p.name, t.name AS team_name,
+            t.primary_color, t.secondary_color, t.conference,
             totals.role, totals.archetype, totals.games, totals.total,
             owned.name AS owned_by
        FROM totals
@@ -251,7 +272,7 @@ export async function playerPool(
       WHERE ($6::boolean IS NOT TRUE OR owned.player_id IS NULL)
         AND ($7::text IS NULL OR p.normalised LIKE '%' || $7 || '%')
         AND ($8::text[] IS NULL OR totals.role = ANY($8))
-      ORDER BY totals.total DESC
+      ORDER BY ${POOL_ORDER[sort]}
       LIMIT $4 OFFSET $5`,
     [leagueId, season, configId, limit, offset, availableOnly,
      search?.trim().toLowerCase() || null, rawRoles],
@@ -261,6 +282,8 @@ export async function playerPool(
     playerId: Number(r.player_id),
     name: r.name,
     teamName: r.team_name,
+    primaryColor: r.primary_color,
+    secondaryColor: r.secondary_color,
     conference: r.conference,
     role: r.role,
     archetype: r.archetype,

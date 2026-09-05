@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { winProbability } from "@illini/league";
 import { Avatar } from "./identity.tsx";
 import { Score, LiveTag } from "./bits.tsx";
 
@@ -25,6 +26,8 @@ export interface BugSide {
   live: number;
   upcoming: number;
   mine: boolean;
+  /** Slots still to play tonight and beyond — the "yet to play" breakdown. */
+  pendingSlots?: { slot: string; count: number }[];
 }
 
 const MONTHDAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -54,6 +57,10 @@ export function ScoreBug({
     && left.gamesPlayed === 0 && right.gamesPlayed === 0;
   const margin = left.mine || right.mine ? (left.mine ? left : right).total - (left.mine ? right : left).total : null;
 
+  // From projected finals rather than totals-so-far — the model's whole point
+  // is to say something about the games that have not happened yet.
+  const leftWinProb = winProbability(left.projected - right.projected, remaining);
+
   return (
     <section className="scorebug" data-live={liveNow > 0 || undefined}>
       <div className="scorebug-top">
@@ -72,6 +79,23 @@ export function ScoreBug({
         <div className="scorebug-mid"><span className="vs">VS</span></div>
         <Team side={right} lead={decided && !leftLeads} unplayed={unplayed} them />
       </div>
+
+      {unplayed ? null : (
+        <div className="winprob" title="Modeled from projected final totals, not a fact about who wins">
+          <div className="leadbar thin" role="img"
+               aria-label={`Model: ${left.name} ${Math.round(leftWinProb * 100)}%, ${right.name} ${Math.round((1 - leftWinProb) * 100)}%`}>
+            <span style={{ width: `${leftWinProb * 100}%` }} data-tone={left.mine ? undefined : "them"} />
+            <span style={{ width: `${(1 - leftWinProb) * 100}%` }} data-tone={right.mine ? undefined : "them"} />
+          </div>
+          <div className="scorebug-legend">
+            <span>{Math.round(leftWinProb * 100)}%</span>
+            <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>
+              Model — win probability
+            </span>
+            <span>{Math.round((1 - leftWinProb) * 100)}%</span>
+          </div>
+        </div>
+      )}
 
       <div className="scorebug-foot">
         <div className="leadbar" data-empty={unplayed || undefined} role="img"
@@ -131,6 +155,9 @@ function Team({
         <span className="sub" style={{ textAlign: them ? "right" : "left" }}>
           Proj <strong className="tnum" style={{ color: "var(--ink-2)" }}>{side.projected.toFixed(1)}</strong>
           {" · "}{pending} to play
+          {side.pendingSlots && side.pendingSlots.length > 0
+            ? ` — ${side.pendingSlots.map((s) => `${s.count} ${s.slot}`).join(" · ")}`
+            : ""}
         </span>
       ) : (
         <span className="sub" style={{ textAlign: them ? "right" : "left" }}>
