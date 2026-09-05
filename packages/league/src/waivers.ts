@@ -1,10 +1,20 @@
 import type { Db } from "@illini/db";
+import { DraftNotCompleteError, draftFor } from "./draft.ts";
 import type { Queryable } from "./membership.ts";
 import {
   AlreadyRosteredError, RosterFullError, claimPlayer, clearFutureLineups, releasePlayer,
   rosterLimit, rosterOn,
 } from "./roster.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
+
+/** A roster move that only makes sense once the draft that filled every
+    other roster slot has actually finished — free agency and waivers both
+    presuppose there is a draft to have missed. */
+async function requireDraftComplete(q: Queryable, leagueId: number): Promise<void> {
+  const draft = await draftFor(q, leagueId);
+  if (!draft) throw new DraftNotCompleteError("none");
+  if (draft.status !== "complete") throw new DraftNotCompleteError(draft.status);
+}
 
 export type ClaimStatus = "pending" | "won" | "lost" | "invalid" | "cancelled";
 
@@ -288,6 +298,7 @@ export async function submitClaim(
     dropPlayerId?: number | null; byUserId?: number; now?: Date;
   },
 ): Promise<Claim> {
+  await requireDraftComplete(db, leagueId);
   const { settings } = await leagueContext(db, leagueId);
   if (!Number.isInteger(bid) || bid < 0) throw new Error("a bid must be a whole number of dollars");
 
@@ -672,6 +683,7 @@ export async function addFreeAgent(
     dropPlayerId?: number | null; byUserId?: number; now?: Date;
   },
 ): Promise<void> {
+  await requireDraftComplete(db, leagueId);
   const client = await db.connect();
   try {
     await client.query("BEGIN");

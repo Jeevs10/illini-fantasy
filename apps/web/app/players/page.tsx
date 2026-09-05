@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  availabilityFor, playerPool, rosterLimit, rosterOn, settleWaivers, waiverWire,
+  availabilityFor, draftFor, playerPool, rosterLimit, rosterOn, settleWaivers, waiverWire,
   type PoolSort, type PositionRole,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -33,14 +33,16 @@ export default async function PlayersPage({
   const sortBy = SORTS.includes(sort as PoolSort) ? (sort as PoolSort) : "total";
   const offset = Math.max(0, Number(page ?? 0)) * PAGE;
   const availableOnly = free === "1";
-  const [players, wire, roster] = await Promise.all([
+  const [players, wire, roster, draft] = await Promise.all([
     playerPool(db, {
       leagueId, season, configId, limit: PAGE + 1, offset, availableOnly, search: q,
       roles: roleFilter ? [roleFilter] : undefined, sort: sortBy, asOf: viewDate(),
     }),
     waiverWire(db, { leagueId, now }),
     fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, viewDate()),
+    draftFor(db, leagueId),
   ]);
+  const draftComplete = draft?.status === "complete";
   const onWaivers = new Set(wire.map((w) => w.playerId));
   const hasMore = players.length > PAGE;
   const paged = players.slice(0, PAGE);
@@ -134,7 +136,7 @@ export default async function PlayersPage({
           players={rows}
           offset={offset}
           full={full}
-          canAct={fantasyTeamId !== null}
+          canAct={fantasyTeamId !== null && draftComplete}
           best={Math.max(...rows.map((r) => r.averageScore), 0)}
           sort={sortBy}
           sortHrefs={{

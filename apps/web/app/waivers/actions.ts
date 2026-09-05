@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  AlreadyRosteredError, BudgetExceededError, NotOnWaiversError, NotYourPlayerError,
-  OnWaiversError, RosterFullError,
+  AlreadyRosteredError, BudgetExceededError, DraftNotCompleteError, NotOnWaiversError,
+  NotYourPlayerError, OnWaiversError, RosterFullError,
   addFreeAgent, cancelClaim, dropPlayer, moveClaim, submitClaim,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -85,6 +85,9 @@ export async function bid(
     if (error instanceof NotYourPlayerError) {
       return { error: "You cannot drop a player you do not own.", at: now() };
     }
+    if (error instanceof DraftNotCompleteError) {
+      return { error: "The draft has not finished yet — nobody can be added until it has.", at: now() };
+    }
     throw error;
   }
 }
@@ -152,6 +155,9 @@ export async function add(
     }
     if (error instanceof NotYourPlayerError) {
       return { error: "You cannot drop a player you do not own.", at: now() };
+    }
+    if (error instanceof DraftNotCompleteError) {
+      return { error: "The draft has not finished yet — nobody can be added until it has.", at: now() };
     }
     throw error;
   }

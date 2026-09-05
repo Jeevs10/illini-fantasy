@@ -77,6 +77,11 @@ before(async () => {
     await db.query("INSERT INTO fantasy_team (id, league_id, name, waiver_priority) VALUES ($1,1,$2,$3)",
       [id, `Team ${id}`, id]);
   }
+  // Free agency and waivers both presuppose a finished draft.
+  await db.query(
+    `INSERT INTO draft (league_id, rounds, pick_seconds, status, opens_on, completed_at)
+     VALUES (1, 1, 0, 'complete', '2026-01-01', now())`,
+  );
 
   // Score descends with id, so "the best available" is the lowest free id.
   for (let id = 1; id <= PLAYERS; id += 1) {

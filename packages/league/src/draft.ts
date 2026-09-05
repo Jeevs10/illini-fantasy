@@ -41,6 +41,18 @@ export class DraftNotLiveError extends Error {
   }
 }
 
+/** No roster move exists before the draft that fills the rosters does. */
+export class DraftNotCompleteError extends Error {
+  constructor(readonly status: DraftStatus | "none") {
+    super(
+      status === "none"
+        ? "this league has not drafted yet"
+        : `the draft is ${status}, not complete`,
+    );
+    this.name = "DraftNotCompleteError";
+  }
+}
+
 export class NotOnTheClockError extends Error {
   constructor(readonly fantasyTeamId: number, readonly onTheClockTeamId: number,
               readonly onTheClockTeamName: string) {
@@ -125,7 +137,7 @@ function hydrate(row: DraftRow, teams: number, totalPicks: number): Draft {
   };
 }
 
-export async function draftFor(db: Db, leagueId: number): Promise<Draft | null> {
+export async function draftFor(db: Queryable, leagueId: number): Promise<Draft | null> {
   return loadDraft(db, leagueId);
 }
 
