@@ -1,6 +1,6 @@
-# Handoff — Phase 9, playoffs
+# Handoff — Phase 10, the stat surface
 
-Phases 1 through 9 are done. The README is the reference for how the system
+Phases 1 through 10 are done. The README is the reference for how the system
 works; this file is only what the next person needs that the README does not
 say.
 
@@ -8,13 +8,46 @@ say.
 
 | | |
 |---|---|
-| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 8 |
-| Tests | 159 passing (`npm test`, needs local Postgres — see README) |
+| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 10 |
+| Tests | 180 passing (`npm test`, needs local Postgres — see README) |
 | Typecheck | clean (`npm run typecheck`, and `npx tsc --noEmit` inside `apps/web`) |
 | Build | clean (`npm run build`) |
 | Production data | Neon `floral-shape-81709658`, 5 ingested game days, Feb 10–14 2026 |
-| Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games |
+| Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games — **not yet migrated to 012 or re-ingested for the box/bio widening; see below** |
 | Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) · 4 `Illini Fantasy — 2025-26` (branch only, drafted and played out) |
+
+**Phase 10 adds migration `012_leaders.sql`, and widens ingest.** `player`
+gains bio columns (`height`, `jersey`, `weight`, `hometown`, `date_of_birth`)
+and a `class_year` backfill — that last column existed since Phase 2 and had
+never actually been populated by anything. A new `player_rank` table holds a
+season-to-date total and rank, overall and by role, as of every played day;
+`npm run ingest -- ranks <season>` rebuilds it wholesale from
+`player_game_score` with window functions, no Torvik call, safe to re-run.
+`toBoxScore`/`toBio` in `packages/sources/src/adapt.ts` read fields Torvik's
+pslice already returned and `toPlayerLine` dropped — steals, blocks, the
+rebound split, makes — into a `box` sub-object stored *beside* the model
+input in `player_game_stat.stats`, never inside `PlayerLine`, so the scorer's
+input shape (and therefore parity) cannot drift; `npm run parity` and `npm
+run backtest` both reproduce their documented baselines exactly after the
+change. One correction to the plan this phase started from: Torvik's pslice
+column 34 looked like a recruit rank (`COL.recRank`) but checked against live
+data holds a fractional rate stat instead — `getadvstats`' CSV inserts
+hometown/weight at columns 33–34 that pslice does not carry, and "recRank"
+was a leftover label from that shape. No `recruit_rank` column was added;
+a real one exists on CBBD's `recruits()` endpoint for a later pass. The
+shooting and advanced-metric groups on the player card (`effectiveFieldGoalPct`,
+`bpm`, `usage`, and the rest) needed no ingest change at all — every
+`PlayerLine` field has been stored in `stats jsonb` since Phase 2, just never
+read back.
+
+**Migration 012 has been run and verified locally only** — against
+throwaway databases and a from-scratch local season (two weeks, real
+Torvik/CBBD data from cache, a drafted 10-team league) — never against the
+`full-season-2026` Neon branch or production. Running it there, then
+`npm run ingest -- range <season> <start> <end>` (from cache) and
+`npm run ingest -- ranks <season>`, is the same three-command rebuild
+`full-season-2026` has always used; nobody with Neon credentials has done it
+yet.
 
 **Phase 9 adds migration `011_playoffs.sql`.** A playoff matchup is a
 matchup — `matchup` gains `round`/`bracket`/`seq`, `home_seed`/`away_seed`,
@@ -39,11 +72,11 @@ new column and a league that has never heard of it reads `null`. The screen
 still needs 007 and 008 on the branch it runs against, because
 `settingsContext` counts sealed claims and live offers.
 
-**Migrations 007 through 011 are not on the production branch.** Production is
+**Migrations 007 through 012 are not on the production branch.** Production is
 still at 006, so `/waivers` and `/trades` both fail against it — and now so does
 signing in, since `app_user.username` does not exist there yet. Phase 5 was
 exercised on the Neon branch `phase-5-waivers` (`br-restless-glade-axer0kym`), a
-copy of production with 007 applied; that branch has none of 008 through 011.
+copy of production with 007 applied; that branch has none of 008 through 012.
 Migrating production is the owner's call and has deliberately not been made.
 
 009 is not additive-only. It drops `auth_account`, `auth_verification_token` and
@@ -260,6 +293,62 @@ are readable and settable from the CLI and are validated by
 `settingsProblems`, but have no widget on that screen yet — a checkbox row
 and a select, not a new pattern.
 
+## How Phase 10 was verified
+
+- **`leaders.test.ts` is new**: `packages/league/src/leaders.test.ts`, following
+  `playoffs.test.ts`'s drop/recreate-database convention. Covers
+  `topPerformances`' ordering and its role filter (expanded to Torvik's own
+  role strings, same as `playerPool`'s), `trendingPlayers`' counts off the
+  transaction log, `playerRankTrend` against a hand-built three-day sequence,
+  `playerWeekProjection` against a checkable average (and zero for a player
+  with no history), and `statPercentiles`' ranking direction. 180 tests,
+  up from 172.
+- **The ingest widening was checked against real Torvik data, not just
+  types**: a from-scratch local database, `setup` + `range` for two real
+  weeks of 2025-11 (from `.cache/`), confirmed `player.height`/`jersey`/
+  `class_year` populated for all 421 players ingested on the first night and
+  `player_game_stat.stats->'box'` carrying steals/blocks/rebounds/makes for
+  every row. `npm run ingest -- ranks` was run twice in a row and left
+  `player_rank` at the same row count both times.
+- **`npm run parity` and `npm run backtest` were re-run after the widening**
+  and reproduce the README's own documented numbers exactly (parity p50
+  0.173, 98.3% within 2.0; backtest's 1.33x archetype spread and r = 0.540) —
+  proof the `box`/bio additions never touched `PlayerLine`.
+- **The screens were driven in a browser** against a fresh local season built
+  for this (two weeks of 2025-11, a real 10-team snake draft, lineups set and
+  settled): `/leaders` with the Day/Week/Month/Season segments and the
+  `All/G/F/B` role chips, both driven by URL params with no client
+  component, exactly like `/players`'; ownership correctly attributed to a
+  drafted team next to unowned free agents in the same list. The player card:
+  the bio line (school, conference, role, class, height, jersey number), the
+  rank and role-rank tiles, a "next 7 days" projection tile that reads
+  "0 games × N avg" for a player with nothing scheduled rather than hiding,
+  the rank-trend chart (suppressed under 3 points, the same gate the existing
+  sparkline uses under 4), and the three BOX/SHOOTING/ADVANCED tables with
+  percentile bars against role peers. Checked deliberately against a
+  low-minute free agent with only 2 games, to confirm every new section
+  degrades sensibly rather than crashing on sparse data.
+- **Narrow width was checked with the same-origin iframe trick at 390px**
+  (`resize_window` is still non-functional — see below): no horizontal
+  overflow on either `/leaders` or the player card, and the new "Leaders"
+  destination correctly highlights in the mobile "More" sheet. Light mode was
+  not opened; every new value in `charts.tsx` and the stat tables reads off
+  an existing CSS custom property, never a literal color, the same
+  covered-by-construction argument Phase 7 made.
+
+Not done: migration 012 and the ingest widening have not been run against the
+`full-season-2026` Neon branch or production — see the state table above.
+`trendingPlayers` counts roster moves rather than splitting them into adds
+and drops, because `transaction.kind` alone cannot always say which direction
+a trade moved a player (`claimPlayer` and `releasePlayer` both write `kind =
+'trade'`); inventing a split the log cannot support seemed worse than
+reporting activity honestly. No CBBD-sourced recruit rank yet, either — see
+the recRank note above. `/leaders`' role filter and segmented control have no
+loading-state skeleton finer than the route's own `loading.tsx`, and the
+"game-day leaders rail" from the original sketch became one ranked list
+rather than a separate rail, since the ranked list already reads as a rail at
+the Day span.
+
 ## How Phase 7 was verified
 
 Production is three migrations behind, so the same route Phase 6 took:
@@ -348,34 +437,47 @@ Not checked: narrow widths and light mode, same as Phase 6.
 
 ## Where it stopped
 
-Done through Phase 9: playoffs. A league now has an ending — a bracket seeded
-from the regular-season standings, byes for the top seeds, an optional
-third-place game and consolation pool, and settle-on-read propagation the same
-way waivers and trades already work. It closes the "the season has no ending"
-gap this plan was written against, alongside Phase 8's position-vocabulary fix
-below. Phases 10 through 12, written up below, are the rest of the plan (a
-Sleeper-informed stat surface, injuries and news, and a retrofit of the five
-older screens) and were deliberately not started this round.
+Done through Phase 10: the stat surface. A league now has an ending (Phase 9)
+and a player card that explains more than the score alone — a rank, a
+projection, season averages against role peers, and a `/leaders` screen for
+who has been best lately (Phase 10). Phases 11 and 12, written up below, are
+the rest of the plan (injuries and news, and a retrofit of the five older
+screens) and were deliberately not started this round.
 
 Not done, in the order I would take them:
 
-1. **The stat surface, and the rest of the design backlog** — see Phases 10
-   through 12 below, and `.impeccable/critique/` for the persisted snapshot,
-   which `/polish` reads automatically. The critique predates `/commissioner`,
-   `/draft`, `/waivers`, `/trades`, `/commissioner/settings` and `/playoffs`,
-   so its heuristic scores cover none of them.
-2. **Settings that vary by week.** The games cap re-scores history because there
+1. **Injuries and news, and the retrofit of `/home`, `/team`, `/league`,
+   `/standings`, `/players`** — see Phases 11 and 12 below, and
+   `.impeccable/critique/` for the persisted snapshot, which `/polish` reads
+   automatically. The critique predates `/commissioner`, `/draft`,
+   `/waivers`, `/trades`, `/commissioner/settings`, `/playoffs` and
+   `/leaders`, so its heuristic scores cover none of them.
+2. **Migration 012 and the ingest widening on `full-season-2026` and
+   production.** Verified locally only — see "How Phase 10 was verified"
+   above. The rebuild is the same three commands the branch has always used;
+   somebody with Neon credentials has to run them.
+3. **Settings that vary by week.** The games cap re-scores history because there
    is one settings blob and no way to say "nine until week 6, eight after". That
    is the honest fix and it is a real phase: `matchup` would have to carry the
    settings it settled under, the way `player_game_score` carries its config.
    The re-score is the right behaviour *given one blob*, and it is worth knowing
    it is a consequence of that rather than a preference. The same gap now
    applies to the playoff settings a bracket is drawn under.
-3. **A settings screen for a manager.** Everything on `/commissioner/settings`
+4. **A settings screen for a manager.** Everything on `/commissioner/settings`
    is the commissioner's. A manager cannot change their own password or username
    from any screen, and that is the same shape of gap the league settings were
    until now — `changePassword` and `setUsername` exist and are tested with
    nothing calling them.
+
+Smaller gaps from Phase 10. No CBBD-sourced recruit rank — see the recRank
+correction above. `trendingPlayers` reports roster-move activity rather than
+a true add/drop split, for the reason given in "How Phase 10 was verified".
+`linkCbbdRosters` still discards `weight`/`hometown`/`dateOfBirth`, which the
+012 migration already has columns for — threading them through is the
+"separately" note the original plan left. And nothing runs `npm run ingest
+-- ranks` on its own; like every other settle-on-read job in this app it
+needs a caller, but unlike those it currently has none — the CLI verb is the
+only way to refresh `player_rank` today.
 
 Smaller gaps from Phase 9. `thirdPlace`, `consolation`, `reseed` and
 `playoffTiebreak` are readable and settable from the CLI and validated the
@@ -547,10 +649,10 @@ populates, or the draft board is built on last year's teams.
 
 ## Planned — Phases 10 through 12: a Sleeper-informed stat surface
 
-Not started. Written up here so the plan does not live only in a chat
-transcript. Renumbered from Phase 7 up, since Phase 7 was already taken by the
-settings screen and the trade deadline, and Phases 8 and 9 — below the state
-table above — have since taken roles and playoffs.
+Phase 10 is done; 11 and 12 are not started. Written up here so the plan does
+not live only in a chat transcript. Renumbered from Phase 7 up, since Phase 7
+was already taken by the settings screen and the trade deadline, and Phases 8
+and 9 — below the state table above — have since taken roles and playoffs.
 
 One gap remains of the three this plan was written against. The other two are
 done. **Position shown as a scoring internal** is Phase 8: players used to be
@@ -693,7 +795,22 @@ alone; the cut line and clinched/alive/eliminated status live only on
 was actually built and how it was checked — this section is left as the
 original plan only where Phase 10 below still depends on reading it that way.
 
-### Phase 10 — The stat surface
+### Phase 10 — The stat surface — done
+
+Built close to the sketch, with three differences worth flagging. No
+`recruit_rank` — checked against live pslice data, `COL.recRank` holds a
+fractional rate stat rather than an integer rank; see "How Phase 10 was
+verified" above. `trendingPlayers` counts roster-move activity rather than a
+true adds/drops split, since `transaction.kind` cannot always say which
+direction a trade moved a player. And the "game-day leaders rail" became one
+ranked list rather than a separate rail — at the Day span it already reads as
+one. Everything else below shipped as written: the ingest widening, migration
+`012_leaders.sql`, `packages/league/src/leaders.ts`, `/leaders`, and the
+player-card additions, all with the shooting/advanced stat groups needing no
+new ingest field at all — `stats jsonb` has carried them since Phase 2. See
+`packages/league/src/leaders.ts`, the `012_leaders.sql` migration, and "How
+Phase 10 was verified" above for what was actually built and how it was
+checked — the rest of this section is left as the original plan.
 
 Ingest: `adapt.ts` gains `toBoxScore(row)` (steals, blocks, rebound split,
 made/attempted FG/3P/FT) and `toBio(row)` (height, jersey, class, recruit
@@ -771,25 +888,28 @@ Everything in the design table above not already delivered by 8–10, against
 
 010–013 sit on top of 009. Production is still at 006 and 007–009 are
 deliberately unapplied (see above), so these reach the local copy and the Neon
-branches and nowhere else — the owner's call, unchanged by this plan.
+branches and nowhere else — the owner's call, unchanged by this plan. 012 is
+written and verified locally (see the state table and "How Phase 10 was
+verified" above) but has not been run against `full-season-2026` or
+production — nobody with Neon credentials has done it yet.
 
-### Verification, when this starts
+### Verification, when this ran
 
-Same shape as every phase above: `npm test` with new suites (`leaders.test.ts`
-and whatever Phase 11 needs), `npm run typecheck` plus `npx tsc --noEmit`
-inside `apps/web`, `npm run parity` and `npm run backtest` after the ingest
-widening (to prove the `box` sub-object left the scorer's inputs untouched),
-and a browser pass at 1440×900 / 768×1024 / 390×844 in both colour schemes via
-the same-origin iframe trick (`resize_window` is still non-functional here).
-The stat surface needs a played-out season to be worth looking at —
-`full-season-2026` (147 game days, a drafted and settled league) is the right
-target rather than a handful of rounds against production's five ingested
-days — the same target Phase 9's own bracket was checked against, drawn fresh
-against a from-scratch database instead since `full-season-2026` was not
-rebuilt for it.
+Same shape as every phase above: `npm test` with the new `leaders.test.ts`
+(180 tests, up from 172), `npm run typecheck` plus `npx tsc --noEmit` inside
+`apps/web`, `npm run parity` and `npm run backtest` after the ingest widening
+(both reproduce the README's documented numbers exactly, proving the `box`
+sub-object left the scorer's inputs untouched), and a browser pass at 390×844
+via the same-origin iframe trick (`resize_window` is still non-functional
+here) — 1440×900 and 768×1024 were not opened this round. The stat surface
+wants a played-out season to be worth looking at; rather than wait on
+`full-season-2026` being rebuilt for it, this was checked against a
+from-scratch local database (two real weeks of 2025-11, drafted and settled),
+the same substitution Phase 9's own bracket used.
 
 ### Order
 
-10 → 11 → 12, each independently shippable, committed at each phase boundary.
-Phase 8, which changed an existing rule rather than adding one, and Phase 9,
-which gave the season an ending, each went alone and are both done.
+Phases 8 and 9, which each changed or added one rule, went alone. Phase 10 —
+a new ingest field, a new migration, a new package module, and two screens —
+also went alone, and is done. Phases 11 and 12 remain: 11 → 12, each
+independently shippable.

@@ -18,6 +18,62 @@ export function seasonRatesFrom(row: PsliceRow): SeasonRates {
   };
 }
 
+/**
+ * Counting stats pslice carries but the model input drops. Kept beside
+ * `PlayerLine` rather than inside it, so the scorer's input shape — and
+ * therefore parity with the reference model — cannot drift.
+ */
+export interface BoxScore {
+  steals: number;
+  blocks: number;
+  offensiveRebounds: number;
+  defensiveRebounds: number;
+  fieldGoalsMade: number;
+  threesMade: number;
+  freeThrowsMade: number;
+}
+
+export function toBoxScore(row: PsliceRow): BoxScore {
+  return {
+    steals: num(row[COL.steals]),
+    blocks: num(row[COL.blocks]),
+    offensiveRebounds: num(row[COL.offensiveRebounds]),
+    defensiveRebounds: num(row[COL.defensiveRebounds]),
+    fieldGoalsMade: num(row[COL.twoMade]) + num(row[COL.threeMade]),
+    threesMade: num(row[COL.threeMade]),
+    freeThrowsMade: num(row[COL.ftMade]),
+  };
+}
+
+/**
+ * Bio fields pslice carries alongside the stat line.
+ *
+ * `COL.recRank` is not included: checked against live pslice data, that
+ * column holds a fractional rate stat (0.4-57, with values like 18.6), not an
+ * integer recruit rank — `COL`'s indices past 32 were verified for the
+ * pslice row shape `toPlayerLine` already reads (points/rebounds/assists/bpm
+ * all check out against parity), but getadvstats' CSV inserts two extra
+ * columns (hometown, weight) at 33-34 that pslice does not carry, and
+ * "recRank" is a leftover label from that CSV shape rather than this one. A
+ * real recruit rank exists on CBBD's `recruits()` endpoint instead.
+ */
+export interface PlayerBio {
+  height: string | null;
+  jersey: string | null;
+  classYear: string | null;
+}
+
+export function toBio(row: PsliceRow): PlayerBio {
+  const height = row[COL.height];
+  const jersey = row[COL.jersey];
+  const year = row[COL.year];
+  return {
+    height: height != null && height !== "" ? String(height) : null,
+    jersey: jersey != null && jersey !== "" ? String(jersey) : null,
+    classYear: year != null && year !== "" ? String(year) : null,
+  };
+}
+
 /** Turn one pslice row into the model's input shape. */
 export function toPlayerLine(
   row: PsliceRow,

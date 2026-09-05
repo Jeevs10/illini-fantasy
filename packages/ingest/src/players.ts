@@ -10,6 +10,9 @@ export interface TorvikIdentity {
   name: string;
   team: string;
   role: string | null;
+  height: string | null;
+  jersey: string | null;
+  classYear: string | null;
 }
 
 /**
@@ -30,37 +33,77 @@ export async function resolveTorvikPlayers(
   );
 
   const missing = identities.filter((i) => !known.has(i.pid));
-  if (missing.length === 0) return known;
+  if (missing.length > 0) {
+    const teams = await ensureTeams(db, missing.map((m) => m.team));
 
-  const teams = await ensureTeams(db, missing.map((m) => m.team));
+    // Insert the new players, then read their ids back by their torvik pid,
+    // which we stash on the player row's normalised name join below.
+    const inserted = await db.query<{ id: string; normalised: string; team_id: string | null }>(
+      `INSERT INTO player (name, normalised, team_id, position, class_year, height, jersey)
+       SELECT * FROM UNNEST(
+         $1::text[], $2::text[], $3::bigint[], $4::text[], $5::text[], $6::text[], $7::text[]
+       )
+       RETURNING id, normalised, team_id`,
+      [
+        missing.map((m) => m.name),
+        missing.map((m) => canonicaliseName(m.name)),
+        missing.map((m) => teams.get(normaliseTeam(m.team)) ?? null),
+        missing.map((m) => m.role),
+        missing.map((m) => m.classYear),
+        missing.map((m) => m.height),
+        missing.map((m) => m.jersey),
+      ],
+    );
 
-  // Insert the new players, then read their ids back by their torvik pid,
-  // which we stash on the player row's normalised name join below.
-  const inserted = await db.query<{ id: string; normalised: string; team_id: string | null }>(
-    `INSERT INTO player (name, normalised, team_id, position)
-     SELECT * FROM UNNEST($1::text[], $2::text[], $3::bigint[], $4::text[])
-     RETURNING id, normalised, team_id`,
+    const links: unknown[][] = inserted.rows.map((row, i) => [
+      Number(row.id), "torvik", missing[i]!.pid, "exact", "source of record",
+    ]);
+    await insertMany(db, {
+      table: "player_source_id",
+      columns: ["player_id", "source", "source_id", "confidence", "reason"],
+      dedupeOn: [1, 2],
+      rows: links,
+      conflict: "(source, source_id) DO NOTHING",
+    });
+
+    for (const [i, row] of inserted.rows.entries()) known.set(missing[i]!.pid, Number(row.id));
+  }
+
+  await backfillBio(db, identities);
+  return known;
+}
+
+/**
+ * Fills bio columns for players resolved before this field existed.
+ *
+ * Fill-only — COALESCE only writes where the column is still null — the same
+ * rule the rest of this row lives under: `position` is never rewritten after
+ * insert either. Torvik's height/jersey/class are stable enough (no player
+ * has ever changed role, per the crosswalk audit) that "first value wins" is
+ * the right rule here too.
+ */
+async function backfillBio(db: Db, identities: TorvikIdentity[]): Promise<void> {
+  const withBio = identities.filter(
+    (i) => i.height !== null || i.jersey !== null || i.classYear !== null,
+  );
+  if (withBio.length === 0) return;
+  await db.query(
+    `UPDATE player p SET
+       height = COALESCE(p.height, v.height),
+       jersey = COALESCE(p.jersey, v.jersey),
+       class_year = COALESCE(p.class_year, v.class_year)
+     FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[])
+       AS v(pid, height, jersey, class_year)
+     JOIN player_source_id psi ON psi.source = 'torvik' AND psi.source_id = v.pid
+     WHERE p.id = psi.player_id
+       AND (p.height IS NULL OR p.jersey IS NULL OR p.class_year IS NULL)`,
     [
-      missing.map((m) => m.name),
-      missing.map((m) => canonicaliseName(m.name)),
-      missing.map((m) => teams.get(normaliseTeam(m.team)) ?? null),
-      missing.map((m) => m.role),
+      withBio.map((i) => i.pid),
+      withBio.map((i) => i.height),
+      withBio.map((i) => i.jersey),
+      withBio.map((i) => i.classYear),
     ],
   );
-
-  const links: unknown[][] = inserted.rows.map((row, i) => [
-    Number(row.id), "torvik", missing[i]!.pid, "exact", "source of record",
-  ]);
-  await insertMany(db, {
-    table: "player_source_id",
-    columns: ["player_id", "source", "source_id", "confidence", "reason"],
-dedupeOn: [1, 2],
-    rows: links,
-    conflict: "(source, source_id) DO NOTHING",
-  });
-
-  for (const [i, row] of inserted.rows.entries()) known.set(missing[i]!.pid, Number(row.id));
-  return known;
 }
 
 /** Creates any team we do not have yet, then returns the full name -> id map. */

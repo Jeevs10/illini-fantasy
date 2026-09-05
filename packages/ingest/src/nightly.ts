@@ -2,8 +2,8 @@ import type { Db } from "@illini/db";
 import { upsertScoringConfig, writeScores, type StoredScore } from "@illini/db";
 import { GAME_CONFIG, scoreLine, type PlayerLine, type ScoringConfig } from "@illini/scoring";
 import {
-  COL, num, seasonRatesFrom, toPlayerLine,
-  type CbbdClient, type CbbdGame, type TorvikClient, type SeasonRates,
+  COL, num, seasonRatesFrom, toBio, toBoxScore, toPlayerLine,
+  type BoxScore, type CbbdClient, type CbbdGame, type TorvikClient, type SeasonRates,
 } from "@illini/sources";
 import { normaliseTeam } from "@illini/crosswalk";
 import { insertMany } from "@illini/db";
@@ -248,12 +248,15 @@ export async function ingestNight(
     // fine locally and ruinous against a remote database.
     const identities: TorvikIdentity[] = [];
     const lines: PlayerLine[] = [];
+    const boxes: BoxScore[] = [];
     for (const row of rows) {
       const pid = String(row[COL.pid] ?? "");
       if (!pid) continue;
       const line = toPlayerLine(row, roles, seasonRates);
+      const bio = toBio(row);
       lines.push(line);
-      identities.push({ pid, name: line.name, team: line.team, role: line.role });
+      boxes.push(toBoxScore(row));
+      identities.push({ pid, name: line.name, team: line.team, role: line.role, ...bio });
     }
 
     const playerIds = await resolveTorvikPlayers(db, identities);
@@ -285,7 +288,7 @@ export async function ingestNight(
 
       statRows.push([
         playerId, day, season, opponent?.gameId ?? null, opponent?.opponentId ?? null,
-        line.role, line.minutes, JSON.stringify(line), "torvik",
+        line.role, line.minutes, JSON.stringify({ ...line, box: boxes[i] }), "torvik",
       ]);
       scores.push({
         ...scoreLine({ ...line, playerId: String(playerId) }, config, multiplier),

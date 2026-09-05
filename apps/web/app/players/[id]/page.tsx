@@ -1,18 +1,48 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { playerCard, type GameLogEntry, type PlayerCard } from "@illini/league";
-import type { BlockName } from "@illini/scoring";
+import {
+  playerCard, playerRankTrend, playerWeekProjection, seasonAverages, statPercentiles,
+  STAT_GROUPS, type GameLogEntry, type PlayerCard, type StatAverages, type StatKey,
+  type StatPercentile,
+} from "@illini/league";
+import { GAME_CONFIG, type BlockName } from "@illini/scoring";
 import { db } from "../../../lib/db.ts";
-import { requireViewer } from "../../../lib/session.ts";
+import { requireViewer, viewDate } from "../../../lib/session.ts";
 import { Avatar } from "../../ui/identity.tsx";
 import { Bar, Empty, Score, StatTile } from "../../ui/bits.tsx";
+import { RankTrendChart } from "../../ui/charts.tsx";
 
 export const dynamic = "force-dynamic";
 
 const BLOCKS: BlockName[] = [
   "scoring", "shooting", "playmaking", "defense", "rebounding", "efficiency",
 ];
+
+const STAT_LABEL: Record<StatKey, string> = {
+  points: "Points", rebounds: "Rebounds", assists: "Assists", steals: "Steals", blocks: "Blocks",
+  offensiveRebounds: "Off. rebounds", defensiveRebounds: "Def. rebounds",
+  fieldGoalsMade: "FG made", threesMade: "3PT made", freeThrowsMade: "FT made",
+  effectiveFieldGoalPct: "eFG%", trueShootingPct: "TS%", threePointPct: "3PT%", freeThrowPct: "FT%",
+  usage: "Usage", bpm: "BPM", obpm: "OBPM", dbpm: "DBPM", porpag: "PORPAG",
+};
+
+function formatStat(stat: StatKey, value: number): string {
+  switch (stat) {
+    case "effectiveFieldGoalPct": case "trueShootingPct": case "usage":
+      return `${value.toFixed(1)}%`;
+    case "threePointPct": case "freeThrowPct":
+      return `${(value * 100).toFixed(1)}%`;
+    default:
+      return value.toFixed(1);
+  }
+}
+
+function shiftDate(iso: string, byDays: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + byDays);
+  return d.toISOString().slice(0, 10);
+}
 
 export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> },
@@ -29,11 +59,25 @@ export async function generateMetadata(
 
 export default async function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const playerId = Number(id);
   const viewer = await requireViewer();
   const { leagueId, season, configId } = viewer.membership;
 
-  const card = await playerCard(db, { playerId: Number(id), configId, season, leagueId });
+  const card = await playerCard(db, { playerId, configId, season, leagueId });
   if (!card) notFound();
+
+  const today = viewDate();
+  const seasonStart = `${season - 1}-11-01`;
+  const [rankTrend, averages, projection] = await Promise.all([
+    playerRankTrend(db, { playerId, configId, from: seasonStart, to: today }),
+    seasonAverages(db, { playerId, season }),
+    playerWeekProjection(db, { playerId, configId, from: today, to: shiftDate(today, 6) }),
+  ]);
+  const percentiles = card.role
+    ? await statPercentiles(db, { playerId, season, role: card.role })
+    : [];
+  const percentileOf = new Map(percentiles.map((p) => [p.stat, p]));
+  const latestRank = rankTrend[rankTrend.length - 1] ?? null;
 
   const scores = card.log.map((g) => g.score);
   const best = scores.length === 0 ? 0 : Math.max(...scores);
@@ -52,6 +96,8 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
             {card.conference ? <span>{card.conference}</span> : null}
             {card.role ? <span>{card.role}</span> : null}
             {card.classYear ? <span>{card.classYear}</span> : null}
+            {card.height ? <span>{card.height}</span> : null}
+            {card.jersey ? <span>#{card.jersey}</span> : null}
           </p>
         </div>
         <div className="hero-own">
@@ -70,6 +116,34 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           <StatTile label="Best" value={card.games === 0 ? "—" : best.toFixed(1)} />
           <StatTile label="Floor" value={card.games === 0 ? "—" : worst.toFixed(1)} />
         </div>
+        {latestRank || projection.gamesScheduled > 0 ? (
+          <div className="tiles" style={{ borderTop: "1px solid var(--line-soft)" }}>
+            {latestRank ? (
+              <>
+                <StatTile label="Rank" value={`#${latestRank.rankOverall}`} note="overall" />
+                {card.role ? (
+                  <StatTile label="Role rank" value={`#${latestRank.rankRole}`} note={card.role} />
+                ) : null}
+              </>
+            ) : null}
+            <StatTile
+              label="Next 7 days"
+              value={projection.projectedTotal.toFixed(1)}
+              note={`${projection.gamesScheduled} games × ${projection.average.toFixed(1)} avg`}
+            />
+          </div>
+        ) : null}
+        {rankTrend.length >= 3 ? (
+          <div className="panel-body" style={{ borderTop: "1px solid var(--line-soft)" }}>
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: "var(--s-2)" }}>
+              <span className="eyebrow">Overall rank, season to date</span>
+              <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
+                {rankTrend[0]!.playedOn} → {rankTrend[rankTrend.length - 1]!.playedOn}
+              </span>
+            </div>
+            <RankTrendChart points={rankTrend.map((r) => ({ playedOn: r.playedOn, rank: r.rankOverall }))} />
+          </div>
+        ) : null}
         {trend.length >= 4 ? (
           <div className="panel-body" style={{ borderTop: "1px solid var(--line-soft)" }}>
             <div className="row" style={{ justifyContent: "space-between", marginBottom: "var(--s-2)" }}>
@@ -92,6 +166,8 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           </div>
         ) : null}
       </div>
+
+      {averages ? <SeasonAverages averages={averages} percentileOf={percentileOf} /> : null}
 
       <div className="panel">
         <div className="panel-head">
@@ -125,14 +201,64 @@ function EmptyLog({ card }: { card: PlayerCard }) {
   );
 }
 
+/** BOX / SHOOTING / ADVANCED, each a table of season averages with a
+    percentile bar against everyone who played the same role this season. */
+function SeasonAverages({
+  averages, percentileOf,
+}: { averages: StatAverages; percentileOf: Map<StatKey, StatPercentile> }) {
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>Season averages</h2>
+          <p>Per-game, against everyone who played the same role this season.</p>
+        </div>
+      </div>
+      <div className="panel-body" style={{ display: "grid", gap: "var(--s-5)" }}>
+        {STAT_GROUPS.map((group) => (
+          <div key={group.label}>
+            <span className="eyebrow">{group.label}</span>
+            <div className="scroll">
+              <table>
+                <tbody>
+                  {group.stats.map((stat) => {
+                    const pct = percentileOf.get(stat);
+                    return (
+                      <tr key={stat}>
+                        <td style={{ whiteSpace: "nowrap" }}>{STAT_LABEL[stat]}</td>
+                        <td className="r" style={{ fontFamily: "var(--f-mono)" }}>
+                          {formatStat(stat, averages[stat])}
+                        </td>
+                        <td style={{ width: "40%" }}>
+                          {pct ? (
+                            <Bar
+                              percent={pct.percentile * 100}
+                              label={`${STAT_LABEL[stat]}, ${Math.round(pct.percentile * 100)}th percentile at this role`}
+                            />
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * One night, decomposed.
  *
  * The blocks are 0..1 before weighting, so the bars show which parts of the
  * model the player filled — not the points they contributed, which depend on
- * the archetype's weights.
+ * the archetype's weights, shown alongside each bar.
  */
 function Game({ game, best }: { game: GameLogEntry; best: number }) {
+  const weights = GAME_CONFIG.weights[game.archetype];
   return (
     <article className="game">
       <div>
@@ -146,7 +272,11 @@ function Game({ game, best }: { game: GameLogEntry; best: number }) {
         </div>
         <p className="game-meta">
           vs {game.opponent ?? "unknown"}
-          {game.opponentStrength !== null ? ` · strength ${game.opponentStrength.toFixed(2)}` : ""}
+          {game.opponentStrength !== null
+            ? ` · strength ${game.opponentStrength.toFixed(2)} (${
+                game.opponentStrength >= 0.5 ? "tougher" : "easier"
+              } than average)`
+            : ""}
           {" · "}{game.minutes.toFixed(0)} min · {game.points} pts, {game.rebounds} reb,{" "}
           {game.assists} ast
         </p>
@@ -162,7 +292,12 @@ function Game({ game, best }: { game: GameLogEntry; best: number }) {
           const value = Math.max(0, Math.min(1, game.blocks[name] ?? 0));
           return (
             <div className="block" key={name}>
-              <span className="label">{name}</span>
+              <span className="label">
+                {name}
+                <span className="faint" style={{ marginLeft: "var(--s-1)" }}>
+                  {weights[name]}
+                </span>
+              </span>
               <Bar percent={value * 100} label={`${name}, ${value.toFixed(2)} of 1`} />
               <span className="val">{value.toFixed(2)}</span>
             </div>

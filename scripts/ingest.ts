@@ -6,14 +6,18 @@
  *   npm run ingest -- night 2026 20260214   one game day
  *   npm run ingest -- range 2026 20260210 20260214
  *   npm run ingest -- link 2026             crosswalk CBBD onto known players
+ *   npm run ingest -- ranks 2026             rebuild the season rank rollup
  *
  * `link` runs after at least one night, because Torvik is the identity spine:
  * players exist once they have a stat line, and other sources attach to them.
+ * `ranks` reads only player_game_score — no Torvik call — so it is cheap to
+ * run again any time the scores it reads have changed.
  */
 import { connect, migrate } from "@illini/db";
 import { CbbdClient, TorvikClient } from "@illini/sources";
 import {
   ingestNight, opponentsOn, syncSchedule, syncTeams, syncRatings, linkCbbdRosters,
+  rebuildPlayerRanks,
 } from "@illini/ingest";
 import { loadEnv } from "./env.ts";
 
@@ -22,7 +26,7 @@ loadEnv();
 const [command, seasonArg, a, b] = process.argv.slice(2);
 const season = Number(seasonArg);
 if (!command || !Number.isFinite(season)) {
-  console.error("usage: ingest <setup|schedule|night|range|link> <season> [date] [endDate]");
+  console.error("usage: ingest <setup|schedule|night|range|link|ranks> <season> [date] [endDate]");
   process.exit(1);
 }
 
@@ -59,6 +63,9 @@ try {
     }
     const links = await linkCbbdRosters(db, cbbd, season);
     console.log(`cbbd linked ${links.linked}, queued for review ${links.queued}`);
+  } else if (command === "ranks") {
+    const { configId, rowsWritten } = await rebuildPlayerRanks(db);
+    console.log(`ranks rebuilt for config ${configId}: ${rowsWritten} rows`);
   } else if (command === "night" || command === "range") {
     const dates = command === "night" ? [a!] : dateRange(a!, b!);
 
