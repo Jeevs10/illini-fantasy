@@ -11,6 +11,7 @@ import { Glyph } from "../ui/glyphs.tsx";
 import { AvailabilityTag, Bar, Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
 import { Dot, PlayerRow } from "../ui/playerrow.tsx";
 import { ScoreBug, type BugSide } from "../ui/scorebug.tsx";
+import { MatchupCarousel } from "../ui/matchup-carousel.tsx";
 import { ActivityFeed } from "../ui/activity.tsx";
 
 export const dynamic = "force-dynamic";
@@ -99,44 +100,31 @@ export default async function HomePage() {
           </div>
 
           <SectionHead title="Around the league" action="All matchups" href="/league" />
-          <div className="panel">
-            {others.length === 0 ? (
+          {others.length === 0 ? (
+            <div className="panel">
               <Empty title="Nothing else on" glyph="matchup">
                 Every other matchup this week is yours.
               </Empty>
-            ) : (
-              others.map((m) => {
-                const sum = m.home.total + m.away.total;
-                const homeLeads = sum > 0 && m.home.total > m.away.total;
-                const awayLeads = sum > 0 && m.away.total > m.home.total;
-                const remaining = m.home.live + m.home.upcoming + m.away.live + m.away.upcoming;
-                return (
-                  <Link className="minibug" key={m.matchupId} href="/league">
-                    <span className="side">
-                      <Avatar name={m.home.name} seed={m.home.fantasyTeamId} size="xs" />
-                      <span className="nm">{m.home.name}</span>
-                    </span>
-                    <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                      <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
-                        <span className="score score-xs sc" data-lead={homeLeads}>{m.home.total.toFixed(1)}</span>
-                        <span className="dash">–</span>
-                        <span className="score score-xs sc" data-lead={awayLeads}>{m.away.total.toFixed(1)}</span>
-                      </span>
-                      {remaining > 0 ? (
-                        <span className="sub" style={{ fontSize: 10, whiteSpace: "nowrap" }}>
-                          Proj {m.home.projected.toFixed(1)} – {m.away.projected.toFixed(1)}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="side them">
-                      <Avatar name={m.away.name} seed={m.away.fantasyTeamId} size="xs" />
-                      <span className="nm">{m.away.name}</span>
-                    </span>
-                  </Link>
-                );
-              })
-            )}
-          </div>
+            </div>
+          ) : (
+            <MatchupCarousel
+              items={others.map((m) => ({
+                id: m.matchupId,
+                node: (
+                  <ScoreBug
+                    week={m.week}
+                    startsOn={m.startsOn}
+                    endsOn={m.endsOn}
+                    settled={m.settled}
+                    gamesCap={settings.gamesCap}
+                    href="/league"
+                    home={bug(m.home.fantasyTeamId, m.home.name, m.home, fantasyTeamId)}
+                    away={bug(m.away.fantasyTeamId, m.away.name, m.away, fantasyTeamId)}
+                  />
+                ),
+              }))}
+            />
+          )}
         </div>
 
         <div className="stack">

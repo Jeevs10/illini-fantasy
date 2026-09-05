@@ -948,6 +948,16 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 .minibug .sc[data-lead="true"] { color: var(--ink); }
 .minibug .dash { font-size: var(--t-xs); color: var(--ink-3); font-weight: 700; }
 
+/* Stepping through every other matchup, one scorebug at a time. */
+.carousel-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  margin-bottom: var(--s-2);
+}
+.carousel-nav .button { min-width: 2.25rem; }
+
 /* ---- player rows ------------------------------------------------------ */
 
 /* One row shape for every list of people in the app: the lineup, the bench,

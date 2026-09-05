@@ -75,9 +75,9 @@ export function ScoreBug({
       </div>
 
       <div className="scorebug-body">
-        <Team side={left} lead={leftLeads} unplayed={unplayed} />
+        <Team side={left} lead={leftLeads} unplayed={unplayed} anyMine={left.mine || right.mine} />
         <div className="scorebug-mid"><span className="vs">VS</span></div>
-        <Team side={right} lead={decided && !leftLeads} unplayed={unplayed} them />
+        <Team side={right} lead={decided && !leftLeads} unplayed={unplayed} anyMine={left.mine || right.mine} them />
       </div>
 
       {unplayed ? null : (
@@ -132,8 +132,8 @@ export function ScoreBug({
 }
 
 function Team({
-  side, lead, unplayed = false, them = false,
-}: { side: BugSide; lead: boolean; unplayed?: boolean; them?: boolean }) {
+  side, lead, unplayed = false, them = false, anyMine = side.mine,
+}: { side: BugSide; lead: boolean; unplayed?: boolean; them?: boolean; anyMine?: boolean }) {
   const pending = side.live + side.upcoming;
   return (
     <div className="scorebug-side" data-lead={lead} data-mine={side.mine || undefined}>
@@ -142,8 +142,10 @@ function Team({
         <span style={{ minWidth: 0 }}>
           <span className="name">{side.name}</span>
           <span className="sub">
-            {side.mine ? "Your team" : "Opponent"}
-            {side.live > 0 ? ` · ${side.live} live` : ""}
+            {[
+              side.mine ? "Your team" : anyMine ? "Opponent" : null,
+              side.live > 0 ? `${side.live} live` : null,
+            ].filter(Boolean).join(" · ")}
           </span>
         </span>
       </span>
