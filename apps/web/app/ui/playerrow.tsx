@@ -11,7 +11,7 @@ import { Avatar } from "./identity.tsx";
  * being four different ideas of the same thing.
  */
 export function PlayerRow({
-  playerId, name, meta, right, lead, state, dim, mine, ...rest
+  playerId, name, meta, right, lead, badge, state, dim, mine, ...rest
 }: {
   playerId?: number;
   name: string;
@@ -21,6 +21,8 @@ export function PlayerRow({
   right?: React.ReactNode;
   /** Replaces the avatar — a slot chip, a rank, a checkbox. */
   lead?: React.ReactNode;
+  /** Sits beside the name — an availability tag, a role. */
+  badge?: React.ReactNode;
   state?: "live" | "empty" | "final";
   dim?: boolean;
   mine?: boolean;
@@ -31,11 +33,19 @@ export function PlayerRow({
         {lead ?? <Avatar name={name} seed={playerId ?? name} size="sm" />}
       </span>
       <span className="plr-id">
-        {playerId === undefined ? (
-          <span className="plr-name">{name}</span>
-        ) : (
-          <Link href={`/players/${playerId}`} className="plr-name">{name}</Link>
-        )}
+        {(() => {
+          const link = playerId === undefined ? (
+            <span className="plr-name" style={badge ? { minWidth: 0, flex: "1 1 auto" } : undefined}>{name}</span>
+          ) : (
+            <Link href={`/players/${playerId}`} className="plr-name"
+                  style={badge ? { minWidth: 0, flex: "1 1 auto" } : undefined}>{name}</Link>
+          );
+          return badge ? (
+            <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
+              {link}<span style={{ flex: "none" }}>{badge}</span>
+            </span>
+          ) : link;
+        })()}
         {meta ? <span className="plr-sub">{meta}</span> : null}
       </span>
       <span className="plr-right">{right}</span>

@@ -2,9 +2,9 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import type { GameState, LeagueSettings, Slot, Startable } from "@illini/league";
+import type { GameState, LeagueSettings, PlayerAvailability, Slot, Startable } from "@illini/league";
 import { autoFill, moveToSlot, type LineupState } from "./actions.ts";
-import { RoleTag, Score } from "../ui/bits.tsx";
+import { AvailabilityTag, RoleTag, Score } from "../ui/bits.tsx";
 
 /**
  * Tip-off, always in Eastern.
@@ -23,6 +23,7 @@ const time = (iso: string | null) => (iso === null ? "—" : ET.format(new Date(
 export interface LineupPlayer extends Startable {
   score: number | null;
   state: GameState;
+  availability?: PlayerAvailability;
 }
 
 interface SlotRow { key: string; slot: Slot; player: LineupPlayer | null }
@@ -162,6 +163,7 @@ function Row({
         <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
           <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
           <RoleTag role={player.role} />
+          <AvailabilityTag status={player.availability?.status} injury={player.availability?.injury} compact />
           {player.state === "live" ? <span className="pill live"><span className="livedot" />Live</span> : null}
         </span>
         <span className="lineup-mobilemeta">

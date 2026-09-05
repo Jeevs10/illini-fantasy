@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { GameState } from "@illini/league";
+import type { AvailabilityStatus, GameState } from "@illini/league";
 import { Glyph, type GlyphName } from "./glyphs.tsx";
 
 /* Small shared parts. Everything here is presentational and takes only what
@@ -87,6 +87,39 @@ const ROLE_TAG = new Map(ROLE_TABLE.map((r) => [r.torvik, r.role]));
 export function RoleTag({ role }: { role: string | null }) {
   const tag = role === null ? undefined : ROLE_TAG.get(role);
   return <span className="pill ghost">{tag ?? "—"}</span>;
+}
+
+const AVAILABILITY_LABEL: Record<AvailabilityStatus, string> = {
+  out: "Out", doubtful: "Doubtful", questionable: "Questionable",
+  probable: "Probable", available: "Available",
+};
+const AVAILABILITY_TONE: Record<AvailabilityStatus, "crit" | "warn" | "ghost"> = {
+  out: "crit", doubtful: "crit", questionable: "warn", probable: "ghost", available: "ghost",
+};
+
+/**
+ * The injury glyph, silent for a healthy or an unreported player.
+ *
+ * `status` is `undefined` for a player `availabilityFor` has no row for at
+ * all — nothing has ever been said about him, which is not the same fact as
+ * RotoWire reporting him fine, so it renders nothing rather than a claim the
+ * ingest never made. `available` renders nothing for the same reason a
+ * healthy player needs no callout.
+ */
+export function AvailabilityTag({
+  status, injury, compact = false,
+}: { status: AvailabilityStatus | undefined; injury?: string | null; compact?: boolean }) {
+  if (!status || status === "available") return null;
+  const label = AVAILABILITY_LABEL[status];
+  return (
+    <span
+      className={`pill availability ${AVAILABILITY_TONE[status]}`}
+      title={injury ? `${label} — ${injury}` : label}
+    >
+      <Glyph name="alert" size={12} />
+      {compact ? null : label}
+    </span>
+  );
 }
 
 /**

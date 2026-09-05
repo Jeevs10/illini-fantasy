@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
-  playerPool, rosterLimit, rosterOn, settleWaivers, waiverWire, type PositionRole,
+  availabilityFor, playerPool, rosterLimit, rosterOn, settleWaivers, waiverWire,
+  type PositionRole,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
@@ -39,8 +40,11 @@ export default async function PlayersPage({
   ]);
   const onWaivers = new Set(wire.map((w) => w.playerId));
   const hasMore = players.length > PAGE;
-  const rows: PoolRow[] = players.slice(0, PAGE)
-    .map((p) => ({ ...p, onWaivers: onWaivers.has(p.playerId) }));
+  const paged = players.slice(0, PAGE);
+  const availability = await availabilityFor(db, paged.map((p) => p.playerId));
+  const rows: PoolRow[] = paged.map((p) => ({
+    ...p, onWaivers: onWaivers.has(p.playerId), availability: availability.get(p.playerId),
+  }));
 
   const query = (over: Record<string, string | undefined>) => {
     const params = new URLSearchParams();

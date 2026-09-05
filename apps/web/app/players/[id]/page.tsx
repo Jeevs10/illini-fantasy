@@ -2,15 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import {
-  playerCard, playerRankTrend, playerWeekProjection, seasonAverages, statPercentiles,
-  STAT_GROUPS, type GameLogEntry, type PlayerCard, type StatAverages, type StatKey,
-  type StatPercentile,
+  availabilityOf, playerCard, playerRankTrend, playerWeekProjection, seasonAverages,
+  statPercentiles, STAT_GROUPS, type GameLogEntry, type PlayerAvailability, type PlayerCard,
+  type StatAverages, type StatKey, type StatPercentile,
 } from "@illini/league";
 import { GAME_CONFIG, type BlockName } from "@illini/scoring";
 import { db } from "../../../lib/db.ts";
 import { requireViewer, viewDate } from "../../../lib/session.ts";
 import { Avatar } from "../../ui/identity.tsx";
-import { Bar, Empty, Score, StatTile } from "../../ui/bits.tsx";
+import { AvailabilityTag, Bar, Empty, Score, StatTile } from "../../ui/bits.tsx";
 import { RankTrendChart } from "../../ui/charts.tsx";
 
 export const dynamic = "force-dynamic";
@@ -68,10 +68,11 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
 
   const today = viewDate();
   const seasonStart = `${season - 1}-11-01`;
-  const [rankTrend, averages, projection] = await Promise.all([
+  const [rankTrend, averages, projection, availability] = await Promise.all([
     playerRankTrend(db, { playerId, configId, from: seasonStart, to: today }),
     seasonAverages(db, { playerId, season }),
     playerWeekProjection(db, { playerId, configId, from: today, to: shiftDate(today, 6) }),
+    availabilityOf(db, playerId),
   ]);
   const percentiles = card.role
     ? await statPercentiles(db, { playerId, season, role: card.role })
@@ -107,6 +108,10 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           <Link className="button sm" href="/players">← All players</Link>
         </div>
       </section>
+
+      {availability && availability.status !== "available" ? (
+        <Availability availability={availability} />
+      ) : null}
 
       <div className="panel">
         <div className="tiles">
@@ -188,6 +193,27 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * RotoWire reports a status and a body part, not prose — this panel shows
+ * exactly that, and nothing it does not have. The page only renders this when
+ * the status is not `available`, so a healthy player never sees an empty box.
+ */
+function Availability({ availability }: { availability: PlayerAvailability }) {
+  return (
+    <div className="panel">
+      <div className="panel-body" style={{ display: "flex", alignItems: "center", gap: "var(--s-3)" }}>
+        <AvailabilityTag status={availability.status} injury={availability.injury} />
+        <p style={{ margin: 0 }}>
+          {availability.injury ?? "No further detail from RotoWire."}
+          <span className="faint" style={{ marginLeft: "var(--s-2)", fontSize: "var(--t-xs)" }}>
+            as of {availability.asOf.slice(0, 10)}
+          </span>
+        </p>
+      </div>
+    </div>
   );
 }
 

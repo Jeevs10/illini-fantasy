@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
-  eligibleSlots, gameState, rosterLimit, rosterOn, scoresOn, slateByDay, startableOn,
-  type Slot,
+  availabilityFor, eligibleSlots, gameState, rosterLimit, rosterOn, scoresOn, slateByDay,
+  startableOn, type Slot,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
@@ -9,7 +9,7 @@ import { Lineup, type LineupPlayer } from "./lineup.tsx";
 import { DayStrip, label, window7 } from "./daystrip.tsx";
 import { NextLock } from "./nextlock.tsx";
 import { Avatar } from "../ui/identity.tsx";
-import { Empty, LiveTag, Score } from "../ui/bits.tsx";
+import { AvailabilityTag, Empty, LiveTag, Score } from "../ui/bits.tsx";
 import { Dot, PlayerRow } from "../ui/playerrow.tsx";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +44,7 @@ export default async function TeamPage({
     scoresOn(db, { fantasyTeamId, day, configId }),
     slateByDay(db, { fantasyTeamId, from, to }),
   ]);
+  const availability = await availabilityFor(db, roster.map((p) => p.playerId));
 
   // Eligibility is resolved here rather than in the browser: it comes from the
   // role Torvik assigned, so the two cannot disagree.
@@ -52,7 +53,10 @@ export default async function TeamPage({
 
   const players: LineupPlayer[] = startable.map((p) => {
     const score = scores.get(p.playerId) ?? null;
-    return { ...p, score, state: gameState({ tipoff: p.tipoff, score }, now) };
+    return {
+      ...p, score, state: gameState({ tipoff: p.tipoff, score }, now),
+      availability: availability.get(p.playerId),
+    };
   });
 
   const idle = roster.filter((p) => !startable.some((s) => s.playerId === p.playerId));
@@ -152,7 +156,15 @@ export default async function TeamPage({
                   {player.role ? <><Dot /><span>{player.role}</span></> : null}
                 </>
               }
-              right={<span className="pill ghost">{player.acquiredVia.replace("_", " ")}</span>}
+              right={
+                <>
+                  <AvailabilityTag
+                    status={availability.get(player.playerId)?.status}
+                    injury={availability.get(player.playerId)?.injury}
+                  />
+                  <span className="pill ghost">{player.acquiredVia.replace("_", " ")}</span>
+                </>
+              }
             />
           ))
         )}

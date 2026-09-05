@@ -1,14 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
-import type { PoolPlayer } from "@illini/league";
+import type { PlayerAvailability, PoolPlayer } from "@illini/league";
 import { add, type WaiverActionState } from "../waivers/actions.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { Score } from "../ui/bits.tsx";
+import { AvailabilityTag, Score } from "../ui/bits.tsx";
 import Link from "next/link";
 import { Dot } from "../ui/playerrow.tsx";
 
-export type PoolRow = PoolPlayer & { onWaivers: boolean };
+export type PoolRow = PoolPlayer & { onWaivers: boolean; availability?: PlayerAvailability };
 
 /**
  * The pool, ranked, with the one verb the season has.
@@ -61,7 +61,10 @@ export function Pool({
           <span className="plr-lead" style={{ minWidth: 0 }}>
             <Avatar name={player.name} seed={player.playerId} size="sm" />
             <span className="plr-id">
-              <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
+              <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
+                <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
+                <AvailabilityTag status={player.availability?.status} injury={player.availability?.injury} compact />
+              </span>
               <span className="plr-sub">
                 <span>{player.teamName ?? "—"}</span>
                 {player.conference ? (

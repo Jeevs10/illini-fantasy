@@ -1,10 +1,10 @@
 import Link from "next/link";
-import type { CountedGame, MatchupView, TeamOutlook } from "@illini/league";
-import { periodOutlook, seasonWeeks, weekMatchups } from "@illini/league";
+import type { CountedGame, MatchupView, PlayerAvailability, TeamOutlook } from "@illini/league";
+import { availabilityFor, periodOutlook, seasonWeeks, weekMatchups } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
+import { AvailabilityTag, Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
 import { ScoreBug, type BugSide } from "../ui/scorebug.tsx";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +47,9 @@ export default async function LeaguePage({
         periodOutlook(db, { fantasyTeamId: mine.away.fantasyTeamId, configId, from: mine.startsOn, to: mine.endsOn, settings, now }),
       ])
     : null;
+  const availability = outlooks
+    ? await availabilityFor(db, [...outlooks[0].pending, ...outlooks[1].pending].map((p) => p.playerId))
+    : new Map<number, PlayerAvailability>();
 
   return (
     <>
@@ -83,7 +86,7 @@ export default async function LeaguePage({
           </div>
           <HeadToHead
             mine={mine} outlooks={outlooks} fantasyTeamId={fantasyTeamId}
-            gamesCap={settings.gamesCap} now={now}
+            gamesCap={settings.gamesCap} now={now} availability={availability}
           />
         </>
       ) : null}
@@ -119,10 +122,11 @@ function bug(id: number, name: string, o: TeamOutlook, mineId: number | null): B
  * page under it. Everything below the line is what was left on the table.
  */
 function HeadToHead({
-  mine, outlooks, fantasyTeamId, gamesCap, now,
+  mine, outlooks, fantasyTeamId, gamesCap, now, availability,
 }: {
   mine: MatchupView; outlooks: [TeamOutlook, TeamOutlook];
   fantasyTeamId: number | null; gamesCap: number; now: Date;
+  availability: Map<number, PlayerAvailability>;
 }) {
   const homeIsMine = mine.home.fantasyTeamId === fantasyTeamId;
   const [left, right] = homeIsMine || fantasyTeamId === null
@@ -162,7 +166,10 @@ function HeadToHead({
                           size="sm" mine={p.side === "left" && homeIsMine === (left.view === mine.home)} />
                 </span>
                 <span className="plr-id">
-                  <Link className="plr-name" href={`/players/${p.playerId}`}>{p.playerName}</Link>
+                  <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
+                    <Link className="plr-name" href={`/players/${p.playerId}`} style={{ minWidth: 0, flex: "1 1 auto" }}>{p.playerName}</Link>
+                    <AvailabilityTag status={availability.get(p.playerId)?.status} injury={availability.get(p.playerId)?.injury} compact />
+                  </span>
                   <span className="plr-sub">
                     <span className="slot" data-slot={p.slot} style={{ minWidth: "2.6rem", height: 18, fontSize: 10 }}>{p.slot}</span>
                     <span>{p.opponent ? `vs ${p.opponent}` : "TBD"}</span>

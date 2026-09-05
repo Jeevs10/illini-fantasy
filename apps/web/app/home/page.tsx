@@ -1,14 +1,14 @@
 import Link from "next/link";
 import {
-  claimsFor, eligibleSlots, gameState, leagueActivity, listTrades, periodOutlook,
-  rankedStandings, rosterLimit, rosterOn, scoresOn, startableOn, weekMatchups,
-  type Slot, type Startable,
+  availabilityFor, claimsFor, eligibleSlots, gameState, leagueActivity, listTrades,
+  periodOutlook, rankedStandings, rosterLimit, rosterOn, scoresOn, startableOn, weekMatchups,
+  type PlayerAvailability, type Slot, type Startable,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Avatar } from "../ui/identity.tsx";
 import { Glyph } from "../ui/glyphs.tsx";
-import { Bar, Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
+import { AvailabilityTag, Bar, Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
 import { Dot, PlayerRow } from "../ui/playerrow.tsx";
 import { ScoreBug, type BugSide } from "../ui/scorebug.tsx";
 import { ActivityFeed } from "../ui/activity.tsx";
@@ -38,6 +38,8 @@ export default async function HomePage() {
     fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, day),
     leagueActivity(db, { leagueId, limit: 8 }),
   ]);
+
+  const availability = await availabilityFor(db, tonight.map((p) => p.playerId));
 
   const [tonightScores, outlooks] = await Promise.all([
     fantasyTeamId === null ? new Map<number, number>() : scoresOn(db, { fantasyTeamId, day, configId }),
@@ -100,7 +102,7 @@ export default async function HomePage() {
             <span className="spacer" />
           </SectionHead>
           <div className="panel">
-            <Tonight players={tonight} scores={tonightScores} now={now} settings={settings} />
+            <Tonight players={tonight} scores={tonightScores} now={now} settings={settings} availability={availability} />
           </div>
 
           <SectionHead title="Around the league" action="All matchups" href="/league" />
@@ -145,6 +147,7 @@ export default async function HomePage() {
             roster={roster.length}
             limit={rosterLimit(settings)}
             now={now}
+            availability={availability}
           />
 
           <div className="card">
@@ -224,12 +227,13 @@ const ordinal = (n: number) =>
  * that has not been made yet, and hiding him is how points get left behind.
  */
 function Tonight({
-  players, scores, now, settings,
+  players, scores, now, settings, availability,
 }: {
   players: Startable[];
   scores: Map<number, number>;
   now: Date;
   settings: { starters: { slot: string; count: number }[] };
+  availability: Map<number, PlayerAvailability>;
 }) {
   if (players.length === 0) {
     return (
@@ -283,6 +287,13 @@ function Tonight({
             dim={benched}
             state={!benched && state === "live" ? "live" : undefined}
             lead={<span className="slot" data-slot={player.slot}>{benched ? "BN" : player.slot}</span>}
+            badge={
+              <AvailabilityTag
+                status={availability.get(player.playerId)?.status}
+                injury={availability.get(player.playerId)?.injury}
+                compact
+              />
+            }
             meta={
               <>
                 <span>{player.opponent ? `vs ${player.opponent}` : "Opponent TBD"}</span>
@@ -318,11 +329,12 @@ function Tonight({
  * standing offer is somebody waiting on an answer.
  */
 function Attention({
-  tonight, settings, offers, claims, roster, limit, now,
+  tonight, settings, offers, claims, roster, limit, now, availability,
 }: {
   tonight: Startable[];
   settings: { starters: { slot: Exclude<Slot, "BENCH" | "IR">; count: number }[] };
   offers: number; claims: number; roster: number; limit: number; now: Date;
+  availability: Map<number, PlayerAvailability>;
 }) {
   const filled = new Map<string, number>();
   for (const p of tonight) {
@@ -343,8 +355,20 @@ function Attention({
   const missed = tonight.filter((p) => (p.slot === "BENCH" || p.slot === "IR") && p.locked);
   const missedPoints = missed.reduce((a, p) => a + p.projected, 0);
 
+  const out = tonight.filter(
+    (p) => p.slot !== "BENCH" && p.slot !== "IR" && availability.get(p.playerId)?.status === "out",
+  );
+
   const items: { tone: "crit" | "warn" | "" ; glyph: "alert" | "clock" | "trades" | "waivers" | "team"; title: string; body: string; href: string; cta: string }[] = [];
 
+  if (out.length > 0) {
+    items.push({
+      tone: "crit", glyph: "alert",
+      title: `${out.length} starter${out.length === 1 ? "" : "s"} ruled out tonight`,
+      body: `${out.map((p) => p.name).join(", ")} — RotoWire lists ${out.length === 1 ? "him" : "them"} out. The slot still scores zero unless somebody else takes it.`,
+      href: "/team", cta: "Swap",
+    });
+  }
   if (open.length > 0) {
     items.push({
       tone: "crit", glyph: "alert",

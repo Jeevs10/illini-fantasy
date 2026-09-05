@@ -1,6 +1,6 @@
-# Handoff — Phase 10, the stat surface
+# Handoff — Phase 11, injuries and news
 
-Phases 1 through 10 are done. The README is the reference for how the system
+Phases 1 through 11 are done. The README is the reference for how the system
 works; this file is only what the next person needs that the README does not
 say.
 
@@ -8,13 +8,48 @@ say.
 
 | | |
 |---|---|
-| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 10 |
-| Tests | 180 passing (`npm test`, needs local Postgres — see README) |
+| Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 11 |
+| Tests | 187 passing (`npm test`, needs local Postgres — see README) |
 | Typecheck | clean (`npm run typecheck`, and `npx tsc --noEmit` inside `apps/web`) |
 | Build | clean (`npm run build`) |
 | Production data | Neon `floral-shape-81709658`, 5 ingested game days, Feb 10–14 2026 |
 | Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games — **not yet migrated to 012 or re-ingested for the box/bio widening; see below** |
 | Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) · 4 `Illini Fantasy — 2025-26` (branch only, drafted and played out) |
+
+**Phase 11 needs no migration** — `player_availability` and the `rotowire`
+`source_kind` have existed since `001_sources.sql` and were read/written by
+nothing until now. `packages/sources/src/rotowire.ts` is a new `RotoWireClient`
+(no key, no auth handshake — one GET returns the whole day's injury report,
+cached by calendar day); `packages/ingest/src/injuries.ts` crosswalks it onto
+known players by reusing `linkSource` (the same function `linkCbbdRosters`
+already used — nothing source-specific needed adding there) and normalises
+RotoWire's free-text `status` onto a fixed vocabulary (`out` / `doubtful` /
+`questionable` / `probable` / `available`), defaulting unrecognised wording to
+`questionable` rather than `available`, since RotoWire lists a player at all
+only because something is being said about him. Because
+`player_availability` is append-only (`PRIMARY KEY (player_id, as_of)`), a
+player who drops off RotoWire's list would otherwise read as still `out`
+forever; `ingestInjuries` fixes this by writing an explicit `available` row
+for anyone whose latest status was not already `available` and who is absent
+from today's report. `npm run ingest -- injuries <season>` runs it — the
+season argument is unused, kept only so every ingest verb has the same argv
+shape (`ranks` already set this precedent). The read side is
+`packages/league/src/availability.ts`'s `availabilityFor`/`availabilityOf`,
+which return the latest row per player and — deliberately — omit a player
+with no row at all rather than assume him healthy, since nothing has actually
+reported on him. `AvailabilityStatus` is defined independently in the ingest
+and league packages rather than shared, the same boundary reason `RoleTag` in
+`app/ui/bits.tsx` keeps its own copy of the role table rather than importing
+`@illini/league`. UI: a new `AvailabilityTag` (the alert glyph, silent for a
+healthy or unreported player) appears in the pool row (`/players`), the
+lineup row and bench (`/team`), the idle-roster row (`/team`), the "Tonight"
+list and a new "Needs you" item for a starter RotoWire lists out (`/home`),
+the "still to play" list (`/league`), and a status panel on the player card
+(`/players/[id]`) showing exactly what RotoWire gives — status, body part,
+date — since no separate news endpoint exists to probe (the plan anticipated
+this fallback explicitly). `PlayerRow` gained an optional `badge` prop for
+this, rendered beside the name only when passed, so every call site without
+one is byte-for-byte unchanged.
 
 **Phase 10 adds migration `012_leaders.sql`, and widens ingest.** `player`
 gains bio columns (`height`, `jersey`, `weight`, `hometown`, `date_of_birth`)
@@ -349,6 +384,60 @@ loading-state skeleton finer than the route's own `loading.tsx`, and the
 rather than a separate rail, since the ranked list already reads as a rail at
 the Day span.
 
+## How Phase 11 was verified
+
+- **`normaliseStatus` has its own tests** (`packages/ingest/src/injuries.test.ts`,
+  3 cases): the recognised RotoWire wording this repo has actually seen
+  (`Out`, `Out For Season`, `Injured Reserve`, `Doubtful`, `Questionable`,
+  `Day-To-Day`, `GTD`, `Probable`, `Available`), that matching ignores case
+  and surrounding space, and that wording this repo has not seen (`Load
+  Management`, an empty string) defaults to `questionable` rather than
+  `available`. `ingestInjuries` itself was not given a database-backed test —
+  the same line the rest of ingest draws: `nightly.ts`'s `ingestNight` isn't
+  tested against a real database either, only its pure helpers are, because
+  the DB-facing behaviour it composes (`linkSource`, `insertMany`) already has
+  coverage where it lives.
+- **`availabilityFor`/`availabilityOf` have four tests against a real
+  Postgres** (`packages/league/src/availability.test.ts`, the same
+  drop/recreate-database convention `playoffs.test.ts` uses): a player with no
+  row at all is absent from the map rather than assumed healthy; the latest
+  row by `as_of` wins regardless of insertion order or which status reads as
+  more severe; a player whose most recent row is `available` reads as cleared
+  even though an older row said `out`; and batching several players in one
+  call, including an empty request, returns the right shape. 187 tests, up
+  from 180.
+- **The ingest and read modules were checked against a real crosswalk run
+  once, ad hoc, rather than as an automated test**: `RotoWireClient().injuries()`
+  against the live endpoint returns the same shape `scripts/crosswalk.ts`
+  already parses, and `linkSource(db, "rotowire", ...)` is the identical
+  function `linkCbbdRosters` calls — no new matching logic exists to have its
+  own bug.
+- **The screens were driven in a browser** against `illini_local` — a full
+  copy of production restored earlier and left on disk (see "Start here"),
+  which turned out to still be migrated only through 010; `/home` failed with
+  `column m.round does not exist` until `npm run migrate` applied 011 and 012.
+  Worth flagging for whoever finds that database next. Two `player_availability`
+  rows were inserted by hand, in the shape `ingestInjuries` writes, for two of
+  the signed-in manager's own rostered players — `out` with an injury note,
+  and `questionable` with a different one — then checked across every screen
+  the plan named: the pool row on `/players` (the glyph, with the injury as
+  its tooltip); the lineup row for the `out` player, now locked into his slot
+  with the glyph beside his name, and the `questionable` player on the bench;
+  the idle-roster row; the "Tonight" list and a new "Needs you" item reading
+  "1 starter ruled out tonight — Baye Ndongo — RotoWire lists him out. The
+  slot still scores zero unless somebody else takes it."; and the player card,
+  whose panel read exactly "Out — Ankle sprain — as of 2026-02-14" for the
+  `out` player and rendered nothing at all for a healthy one.
+- **Not checked**: the `/league` matchup screen's "still to play" list —
+  `HeadToHead` only renders that branch when a week has an unscored game left,
+  and the only local data on hand was a fully settled week, so the branch
+  never ran. The code path calls the same `availabilityFor` and
+  `AvailabilityTag` already exercised on every other screen, with no logic of
+  its own. Narrow width and light mode were not opened this round, the same
+  gap as most phases. `full-season-2026` and production have not had
+  `npm run ingest -- injuries` run against them — nobody with Neon credentials
+  has done it, the same standing gap `ranks` and migration 012 are in.
+
 ## How Phase 7 was verified
 
 Production is three migrations behind, so the same route Phase 6 took:
@@ -437,25 +526,26 @@ Not checked: narrow widths and light mode, same as Phase 6.
 
 ## Where it stopped
 
-Done through Phase 10: the stat surface. A league now has an ending (Phase 9)
-and a player card that explains more than the score alone — a rank, a
-projection, season averages against role peers, and a `/leaders` screen for
-who has been best lately (Phase 10). Phases 11 and 12, written up below, are
-the rest of the plan (injuries and news, and a retrofit of the five older
-screens) and were deliberately not started this round.
+Done through Phase 11: injuries and news. A league now has an ending (Phase
+9), a player card that explains more than the score alone (Phase 10), and a
+manager can now see, everywhere a player's name appears, whether RotoWire
+says he is available to play tonight (Phase 11). Phase 12, written up below,
+is the rest of the plan — a retrofit of the five older screens — and was
+deliberately not started this round.
 
 Not done, in the order I would take them:
 
-1. **Injuries and news, and the retrofit of `/home`, `/team`, `/league`,
-   `/standings`, `/players`** — see Phases 11 and 12 below, and
-   `.impeccable/critique/` for the persisted snapshot, which `/polish` reads
-   automatically. The critique predates `/commissioner`, `/draft`,
-   `/waivers`, `/trades`, `/commissioner/settings`, `/playoffs` and
-   `/leaders`, so its heuristic scores cover none of them.
-2. **Migration 012 and the ingest widening on `full-season-2026` and
-   production.** Verified locally only — see "How Phase 10 was verified"
-   above. The rebuild is the same three commands the branch has always used;
-   somebody with Neon credentials has to run them.
+1. **The retrofit of `/home`, `/team`, `/league`, `/standings`, `/players`** —
+   see Phase 12 below, and `.impeccable/critique/` for the persisted
+   snapshot, which `/polish` reads automatically. The critique predates
+   `/commissioner`, `/draft`, `/waivers`, `/trades`, `/commissioner/settings`,
+   `/playoffs`, `/leaders` and the Phase 11 availability tags, so its
+   heuristic scores cover none of them.
+2. **Migration 012, the ingest widening, and `npm run ingest -- injuries` on
+   `full-season-2026` and production.** Verified locally only — see "How
+   Phase 10" and "How Phase 11 was verified" above. Each is a command or two
+   the branch has always used; somebody with Neon credentials has to run
+   them.
 3. **Settings that vary by week.** The games cap re-scores history because there
    is one settings blob and no way to say "nine until week 6, eight after". That
    is the honest fix and it is a real phase: `matchup` would have to carry the
@@ -468,6 +558,18 @@ Not done, in the order I would take them:
    from any screen, and that is the same shape of gap the league settings were
    until now — `changePassword` and `setUsername` exist and are tested with
    nothing calling them.
+
+Smaller gaps from Phase 11. No news, only status — RotoWire's table has no
+prose endpoint to probe, the same finding the original plan anticipated and
+told this phase to fall back on. Like `ranks`, nothing runs
+`npm run ingest -- injuries` on its own; it needs a caller, and has none.
+`match_review` gets RotoWire misses the same way it has always gotten CBBD
+misses, but there is still no commissioner screen to resolve either kind —
+`linkSource`'s queue has been readable-only from the database since Phase 2.
+A cleared player's `player_availability` history is never pruned, so a
+season with daily ingest runs accumulates one row per player per day he
+appears on or clears RotoWire's list; harmless at this league's size, worth
+knowing before assuming the table is small.
 
 Smaller gaps from Phase 10. No CBBD-sourced recruit rank — see the recRank
 correction above. `trendingPlayers` reports roster-move activity rather than
@@ -841,7 +943,19 @@ explain the score; `opponentStrength` gets a scale and direction, another
 critique item. New `app/ui/charts.tsx` (line/area, percentile bar, inline SVG,
 both themes); `.spark` bounded rather than unbounded **[critique P2]**.
 
-### Phase 11 — Injuries and news
+### Phase 11 — Injuries and news — done
+
+Built as sketched, with one difference: linking RotoWire onto known players
+needed no new matching logic at all — `linkSource` (added for `linkCbbdRosters`
+back in Phase 2) already resolves a `SourceRecord` list onto `player` by name
+and team and files anything below `strong` confidence to `match_review`, and
+RotoWire's shape drops straight into it. Nothing about "news" beyond status
+and body part turned up during implementation either, exactly as this section
+predicted below — RotoWire's endpoint has no prose field to probe. See
+`packages/sources/src/rotowire.ts`, `packages/ingest/src/injuries.ts`,
+`packages/league/src/availability.ts`, and "How Phase 11 was verified" above
+for what was actually built and how it was checked — the rest of this section
+is left as the original plan.
 
 RotoWire is proven in this repo: `scripts/crosswalk.ts:25` already calls
 `rotowire.com/cbasketball/tables/injury-report.php?team=ALL&pos=ALL&conf=ALL&site=other&slateID=null`,
@@ -891,7 +1005,10 @@ deliberately unapplied (see above), so these reach the local copy and the Neon
 branches and nowhere else — the owner's call, unchanged by this plan. 012 is
 written and verified locally (see the state table and "How Phase 10 was
 verified" above) but has not been run against `full-season-2026` or
-production — nobody with Neon credentials has done it yet.
+production — nobody with Neon credentials has done it yet. Phase 11 added no
+migration of its own — `player_availability` and the `rotowire` `source_kind`
+have been on 001 the whole time — so it carries no new migration debt either
+way.
 
 ### Verification, when this ran
 
@@ -911,5 +1028,7 @@ the same substitution Phase 9's own bracket used.
 
 Phases 8 and 9, which each changed or added one rule, went alone. Phase 10 —
 a new ingest field, a new migration, a new package module, and two screens —
-also went alone, and is done. Phases 11 and 12 remain: 11 → 12, each
-independently shippable.
+also went alone, and is done. Phase 11 — a new source client, a new ingest
+module, no migration, and a tag threaded through six existing screens rather
+than a new one — also went alone, and is done. Phase 12 remains, and does not
+depend on it.

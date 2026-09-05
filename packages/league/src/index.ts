@@ -13,3 +13,4 @@ export * from "./views.ts";
 export * from "./outlook.ts";
 export * from "./playoffs.ts";
 export * from "./leaders.ts";
+export * from "./availability.ts";
