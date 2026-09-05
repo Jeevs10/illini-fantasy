@@ -9,7 +9,7 @@
  *   npm run league -- account <email> <username> <password> ["Display Name"]
  *   npm run league -- whoami <username>
  *   npm run league -- settings 1
- *   npm run league -- settings 1 gamesCap=8 faabBudget=200 tradeDeadline=2026-03-01
+ *   npm run league -- settings 1 bench=6 faabBudget=200 tradeDeadline=2026-03-01
  *   npm run league -- settings 1 starters=G2,F2,B1,FLEX2   |   tradeDeadline=none
  *   npm run league -- draft new 1 [rounds] [clockSeconds] [order…]
  *   npm run league -- draft start 1 | pause 1 | run 1

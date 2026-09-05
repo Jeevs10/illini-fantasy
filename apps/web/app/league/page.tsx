@@ -54,7 +54,6 @@ export default async function LeaguePage({
           <h1>Week {weekNumber}</h1>
           <p className="meta">
             <span>{startsOn} &ndash; {endsOn}</span>
-            <span>Best {settings.gamesCap} games count</span>
           </p>
         </div>
         <nav className="controls" aria-label="Week navigation">
@@ -75,14 +74,14 @@ export default async function LeaguePage({
           <div className="rise" style={{ marginBottom: "var(--s-5)" }}>
             <ScoreBug
               week={mine.week} startsOn={mine.startsOn} endsOn={mine.endsOn}
-              settled={mine.settled} gamesCap={settings.gamesCap} today={today}
+              settled={mine.settled} today={today}
               home={bug(mine.home.fantasyTeamId, mine.home.name, outlooks[0], fantasyTeamId)}
               away={bug(mine.away.fantasyTeamId, mine.away.name, outlooks[1], fantasyTeamId)}
             />
           </div>
           <Rosters
             mine={mine} outlooks={outlooks} fantasyTeamId={fantasyTeamId}
-            gamesCap={settings.gamesCap} now={now} availability={availability}
+            now={now} availability={availability}
           />
         </>
       ) : null}
@@ -103,7 +102,7 @@ function bug(id: number, name: string, o: TeamOutlook, mineId: number | null): B
   return {
     fantasyTeamId: id, name,
     total: o.total, projected: o.projected,
-    gamesCounted: o.gamesCounted, gamesPlayed: o.gamesPlayed,
+    gamesPlayed: o.gamesPlayed,
     live: o.live, upcoming: o.upcoming,
     pendingSlots: bySlot(o.pending),
     mine: id === mineId,
@@ -123,14 +122,14 @@ function bySlot(pending: TeamOutlook["pending"]): { slot: string; count: number 
  * Not ranked against each other and not interleaved — the two teams are
  * fielding different starters against different real games, so pairing them
  * row-for-row invites a comparison the schedule never asked for. Each side is
- * its own roster: who is still to play, who is already in the books, and
- * what the cap left on the table, under the total that roster projects to.
+ * its own roster: who is still to play, and what each starter's week adds up
+ * to so far, under the total that roster projects to.
  */
 function Rosters({
-  mine, outlooks, fantasyTeamId, gamesCap, now, availability,
+  mine, outlooks, fantasyTeamId, now, availability,
 }: {
   mine: MatchupView; outlooks: [TeamOutlook, TeamOutlook];
-  fantasyTeamId: number | null; gamesCap: number; now: Date;
+  fantasyTeamId: number | null; now: Date;
   availability: Map<number, PlayerAvailability>;
 }) {
   const homeIsMine = mine.home.fantasyTeamId === fantasyTeamId;
@@ -141,25 +140,31 @@ function Rosters({
   return (
     <div className="rosters">
       <RosterPanel side={left} mine={left.view.fantasyTeamId === fantasyTeamId}
-                   gamesCap={gamesCap} now={now} availability={availability} />
+                   now={now} availability={availability} />
       <RosterPanel side={right} mine={right.view.fantasyTeamId === fantasyTeamId}
-                   gamesCap={gamesCap} now={now} availability={availability} />
+                   now={now} availability={availability} />
     </div>
   );
 }
 
 function RosterPanel({
-  side, mine, gamesCap, now, availability,
+  side, mine, now, availability,
 }: {
   side: { view: MatchupView["home"]; out: TeamOutlook };
-  mine: boolean; gamesCap: number; now: Date;
+  mine: boolean; now: Date;
   availability: Map<number, PlayerAvailability>;
 }) {
   const { view, out } = side;
   const pending = [...out.pending].sort((a, b) => (a.tipoff ?? "~").localeCompare(b.tipoff ?? "~"));
   const scored = [...out.games].sort((a, b) => b.score - a.score);
-  const counted = scored.filter((g) => g.counted);
-  const overflow = scored.filter((g) => !g.counted);
+  // Games by player, so a starter's row can be opened to see the nights it is
+  // made of. The week is the sum of these; the individual nights are evidence.
+  const nightsOf = new Map<number, typeof scored>();
+  for (const g of scored) {
+    const held = nightsOf.get(g.playerId);
+    if (held === undefined) nightsOf.set(g.playerId, [g]);
+    else held.push(g);
+  }
 
   return (
     <div className="panel" data-density="compact">
@@ -168,7 +173,10 @@ function RosterPanel({
           <Avatar name={view.name} seed={view.fantasyTeamId} size="md" mine={mine} />
           <span style={{ minWidth: 0 }}>
             <h2 style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{view.name}</h2>
-            <p>{out.gamesCounted} of {out.gamesPlayed} played count</p>
+            <p>
+              {out.players.length} starter{out.players.length === 1 ? "" : "s"}
+              {" · "}{out.gamesPlayed} game{out.gamesPlayed === 1 ? "" : "s"} played
+            </p>
           </span>
         </span>
         <span style={{ textAlign: "right", flex: "none" }}>
@@ -211,25 +219,46 @@ function RosterPanel({
         </>
       ) : null}
 
-      <div className="subhead"><h3>Scored</h3></div>
-      {counted.length === 0 && overflow.length === 0 ? (
+      <div className="subhead"><h3>The week, by starter</h3></div>
+      {out.players.length === 0 ? (
         <Empty title="No games scored yet" glyph="clock">
           Nothing has a filed box score yet. Scores appear the morning after a
           night is ingested.
         </Empty>
       ) : (
-        <>
-          {counted.map((g) => <ScoredRow key={`${g.playerId}-${g.playedOn}`} game={g} />)}
-          {overflow.length > 0 ? (
-            <details>
-              <summary className="capline">
-                <span aria-hidden="true" className="chev">▸</span>
-                <span>Cap — best {gamesCap} count · {overflow.length} more, not counted</span>
+        out.players.map((p) => {
+          const nights = nightsOf.get(p.playerId) ?? [];
+          const ahead = (p.projected ?? p.total) - p.total;
+          return (
+            <details key={p.playerId} className="wk">
+              <summary className="plr">
+                <span className="plr-lead">
+                  <span className="slot" data-slot={p.slot}
+                        style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{p.slot}</span>
+                </span>
+                <span className="plr-id">
+                  <span className="plr-name">{p.playerName}</span>
+                  <span className="plr-sub">
+                    <span>{p.games} game{p.games === 1 ? "" : "s"}</span>
+                    {ahead > 0.05 ? (
+                      <>
+                        <span className="dot" />
+                        <span>proj {(p.projected ?? p.total).toFixed(1)}</span>
+                      </>
+                    ) : null}
+                  </span>
+                </span>
+                <span className="plr-right">
+                  <span className="plr-figure">
+                    <Score value={p.total} size="sm" tone={p.games === 0 ? "quiet" : "default"} />
+                    <span className="cap">pts</span>
+                  </span>
+                </span>
               </summary>
-              {overflow.map((g) => <ScoredRow key={`${g.playerId}-${g.playedOn}`} game={g} />)}
+              {nights.map((g) => <ScoredRow key={`${g.playerId}-${g.playedOn}`} game={g} />)}
             </details>
-          ) : null}
-        </>
+          );
+        })
       )}
     </div>
   );

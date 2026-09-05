@@ -74,7 +74,6 @@ export default async function HomePage() {
             startsOn={mine.startsOn}
             endsOn={mine.endsOn}
             settled={mine.settled}
-            gamesCap={settings.gamesCap}
             today={day}
             href="/league"
             home={bug(mine.home.fantasyTeamId, mine.home.name, outlooks[0], fantasyTeamId)}
@@ -117,8 +116,7 @@ export default async function HomePage() {
                     startsOn={m.startsOn}
                     endsOn={m.endsOn}
                     settled={m.settled}
-                    gamesCap={settings.gamesCap}
-                    today={day}
+                            today={day}
                     href="/league"
                     home={bug(m.home.fantasyTeamId, m.home.name, m.home, fantasyTeamId)}
                     away={bug(m.away.fantasyTeamId, m.away.name, m.away, fantasyTeamId)}

@@ -127,10 +127,9 @@ after(async () => { await db?.end(); });
 
 test("bounds and whole numbers, all of them at once", () => {
   const problems = settingsProblems({
-    ...SETTINGS, gamesCap: 0, waiverHour: 24, bench: 1.5, tradeOfferDays: 3,
+    ...SETTINGS, waiverHour: 24, bench: 1.5, tradeOfferDays: 3,
   });
-  assert.equal(problems.length, 3);
-  assert.ok(problems.some((p) => p.includes("Games cap")));
+  assert.equal(problems.length, 2);
   assert.ok(problems.some((p) => p.includes("Waiver hour")));
   assert.ok(problems.some((p) => p.includes("Bench") && p.includes("whole number")));
 });
@@ -292,27 +291,15 @@ test("every reason at once, so the form is filled in once", async () => {
 
 // --- the one that is scoring -----------------------------------------------
 
-test("moving the games cap leaves an already-settled week exactly as it was", async () => {
+test("a settled week is the sum of its starters' games", async () => {
   await playAWeek();
 
-  // The cap is a cap on starters, not on games: every player scores his own
-  // id every night, so each of the four starters' single best game is just
-  // his id, and all four fit under a cap of four. Team 1 keeps 4+3+2+1=10,
-  // team 2 keeps 8+7+6+5=26.
-  const before = await standings(db, 1);
-  assert.equal(before.find((r) => r.name === "Team 1")!.pointsFor, 10);
-  assert.equal(before.find((r) => r.name === "Team 2")!.pointsFor, 26);
-
-  const result = await updateSettings(db, {
-    leagueId: 1, byUserId: commish, patch: { gamesCap: 2 }, now: NOW });
-
-  assert.match(result.notes[0]!, /1 settled week keeps the score settled under/);
-
-  // The week already carries the cap of four it settled under, so a cap of
-  // two now has nothing left to touch.
-  const after = await standings(db, 1);
-  assert.equal(after.find((r) => r.name === "Team 1")!.pointsFor, 10);
-  assert.equal(after.find((r) => r.name === "Team 2")!.pointsFor, 26);
+  // Every started game counts, so each starter's week is his id five times
+  // over: team 1 keeps (1+2+3+4)*5 = 50, team 2 (5+6+7+8)*5 = 130. There is
+  // no cap left to move, which is why nothing here tries to move one.
+  const table = await standings(db, 1);
+  assert.equal(table.find((r) => r.name === "Team 1")!.pointsFor, 50);
+  assert.equal(table.find((r) => r.name === "Team 2")!.pointsFor, 130);
 });
 
 test("a settled matchup records the config and settings it was scored under", async () => {

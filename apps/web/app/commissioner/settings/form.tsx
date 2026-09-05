@@ -28,7 +28,7 @@ const GROUPS: { title: string; note: string; keys: string[] }[] = [
   {
     title: "Scoring",
     note: "What counts, and over how long.",
-    keys: ["gamesCap", "periodDays"],
+    keys: ["periodDays"],
   },
   {
     title: "Waivers",
@@ -148,16 +148,6 @@ export function SettingsForm({
                   </label>
                   <p className="sethelp">
                     {field.help}
-                    {key === "gamesCap" && context.settledWeeks > 0 ? (
-                      <>
-                        {" "}The {context.settledWeeks} week
-                        {context.settledWeeks === 1 ? "" : "s"} already settled{" "}
-                        <strong>
-                          keep{context.settledWeeks === 1 ? "s" : ""} the score settled under
-                        </strong> — this only changes what happens the next time a week is
-                        settled.
-                      </>
-                    ) : null}
                     {key === "periodDays" && context.scheduleDrawn ? (
                       <>
                         {" "}The schedule is already drawn and its weeks are stored

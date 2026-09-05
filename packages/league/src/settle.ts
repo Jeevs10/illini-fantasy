@@ -11,26 +11,48 @@ export interface CountedGame {
   counted: boolean;
 }
 
+/** One starter's whole week: every game he played, and what they add up to. */
+export interface PlayerWeek {
+  playerId: number;
+  playerName: string;
+  slot: string;
+  games: number;
+  total: number;
+  /**
+   * Where his week lands once the nights he has not played yet are filled in
+   * from form. Equal to `total` for a week with nothing left in it, and only
+   * set by `periodOutlook` — settlement has no unplayed nights to project.
+   */
+  projected?: number;
+}
+
 export interface TeamPeriod {
   fantasyTeamId: number;
   total: number;
   gamesPlayed: number;
   gamesCounted: number;
   games: CountedGame[];
+  /** The starters, each with their cumulative total — what the week is made of. */
+  players: PlayerWeek[];
 }
 
 /**
  * Scores one fantasy team over a scoring period.
  *
- * The cap is a cap on *starters*, not on games: each starter's best night this
- * week is what is eligible to count, one per player, ranked against the other
- * starters' best nights and cut off at `gamesCap`. Pooling every started game
- * together and keeping the top N individual scores — the previous rule here —
- * let a starter with several hot games crowd out a different starter's only
- * game of the week, so a rostered, started player could contribute nothing
- * despite having played. A player's other, non-best games this week never
- * counted anyway once his best one did, so this is strictly which games
- * compete for the cap, not a new kind of game.
+ * A starter is started for the period, and everything he scores in it counts.
+ * The team's total is the sum of its starters' cumulative totals — no best-of
+ * selection, no cap. A player with three games contributes all three.
+ *
+ * This is deliberately a rule about *players*, not about games. The lineup is
+ * set once for the period, so the question a manager answers is "who are my
+ * seven?" and not "who are my seven tonight, and again tomorrow" — and the
+ * answer to the first question should not be re-litigated by a scoring rule
+ * that then discards most of what those seven did.
+ *
+ * The consequence, taken on purpose: a heavier slate is worth more. Two games
+ * from an even starter beat one game from a better one, so who a team plays
+ * this week is part of what a manager is picking. The previous cap existed to
+ * neutralise exactly that; scheduling is now a thing to be good at instead.
  *
  * Takes any queryable rather than the pool, for the same reason `claimPlayer`
  * does: a caller already inside a transaction — `settlePlayoffs` scoring
@@ -73,29 +95,39 @@ export async function scorePeriod(
     [fantasyTeamId, configId, from, to, asOf ?? null],
   );
 
+  // Every started game counts, so `counted` is now always true. It stays on the
+  // row because the screens still ask each game whether it scored, and because
+  // a game that did not count is exactly what an IR or bench slot produces.
   const games: CountedGame[] = rows.map((r) => ({
     playerId: Number(r.player_id),
     playerName: r.name,
     playedOn: r.played_on,
     slot: r.slot,
     score: Number(r.score),
-    counted: false,
+    counted: true,
   }));
 
-  const bestByPlayer = new Map<number, CountedGame>();
+  const byPlayer = new Map<number, PlayerWeek>();
   for (const g of games) {
-    const best = bestByPlayer.get(g.playerId);
-    if (!best || g.score > best.score) bestByPlayer.set(g.playerId, g);
+    const held = byPlayer.get(g.playerId);
+    if (held === undefined) {
+      byPlayer.set(g.playerId, {
+        playerId: g.playerId, playerName: g.playerName, slot: g.slot,
+        games: 1, total: g.score,
+      });
+      continue;
+    }
+    held.games += 1;
+    held.total += g.score;
   }
-  const ranked = [...bestByPlayer.values()].sort((a, b) => b.score - a.score);
-  for (const g of ranked.slice(0, settings.gamesCap)) g.counted = true;
 
   return {
     fantasyTeamId,
-    total: games.filter((g) => g.counted).reduce((a, g) => a + g.score, 0),
+    total: games.reduce((a, g) => a + g.score, 0),
     gamesPlayed: games.length,
-    gamesCounted: Math.min(bestByPlayer.size, settings.gamesCap),
+    gamesCounted: games.length,
     games,
+    players: [...byPlayer.values()].sort((a, b) => b.total - a.total),
   };
 }
 

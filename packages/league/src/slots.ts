@@ -7,9 +7,13 @@ export interface LeagueSettings {
   bench: number;
   ir: number;
   /**
-   * Most games a team may start in one scoring period. College schedules are
-   * uneven — some teams play twice a week, some once — so without a cap the
-   * matchup is decided by whose players happened to have a heavier slate.
+   * Dead as a rule, kept as a record.
+   *
+   * A period is now the sum of what its starters scored in it, so nothing reads
+   * this to decide a score and it is no longer editable. It stays on the type
+   * because `settleWeek` snapshots the whole settings object onto every matchup
+   * it settles: weeks settled under the old cap still carry the number they
+   * were scored under, and dropping the field would make those rows unreadable.
    */
   gamesCap: number;
   periodDays: number;

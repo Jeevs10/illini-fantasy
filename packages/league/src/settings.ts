@@ -23,19 +23,22 @@ import { DEFAULT_SETTINGS, type LeagueSettings, type Slot } from "./slots.ts";
  *     FAAB budget. A limit below a roster somebody already holds, or a budget
  *     below what somebody already spent, is not a rule — it is a league in a
  *     state it has no way to reach. Those are refused, naming the team.
- *   - **One that is scoring, and used to rewrite history.** The games cap
- *     decides which started games count. It used to re-score every already-
- *     settled week the moment it moved, in the same transaction, because
- *     `matchup` had nowhere of its own to say what it had actually been
- *     scored under. Now it does: `settleWeek`/`settlePlayoffs` snapshot the
- *     scoring config and the settings onto the row the moment it settles, so
- *     a settled score simply has nothing left to rewrite. Moving the cap now
- *     only ever affects a week not yet settled.
+ *   - **Ones that are scoring, and could rewrite history.** These used to
+ *     re-score every already-settled week the moment they moved, in the same
+ *     transaction, because `matchup` had nowhere of its own to say what it had
+ *     actually been scored under. Now it does: `settleWeek`/`settlePlayoffs`
+ *     snapshot the scoring config and the settings onto the row the moment it
+ *     settles, so a settled score has nothing left to rewrite.
+ *
+ * The games cap used to be the third kind and is no longer editable at all: a
+ * period is the sum of what its starters scored in it, so there is no cap left
+ * to set. Settled matchups still carry the one they were scored under, which is
+ * what lets an old week keep reading the way it read at the time.
  */
 
 /** The settings that are a single whole number. */
 export type NumericSetting =
-  | "bench" | "ir" | "gamesCap" | "periodDays" | "faabBudget"
+  | "bench" | "ir" | "periodDays" | "faabBudget"
   | "waiverHour" | "waiverDays" | "tradeOfferDays" | "tradeReviewHours"
   | "playoffTeams" | "playoffStartWeek" | "playoffRoundWeeks";
 
@@ -66,12 +69,6 @@ export const SETTING_FIELDS: SettingField[] = [
   {
     key: "ir", label: "Injured reserve", min: 0, max: 5, unit: "players",
     help: "Seats that never score and never have to be filled.",
-  },
-  {
-    key: "gamesCap", label: "Games cap", min: 1, max: 40, unit: "games",
-    help: "Most started games that count in one scoring period. College " +
-      "schedules are uneven, and without a cap the matchup goes to whoever " +
-      "happened to draw the heavier slate.",
   },
   {
     key: "periodDays", label: "Scoring period", min: 1, max: 14, unit: "days",
@@ -163,7 +160,7 @@ export interface SettingsContext {
   largestRoster: { fantasyTeamId: number; teamName: string; size: number } | null;
   /** The most FAAB anybody has already spent, and who. */
   mostSpent: { fantasyTeamId: number; teamName: string; spent: number } | null;
-  /** Weeks already settled. Each keeps the cap and config it settled under. */
+  /** Weeks already settled. Each keeps the settings and config it settled under. */
   settledWeeks: number;
   /** Whether a schedule exists, which is what freezes the scoring period. */
   scheduleDrawn: boolean;
@@ -467,15 +464,6 @@ export async function updateSettings(
       [leagueId, JSON.stringify(after)]);
 
     const notes: string[] = [];
-    // `settleWeek`/`settlePlayoffs` snapshot the cap onto a matchup the moment
-    // it settles, so an already-settled week has nothing left for this change
-    // to touch — only a week not yet settled sees the new number.
-    if (moved.has("gamesCap") && context.settledWeeks > 0) {
-      notes.push(
-        `${context.settledWeeks} settled week${context.settledWeeks === 1 ? "" : "s"} ` +
-        `keep${context.settledWeeks === 1 ? "s" : ""} the score settled under. The new cap ` +
-        "applies the next time a week is settled.");
-    }
     // Everything already in flight carries the moment it was created with,
     // because that moment is stored on the row rather than derived on read —
     // which is the only reason a sealed bid can be sealed at all.

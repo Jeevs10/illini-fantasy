@@ -77,9 +77,10 @@ test("only started players count, and the bench never does", async () => {
     `bench leaked in: ${period.total} vs ${expected}`);
 });
 
-test("the games cap keeps the best games, not the earliest", async () => {
+test("every started game counts, however many a starter plays", async () => {
   await db.query("DELETE FROM lineup_entry WHERE fantasy_team_id = 2");
-  // 12 started games across the week, worth more than the 9-game cap allows.
+  // 12 started games across the week — more than the old 9-game cap allowed.
+  // All twelve count now: a period is the sum of what its starters did in it.
   const days = ["2026-11-02", "2026-11-03", "2026-11-04"];
   let player = 1;
   for (const day of days) {
@@ -94,19 +95,26 @@ test("the games cap keeps the best games, not the earliest", async () => {
     fantasyTeamId: 2, configId, from: "2026-11-02", to: "2026-11-08",
   });
   assert.equal(period.gamesPlayed, 12);
-  assert.equal(period.gamesCounted, DEFAULT_SETTINGS.gamesCap);
+  assert.equal(period.gamesCounted, 12, "nothing is dropped");
+  assert.ok(period.games.every((g) => g.counted));
 
-  const counted = period.games.filter((g) => g.counted).map((g) => g.score);
-  const dropped = period.games.filter((g) => !g.counted).map((g) => g.score);
-  assert.ok(Math.min(...counted) >= Math.max(...dropped),
-    "a dropped game outscored a counted one — the cap is taking the wrong games");
+  const expected = period.games.reduce((a, g) => a + g.score, 0);
+  assert.ok(Math.abs(period.total - expected) < 1e-9,
+    "the total is the plain sum of every started game");
+
+  // And the cap setting no longer has any say in it.
+  const capped = await scorePeriod(db, {
+    fantasyTeamId: 2, configId, from: "2026-11-02", to: "2026-11-08",
+    settings: { ...DEFAULT_SETTINGS, gamesCap: 2 },
+  });
+  assert.ok(Math.abs(capped.total - period.total) < 1e-9,
+    "a cap of 2 scores the same as a cap of 9 — the cap is not a scoring rule");
 });
 
-test("a starter who played once is not crowded out by another starter's hot week", async () => {
-  // Player 12 starts three nights, player 1 starts one — both are started
-  // players all week, but under the old "pool every game, keep the top N"
-  // rule, player 12's three high-scoring nights alone would fill a cap of
-  // two and player 1's night would count for nothing despite having played.
+test("a starter's week is his own games added up", async () => {
+  // Player 12 starts three nights, player 1 starts one. Both are starters all
+  // week, so player 12 contributes all three of his games and player 1 his
+  // one — nobody is crowded out, and nobody's extra games are discarded.
   for (const day of ["2026-11-02", "2026-11-03", "2026-11-04"]) {
     await db.query(
       `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot)
@@ -118,18 +126,21 @@ test("a starter who played once is not crowded out by another starter's hot week
 
   const period = await scorePeriod(db, {
     fantasyTeamId: 3, configId, from: "2026-11-02", to: "2026-11-08",
-    settings: { ...DEFAULT_SETTINGS, gamesCap: 2 },
   });
 
   assert.equal(period.gamesPlayed, 4);
-  assert.equal(period.gamesCounted, 2);
-  const player1Game = period.games.find((g) => g.playerId === 1)!;
-  assert.ok(player1Game.counted, "player 1's only game of the week should count");
-  assert.equal(
-    period.games.filter((g) => g.playerId === 12 && g.counted).length, 1,
-    "only one of player 12's three games — his best — should compete for the cap",
-  );
-  assert.ok(Math.abs(period.total - (player1Game.score + scoreOf(22))) < 1e-9);
+  assert.equal(period.gamesCounted, 4);
+
+  const twelve = period.players.find((p) => p.playerId === 12)!;
+  assert.equal(twelve.games, 3, "all three of his nights are his");
+  const hisGames = period.games.filter((g) => g.playerId === 12);
+  assert.ok(Math.abs(twelve.total - hisGames.reduce((a, g) => a + g.score, 0)) < 1e-9,
+    "his week is the sum of those three nights");
+
+  const one = period.players.find((p) => p.playerId === 1)!;
+  assert.equal(one.games, 1);
+  assert.ok(Math.abs(period.total - (twelve.total + one.total)) < 1e-9,
+    "the team total is its starters' weeks added together");
 });
 
 test("settling a week is re-runnable and does not double-count", async () => {

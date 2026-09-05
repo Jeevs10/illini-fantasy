@@ -1607,6 +1607,21 @@ summary.capline .chev {
 }
 details[open] > summary.capline .chev { transform: rotate(90deg); }
 
+/* A starter's week, openable for the nights it is made of. The summary IS the
+   player row, so the closed state is an ordinary list and the disclosure costs
+   no extra chrome; the nights inside are indented to read as evidence for the
+   number above them rather than as more starters. */
+.wk > summary { cursor: pointer; list-style: none; }
+.wk > summary::marker, .wk > summary::-webkit-details-marker { display: none; }
+.wk > summary:hover { background: var(--surface-2); }
+.wk[open] > summary { border-bottom: 1px solid var(--line-soft); }
+.wk[open] > summary .plr-name { color: var(--accent-ink); }
+.wk > .plr {
+  padding-left: var(--s-6);
+  background: color-mix(in srgb, var(--sunken) 45%, transparent);
+}
+.wk > .plr .plr-name { font-weight: 500; color: var(--ink-2); }
+
 /* ---- the bracket ------------------------------------------------------ */
 
 /* Columns of rounds, each round's matches centred in the space its round

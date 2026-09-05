@@ -68,7 +68,7 @@ export interface TeamOutlook extends TeamPeriod {
   upcoming: number;
   /**
    * Where the period lands if every pending game scores its projection —
-   * the best `gamesCap` of what is scored plus what is expected.
+   * everything scored so far plus everything still expected, summed.
    */
   projected: number;
 }
@@ -80,22 +80,6 @@ export function gameState(
   if (game.score !== null) return "final";
   if (game.tipoff !== null && new Date(game.tipoff) <= now) return "live";
   return "upcoming";
-}
-
-/**
- * Where the period lands if every pending game scores its projection — each
- * player's own best value this week, played or projected, ranked against
- * every other starter's best and cut off at `cap`. Mirrors `scorePeriod`'s
- * per-player cap exactly, so a live total never implies a different rule than
- * the one the week actually settles under.
- */
-function bestPerPlayer(entries: { playerId: number; value: number }[], cap: number): number {
-  const byPlayer = new Map<number, number>();
-  for (const { playerId, value } of entries) {
-    const best = byPlayer.get(playerId);
-    if (best === undefined || value > best) byPlayer.set(playerId, value);
-  }
-  return [...byPlayer.values()].sort((a, b) => b - a).slice(0, cap).reduce((a, b) => a + b, 0);
 }
 
 interface FrozenStarter { name: string; slot: string }
@@ -298,18 +282,35 @@ export async function periodOutlook(
 
   const live = pending.filter((g) => g.tipoff !== null && new Date(g.tipoff) <= now).length;
 
+  // Mirrors `scorePeriod` exactly, which is the whole requirement: a live
+  // total must never imply a different rule than the one the week settles
+  // under. Both are now a plain sum over every started game, so a projection
+  // is the same arithmetic with the unplayed nights filled in from form.
+  const projected = scored.total + pending.reduce((a, g) => a + g.projected, 0);
+
+  // Each starter's week as it currently stands: what he has banked, plus what
+  // his remaining nights are expected to add.
+  const players = new Map(scored.players.map((p) => [p.playerId, { ...p }]));
+  for (const g of pending) {
+    const held = players.get(g.playerId);
+    if (held === undefined) {
+      players.set(g.playerId, {
+        playerId: g.playerId, playerName: g.playerName, slot: g.slot,
+        games: 0, total: 0, projected: g.projected,
+      });
+      continue;
+    }
+    held.projected = (held.projected ?? held.total) + g.projected;
+  }
+  for (const p of players.values()) p.projected ??= p.total;
+
   return {
     ...scored,
     pending,
     live,
     upcoming: pending.length - live,
-    projected: bestPerPlayer(
-      [
-        ...scored.games.map((g) => ({ playerId: g.playerId, value: g.score })),
-        ...pending.map((g) => ({ playerId: g.playerId, value: g.projected })),
-      ],
-      settings.gamesCap,
-    ),
+    projected,
+    players: [...players.values()].sort((a, b) => (b.projected ?? b.total) - (a.projected ?? a.total)),
   };
 }
 

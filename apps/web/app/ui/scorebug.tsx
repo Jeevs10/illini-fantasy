@@ -21,7 +21,6 @@ export interface BugSide {
   total: number;
   /** Where the week lands if the pending games score their projections. */
   projected: number;
-  gamesCounted: number;
   gamesPlayed: number;
   live: number;
   upcoming: number;
@@ -35,9 +34,9 @@ const span = (from: string, to: string) =>
   `${MONTHDAY.format(new Date(`${from}T00:00:00Z`))} – ${MONTHDAY.format(new Date(`${to}T00:00:00Z`))}`;
 
 export function ScoreBug({
-  week, startsOn, endsOn, settled, gamesCap, home, away, href, today,
+  week, startsOn, endsOn, settled, home, away, href, today,
 }: {
-  week: number; startsOn: string; endsOn: string; settled: boolean; gamesCap: number;
+  week: number; startsOn: string; endsOn: string; settled: boolean;
   home: BugSide; away: BugSide; href?: string;
   /** The date the app treats as today — what makes a week past, current, or ahead. */
   today: string;
@@ -88,7 +87,6 @@ export function ScoreBug({
           : ahead ? <span className="pill ghost">Scheduled</span>
           : remaining > 0 ? <span className="pill ghost">In progress</span>
           : <span className="pill ghost">Scheduled</span>}
-        <span className="pill ghost">Best {gamesCap} count</span>
       </div>
 
       <div className="scorebug-body">
@@ -126,7 +124,7 @@ export function ScoreBug({
           )}
         </div>
         <div className="scorebug-legend">
-          <span>{unplayed ? "" : `${left.gamesCounted} of ${left.gamesPlayed} count`}</span>
+          <span>{unplayed ? "" : `${left.gamesPlayed} game${left.gamesPlayed === 1 ? "" : "s"}`}</span>
           <span style={{ color: "var(--ink-2)", textAlign: "center", fontWeight: 700 }}>
             {/*
               * Before a week starts there is no lead to report, only a
@@ -149,7 +147,7 @@ export function ScoreBug({
               : `${margin > 0 ? "Leading" : "Trailing"} by ${Math.abs(margin).toFixed(1)}`}
             {remaining > 0 ? ` · ${remaining} to play` : ""}
           </span>
-          <span>{unplayed ? "" : `${right.gamesCounted} of ${right.gamesPlayed} count`}</span>
+          <span>{unplayed ? "" : `${right.gamesPlayed} game${right.gamesPlayed === 1 ? "" : "s"}`}</span>
         </div>
         {href ? (
           <Link className="button sm" href={href} style={{ justifySelf: "center", marginTop: "var(--s-2)" }}>
