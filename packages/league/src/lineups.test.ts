@@ -195,3 +195,75 @@ test("a started player carries the game he was started for", async () => {
     assert.equal(Number(row.game_id), Number(row.player_id) <= 5 ? 1 : 2);
   }
 });
+
+/** A score cannot exist without the stat line it was scored from. */
+async function fileLine(playerId: number, day: string, points: number): Promise<void> {
+  await db.query(
+    `INSERT INTO player_game_stat (player_id, played_on, season, role, minutes, stats, source)
+     VALUES ($1,$2,2026,$3,30,'{}'::jsonb,'torvik')
+     ON CONFLICT (player_id, played_on) DO NOTHING`,
+    [playerId, day, ROLES[playerId - 1]]);
+  await writeScores(db, configId, day,
+    [{ ...scoreLine(line(playerId, points, ROLES[playerId - 1]!), GAME_CONFIG, 1), playedOn: day }]);
+}
+
+test("a filed box score locks a player the clock has not reached yet", async () => {
+  // Player 9 is Purdue: his game tips at 10:30pm ET, and at 8pm the clock says
+  // he has not started. But his line has already been filed — scores are
+  // ingested a whole day at a time, so a finished game's box score can land
+  // before a pinned clock reaches its tip-off. Believing only the clock here is
+  // what left a played, scored starter still swappable on the live site.
+  await fileLine(9, DAY, 24);
+
+  const startable = await startableOn(db,
+    { fantasyTeamId: 1, day: DAY, configId, now: BETWEEN_TIPS });
+  const nine = startable.find((s) => s.playerId === 9)!;
+  assert.ok(nine.tipoff !== null && new Date(nine.tipoff) > BETWEEN_TIPS,
+    "the clock genuinely has not reached his tip-off");
+  assert.ok(nine.locked, "a player with a filed box score has played, whatever the clock says");
+  assert.ok(!startable.find((s) => s.playerId === 10)!.locked,
+    "his team-mate has no line filed and has not tipped off, so he is still free");
+
+  await assert.rejects(
+    () => setLineup(db, {
+      fantasyTeamId: 1, day: DAY, configId, now: BETWEEN_TIPS,
+      entries: [{ playerId: 9, slot: nine.slot === "BENCH" ? "FLEX" : "BENCH" }],
+    }),
+    (error: Error) => error instanceof LineupLockedError,
+    "the server refuses the move, not just the screen");
+
+  await db.query("DELETE FROM player_game_score WHERE played_on = $1 AND player_id = 9", [DAY]);
+  await db.query("DELETE FROM player_game_stat WHERE played_on = $1 AND player_id = 9", [DAY]);
+});
+
+test("a night already behind us is locked whether or not anything was filed", async () => {
+  // Nobody filed a line and no tip-off has to be consulted: the night is over.
+  const nextWeek = new Date("2026-11-17T12:00:00Z");
+  const startable = await startableOn(db,
+    { fantasyTeamId: 1, day: DAY, configId, now: nextWeek });
+  assert.ok(startable.every((s) => s.locked), "a past night cannot be re-set");
+
+  const started = startable.find((s) => s.slot !== "BENCH" && s.slot !== "IR")!;
+  await assert.rejects(
+    () => setLineup(db, {
+      fantasyTeamId: 1, day: DAY, configId, now: nextWeek,
+      entries: [{ playerId: started.playerId, slot: "BENCH" }],
+    }),
+    (error: Error) => error instanceof LineupLockedError);
+});
+
+test("a score dated after today locks nothing — that is the season's future", async () => {
+  // The database holds the whole season, so a game a week out already has a
+  // line in it. Browsing forward to that night must still be editable.
+  const ahead = "2026-11-24";
+  await db.query(
+    `INSERT INTO game (id, played_on, season, home_team_id, away_team_id, tipoff)
+     VALUES (90, $1, 2026, 1, 3, $2)`, [ahead, `${ahead}T23:00:00Z`]);
+  await fileLine(1, ahead, 30);
+
+  const startable = await startableOn(db,
+    { fantasyTeamId: 1, day: ahead, configId, now: BEFORE_TIP });
+  assert.ok(startable.length > 0, "the night is on the schedule");
+  assert.ok(startable.every((s) => !s.locked),
+    "a night that has not arrived is open, however much the database knows about it");
+});

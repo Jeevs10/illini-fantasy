@@ -19,6 +19,17 @@ import { scorePeriod, standings, type StandingsRow, type TeamPeriod } from "./se
  * wrong in exactly the way the rest of the app already is, which is the only
  * honest kind of projection to show.
  *
+ * Everything here is answered as of a single night — `now`'s date. Two
+ * questions that look the same are not: "has a box score been filed?" and "has
+ * this game happened?" A database can hold the whole season at once, so a game
+ * three weeks out can have a filed score sitting in it. Reading that score
+ * would show a manager next month's result; refusing to project *because* the
+ * score exists leaves the same matchup reading 0.0. So a night after `now` is
+ * projected from form and its score is never read, and a night before `now` is
+ * over — a starter with no box score that night did not play, which is zero
+ * points, not a game still to come. Only tonight is genuinely in between, and
+ * only tonight is decided by comparing tip-off to the clock.
+ *
  * A night nobody has set a lineup for yet — most of a week still to come —
  * has no `lineup_entry` row to read a slot from. Rather than call that "no
  * game" and let the projection go quiet exactly where it matters most, such a
@@ -154,8 +165,8 @@ async function currentStarters(
  * one whose real team plays that night.
  */
 async function pendingForCurrentStarters(
-  db: Db, { fantasyTeamId, configId, from, to, starters }: {
-    fantasyTeamId: number; configId: number; from: string; to: string;
+  db: Db, { fantasyTeamId, configId, from, to, today, starters }: {
+    fantasyTeamId: number; configId: number; from: string; to: string; today: string;
     starters: Map<number, FrozenStarter>;
   },
 ): Promise<PendingGame[]> {
@@ -177,19 +188,27 @@ async function pendingForCurrentStarters(
          LEFT JOIN team opp
            ON opp.id = CASE WHEN g.home_team_id = p.team_id THEN g.away_team_id ELSE g.home_team_id END
          LEFT JOIN LATERAL (
+           -- Form is what is known *now*, not what the season will know by the
+           -- night in question: averaging up to a future game date would price
+           -- that game off results nobody has seen yet.
            SELECT avg(sc.score) AS projected FROM player_game_score sc
-            WHERE sc.player_id = p.id AND sc.config_id = $2 AND sc.played_on < g.played_on
+            WHERE sc.player_id = p.id AND sc.config_id = $2
+              AND sc.played_on < LEAST(g.played_on, $6::date)
          ) form ON true
         WHERE p.id = ANY($3::bigint[])
           AND g.played_on BETWEEN $4 AND $5
-          AND s.score IS NULL
+          -- A filed score only settles a night that has actually arrived. On a
+          -- night still ahead of us the score is the season's own future and
+          -- must not stop the projection, or a week the database already holds
+          -- the answer to reads as nothing to play for.
+          AND (s.score IS NULL OR g.played_on > $6)
           AND NOT EXISTS (
             SELECT 1 FROM lineup_entry le
              WHERE le.fantasy_team_id = $1 AND le.played_on = g.played_on
           )
         ORDER BY p.id, g.played_on, g.tipoff NULLS LAST
      ) t`,
-    [fantasyTeamId, configId, playerIds, from, to],
+    [fantasyTeamId, configId, playerIds, from, to, today],
   );
 
   return rows.map((r) => {
@@ -213,7 +232,8 @@ export async function periodOutlook(
     settings?: LeagueSettings; now?: Date;
   },
 ): Promise<TeamOutlook> {
-  const scored = await scorePeriod(db, { fantasyTeamId, configId, from, to, settings });
+  const today = now.toISOString().slice(0, 10);
+  const scored = await scorePeriod(db, { fantasyTeamId, configId, from, to, settings, asOf: today });
 
   const { rows } = await db.query<{
     player_id: string; name: string; played_on: string; slot: string;
@@ -237,14 +257,21 @@ export async function periodOutlook(
        LEFT JOIN LATERAL (
          SELECT avg(sc.score) AS projected
            FROM player_game_score sc
-          WHERE sc.player_id = l.player_id AND sc.config_id = $2 AND sc.played_on < l.played_on
+          WHERE sc.player_id = l.player_id AND sc.config_id = $2
+            AND sc.played_on < LEAST(l.played_on, $5::date)
        ) form ON true
       WHERE l.fantasy_team_id = $1
         AND l.played_on BETWEEN $3 AND $4
         AND l.slot NOT IN ('BENCH', 'IR')
-        AND s.score IS NULL
+        -- Tonight and later only. A started night already behind us is over
+        -- whatever the box score says: a starter with no line that night did
+        -- not play, and a DNP is zero points, not a game still to come. Left
+        -- pending it would read as "live" for the rest of the season and hold
+        -- a finished week open behind it.
+        AND l.played_on >= $5
+        AND (s.score IS NULL OR l.played_on > $5)
       ORDER BY sched.tipoff NULLS LAST, p.name`,
-    [fantasyTeamId, configId, from, to],
+    [fantasyTeamId, configId, from, to, today],
   );
 
   const decided: PendingGame[] = rows.map((r) => ({
@@ -257,10 +284,9 @@ export async function periodOutlook(
     projected: r.projected === null ? 0 : Number(r.projected),
   }));
 
-  const today = now.toISOString().slice(0, 10);
   const frozen = today > to ? [] : await currentStarters(db, { fantasyTeamId, configId, settings, now })
     .then((starters) => pendingForCurrentStarters(db, {
-      fantasyTeamId, configId, from: today > from ? today : from, to, starters,
+      fantasyTeamId, configId, from: today > from ? today : from, to, today, starters,
     }));
 
   const pending = [...decided, ...frozen].sort((a, b) => {

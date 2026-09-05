@@ -24,8 +24,15 @@ export interface Startable {
 }
 
 export class LineupLockedError extends Error {
-  constructor(readonly playerId: number, readonly tipoff: string) {
-    super(`player ${playerId} tipped off at ${tipoff} and can no longer be moved`);
+  /**
+   * `tipoff` is null for a night that locked without a clock to point at — one
+   * already in the past, or a game whose box score arrived before its scheduled
+   * tip-off did. The lock is the same; only the explanation differs.
+   */
+  constructor(readonly playerId: number, readonly tipoff: string | null) {
+    super(tipoff === null
+      ? `player ${playerId} has already played and can no longer be moved`
+      : `player ${playerId} tipped off at ${tipoff} and can no longer be moved`);
     this.name = "LineupLockedError";
   }
 }
@@ -64,6 +71,7 @@ export async function startableOn(
     primary_color: string | null; secondary_color: string | null;
     game_id: string; tipoff: Date | null; opponent: string | null;
     opponent_strength: number | null; projected: number | null; slot: Slot | null;
+    score: number | null;
   }>(
     `WITH roster AS (
        SELECT r.player_id, p.name, p.team_id
@@ -95,7 +103,7 @@ export async function startableOn(
               WHERE st.player_id = roster.player_id AND st.role IS NOT NULL
               ORDER BY st.played_on DESC LIMIT 1) AS role,
             own.primary_color, own.secondary_color,
-            l.slot
+            l.slot, filed.score
        FROM roster
        JOIN tonight ON tonight.team_id = roster.team_id
        LEFT JOIN form ON form.player_id = roster.player_id
@@ -109,6 +117,9 @@ export async function startableOn(
        ) rating ON true
        LEFT JOIN lineup_entry l
          ON l.fantasy_team_id = $1 AND l.played_on = $2 AND l.player_id = roster.player_id
+       LEFT JOIN player_game_score filed
+         ON filed.player_id = roster.player_id AND filed.played_on = $2
+        AND filed.config_id = $3
       ORDER BY form.projected DESC NULLS LAST, roster.name`,
     [fantasyTeamId, day, configId],
   );
@@ -120,8 +131,20 @@ export async function startableOn(
   // UPDATE command cannot affect row a second time". A lineup slot is one row
   // per player per night, so he is one entry here too — the earlier tip-off,
   // because that is the one whose clock locks him.
+  // A night before this one is over, whatever else the row says.
+  const today = now.toISOString().slice(0, 10);
+  const nightIsPast = day < today;
+
   const byPlayer = new Map<number, Startable>();
   for (const r of rows) {
+    const tipped = r.tipoff !== null && r.tipoff <= now;
+    // A filed box score is the game itself saying it is over, and it outranks
+    // the clock: scores can be ingested a whole day at a time, so a finished
+    // game's line can land before a pinned clock reaches its tip-off. Believing
+    // only the clock there leaves a played, scored starter still swappable —
+    // the exact move the lock exists to refuse. A score dated after today is
+    // the season's future rather than this night's result, so it locks nothing.
+    const played = r.score !== null && day <= today;
     const startable: Startable = {
       playerId: Number(r.player_id),
       name: r.name,
@@ -135,7 +158,7 @@ export async function startableOn(
       opponentStrength: r.opponent_strength === null ? null : Number(r.opponent_strength),
       projected: r.projected === null ? 0 : Number(r.projected),
       slot: r.slot ?? "BENCH",
-      locked: r.tipoff !== null && r.tipoff <= now,
+      locked: nightIsPast || tipped || played,
     };
     const held = byPlayer.get(startable.playerId);
     if (held === undefined) { byPlayer.set(startable.playerId, startable); continue; }
@@ -186,7 +209,7 @@ export async function setLineup(
   for (const player of startable) {
     const to = desired.get(player.playerId) ?? player.slot;
     if (player.locked && to !== player.slot) {
-      throw new LineupLockedError(player.playerId, player.tipoff!);
+      throw new LineupLockedError(player.playerId, player.tipoff);
     }
   }
 

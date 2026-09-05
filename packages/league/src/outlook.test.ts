@@ -166,3 +166,37 @@ test("a past night nobody ever set a lineup for is not retroactively simulated",
   assert.equal(outlook.pending.length, 0, "a settled gap in the past is not invented after the fact");
   assert.equal(outlook.projected, 0);
 });
+
+test("a week the database already has the answer to is still projected, not revealed", async () => {
+  // The whole season's box scores can sit in the table at once — a backfill, or
+  // a finished season replayed a night at a time. A matchup a week out must
+  // read as a forecast built from form so far, not as the result nobody is
+  // supposed to have seen yet, and not as 0.0 because a score happens to exist.
+  const ahead = "2026-11-20";
+  for (const id of [1, 2, 3]) {
+    await db.query(
+      `INSERT INTO player_game_stat (player_id, played_on, season, role, minutes, stats, source)
+       VALUES ($1,$2,2026,$3,30,'{}'::jsonb,'torvik')
+       ON CONFLICT (player_id, played_on) DO NOTHING`, [id, ahead, ROLES[id]]);
+  }
+  // Deliberately enormous, so leaking it into the projection would be obvious.
+  await writeScores(db, configId, ahead, [1, 2, 3].map((id) => ({
+    ...scoreLine(line(id, 99, ROLES[id]!), GAME_CONFIG, 1), playedOn: ahead,
+  })));
+
+  const now = new Date("2026-11-13T00:00:00Z"); // a week before that night
+  const outlook = await periodOutlook(db, {
+    fantasyTeamId: 1, configId, from: ahead, to: ahead, settings: SETTINGS, now,
+  });
+
+  assert.equal(outlook.gamesPlayed, 0, "a night still ahead has been played by nobody");
+  assert.ok(outlook.pending.length > 0, "and is still projected, filed score or not");
+  assert.ok(outlook.projected > 0, "a future week is a forecast, never a flat 0.0");
+
+  const leaked = scoreOf(1, 99);
+  assert.ok(outlook.pending.every((p) => Math.abs(p.projected - leaked) > 1e-9),
+    "the projection is form so far, not the result the table already holds");
+
+  await db.query("DELETE FROM player_game_score WHERE played_on = $1", [ahead]);
+  await db.query("DELETE FROM player_game_stat WHERE played_on = $1", [ahead]);
+});

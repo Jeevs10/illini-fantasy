@@ -39,9 +39,19 @@ export interface TeamPeriod {
  */
 export async function scorePeriod(
   db: Queryable,
-  { fantasyTeamId, configId, from, to, settings = DEFAULT_SETTINGS }: {
+  { fantasyTeamId, configId, from, to, settings = DEFAULT_SETTINGS, asOf }: {
     fantasyTeamId: number; configId: number; from: string; to: string;
     settings?: LeagueSettings;
+    /**
+     * The last night whose box scores may be read, when one applies.
+     *
+     * A database can hold the whole season's scores at once — a backfill, or a
+     * finished season being replayed a night at a time — and a screen pinned to
+     * a date inside that range must not read the ones dated after it. Without
+     * the cap, a matchup two weeks out shows its real result. Settlement passes
+     * nothing here: a week being settled is a week that has happened.
+     */
+    asOf?: string;
   },
 ): Promise<TeamPeriod> {
   const { rows } = await db.query<{
@@ -58,8 +68,9 @@ export async function scorePeriod(
       WHERE l.fantasy_team_id = $1
         AND l.played_on BETWEEN $3 AND $4
         AND l.slot NOT IN ('BENCH', 'IR')
+        AND ($5::date IS NULL OR l.played_on <= $5)
       ORDER BY l.played_on`,
-    [fantasyTeamId, configId, from, to],
+    [fantasyTeamId, configId, from, to, asOf ?? null],
   );
 
   const games: CountedGame[] = rows.map((r) => ({

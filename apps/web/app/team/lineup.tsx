@@ -27,6 +27,25 @@ export interface LineupPlayer extends Startable {
   availability?: PlayerAvailability;
 }
 
+/**
+ * A rostered player whose real team is not playing tonight.
+ *
+ * He has no game, so no slot, no tip-off and no projection — but he is still on
+ * the roster, and a manager scanning the bench for cover should find him there
+ * rather than in a second list further down the page. Kept as its own type
+ * because he has no `Startable` to stand on: there is no game to be startable
+ * for, and inventing one would put him in the auto-fill's pool.
+ */
+export interface OffNightPlayer {
+  playerId: number;
+  name: string;
+  role: string | null;
+  teamName: string | null;
+  primaryColor: string | null;
+  availability?: PlayerAvailability;
+  acquiredVia: string;
+}
+
 interface SlotRow { key: string; slot: Slot; player: LineupPlayer | null }
 
 /**
@@ -63,13 +82,16 @@ function buildSlots(startable: LineupPlayer[], settings: LeagueSettings): SlotRo
 }
 
 export function Lineup({
-  day, startable, settings, eligible,
+  day, startable, settings, eligible, offNight = [], isToday = true,
 }: {
   day: string;
   startable: LineupPlayer[];
   settings: LeagueSettings;
   /** Slots each player may take, resolved on the server from their archetype. */
   eligible: Record<number, Slot[]>;
+  /** Rostered players with no game tonight — shown on the bench, scoring nothing. */
+  offNight?: OffNightPlayer[];
+  isToday?: boolean;
 }) {
   const [state, submitMove] = useActionState<LineupState, FormData>(moveToSlot, {});
   const [fillState, submitFill, filling] = useActionState<LineupState, FormData>(autoFill, {});
@@ -133,12 +155,12 @@ export function Lineup({
       </div>
 
       <div className="subhead">
-        <h3>Bench — {bench.length}</h3>
+        <h3>Bench — {bench.length + offNight.length}</h3>
         {missed.length > 0 ? (
           <span className="pill crit">{missedPoints.toFixed(1)} left on the bench</span>
         ) : null}
       </div>
-      {bench.length === 0 ? (
+      {bench.length + offNight.length === 0 ? (
         <p className="seatless">Everyone with a game tonight is starting.</p>
       ) : (
         <div className="lineup">
@@ -148,6 +170,14 @@ export function Lineup({
               eligible={eligible[player.playerId] ?? []}
               submit={submitMove} onBench revision={latest.at ?? 0}
             />
+          ))}
+          {/*
+            * Below the players who could have started: same bench, but these
+            * had no game to be started for. Ordering them last keeps the ones a
+            * manager can still act on at the top.
+            */}
+          {offNight.map((player) => (
+            <OffNightRow key={player.playerId} player={player} isToday={isToday} />
           ))}
         </div>
       )}
@@ -238,6 +268,64 @@ function Row({
             </SlotSelect>
           </form>
         )}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * A bench row for a player with no game.
+ *
+ * Deliberately the same row as everyone else's — same rail, same columns — so
+ * the bench reads as one list. What differs is what the columns can honestly
+ * say: no opponent, no tip-off, and a score of 0.0, which is what he will
+ * contribute tonight. There is no move control because there is no move: a
+ * player cannot be started into a game his team is not playing.
+ */
+function OffNightRow({ player, isToday }: { player: OffNightPlayer; isToday: boolean }) {
+  return (
+    <div
+      className="lineup-row" data-state="offnight"
+      data-rail={player.primaryColor ? true : undefined}
+      style={player.primaryColor ? { ["--rail" as string]: player.primaryColor } : undefined}
+    >
+      <span className="slot" data-slot="BENCH">BN</span>
+
+      <span className="plr-id">
+        <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
+          <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
+          <RoleTag role={player.role} />
+          <AvailabilityTag status={player.availability?.status} injury={player.availability?.injury} compact />
+        </span>
+        <span className="lineup-mobilemeta">
+          <span>{player.teamName ?? "—"}</span>
+          <span className="dot" />
+          <span>No game</span>
+        </span>
+      </span>
+
+      {/* There is no opponent, so the column says so — the player's own team
+        * goes in the sub-line, where it reads as context rather than as the
+        * side he is up against. */}
+      <span className="lineup-when">
+        <span className="op">—</span>
+        <span className="st">{player.teamName ?? "not scheduled"}</span>
+      </span>
+
+      <span className="lineup-when">
+        <span className="num" style={{ fontSize: "var(--t-sm)" }}>—</span>
+        <span className="st">no game</span>
+      </span>
+
+      <span className="lineup-proj">
+        <Score value={0} size="xs" tone="quiet" />
+        <span className="cap" style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--ink-3)" }}>
+          pts
+        </span>
+      </span>
+
+      <span className="lineup-act">
+        <span className="pill ghost">{isToday ? "No game tonight" : "No game"}</span>
       </span>
     </div>
   );

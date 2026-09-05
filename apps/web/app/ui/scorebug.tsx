@@ -35,10 +35,12 @@ const span = (from: string, to: string) =>
   `${MONTHDAY.format(new Date(`${from}T00:00:00Z`))} – ${MONTHDAY.format(new Date(`${to}T00:00:00Z`))}`;
 
 export function ScoreBug({
-  week, startsOn, endsOn, settled, gamesCap, home, away, href,
+  week, startsOn, endsOn, settled, gamesCap, home, away, href, today,
 }: {
   week: number; startsOn: string; endsOn: string; settled: boolean; gamesCap: number;
   home: BugSide; away: BugSide; href?: string;
+  /** The date the app treats as today — what makes a week past, current, or ahead. */
+  today: string;
 }) {
   const [left, right] = away.mine ? [away, home] : [home, away];
 
@@ -51,10 +53,15 @@ export function ScoreBug({
 
   const sum = left.total + right.total;
   const share = sum === 0 ? 50 : (left.total / sum) * 100;
-  // Nothing played and nothing pending: a week the schedule holds and the
-  // season never reached. A 50/50 bar and a "winner" would both be lies.
+  const ahead = startsOn > today;
+  const over = endsOn < today;
+  // Nothing played, nothing pending, and the week is behind us: the schedule
+  // held it and the season never filled it in. A 50/50 bar and a "winner"
+  // would both be lies. A week still ahead is not this — it has projections
+  // to show — and calling it "never played" was the bug that made every
+  // future matchup read 0.0.
   const unplayed = sum === 0 && remaining === 0
-    && left.gamesPlayed === 0 && right.gamesPlayed === 0;
+    && left.gamesPlayed === 0 && right.gamesPlayed === 0 && !ahead;
   const margin = left.mine || right.mine ? (left.mine ? left : right).total - (left.mine ? right : left).total : null;
 
   // From projected finals rather than totals-so-far — the model's whole point
@@ -66,9 +73,19 @@ export function ScoreBug({
       <div className="scorebug-top">
         <span className="eyebrow">Week {week}</span>
         <span className="eyebrow" style={{ color: "var(--ink-2)" }}>{span(startsOn, endsOn)}</span>
-        {liveNow > 0 ? <LiveTag label={`${liveNow} playing`} />
+        {/*
+          * Settled first, and a week whose last night has passed second. A
+          * settled week is final by definition, and one that is simply over is
+          * final in every way a manager cares about — waiting on a box score
+          * that never came for a player who did not dress is not "in progress".
+          * Ranking a live badge above those is what left a November week
+          * reading "2 playing" in January.
+          */}
+        {settled ? <span className="pill">Final</span>
           : unplayed ? <span className="pill ghost">Not played</span>
-          : settled ? <span className="pill">Final</span>
+          : over ? <span className="pill">Final</span>
+          : liveNow > 0 ? <LiveTag label={`${liveNow} playing`} />
+          : ahead ? <span className="pill ghost">Scheduled</span>
           : remaining > 0 ? <span className="pill ghost">In progress</span>
           : <span className="pill ghost">Scheduled</span>}
         <span className="pill ghost">Best {gamesCap} count</span>
@@ -111,8 +128,21 @@ export function ScoreBug({
         <div className="scorebug-legend">
           <span>{unplayed ? "" : `${left.gamesCounted} of ${left.gamesPlayed} count`}</span>
           <span style={{ color: "var(--ink-2)", textAlign: "center", fontWeight: 700 }}>
+            {/*
+              * Before a week starts there is no lead to report, only a
+              * forecast — so the margin is quoted off the projections, and
+              * said to be one.
+              */}
             {unplayed
               ? "This week was never played"
+              : ahead && sum === 0
+              ? (() => {
+                  const gap = (left.mine ? left : right).projected - (left.mine ? right : left).projected;
+                  const [front, back] = left.projected >= right.projected ? [left, right] : [right, left];
+                  return margin === null
+                    ? `${front.name} projected by ${(front.projected - back.projected).toFixed(1)}`
+                    : `Projected ${gap >= 0 ? "ahead" : "behind"} by ${Math.abs(gap).toFixed(1)}`;
+                })()
               : margin === null
               ? decided ? `${leftLeads ? left.name : right.name} by ${Math.abs(left.total - right.total).toFixed(1)}` : "Level"
               : margin === 0 ? "Level"

@@ -1308,6 +1308,10 @@ select:disabled { opacity: .5; cursor: not-allowed; }
 .lineup-row[data-state="live"]  { background: color-mix(in srgb, var(--live-wash) 50%, transparent); }
 .lineup-row[data-state="empty"] { background: color-mix(in srgb, var(--warn-wash) 55%, transparent); }
 .lineup-row[data-state="missed"] { background: color-mix(in srgb, var(--crit-wash) 45%, transparent); }
+/* No game tonight: on the roster, but nothing to decide — recede, do not alarm. */
+.lineup-row[data-state="offnight"] { background: transparent; }
+.lineup-row[data-state="offnight"] .plr-name { color: var(--ink-2); }
+.lineup-row[data-state="offnight"] .op { color: var(--ink-2); font-weight: 500; }
 @media (min-width: 760px) {
   .lineup-row { grid-template-columns: 3.2rem minmax(8rem, 1.35fr) minmax(0, .95fr) 5.5rem 4.5rem 9rem; }
 }

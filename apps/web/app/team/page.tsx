@@ -5,12 +5,11 @@ import {
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
-import { Lineup, type LineupPlayer } from "./lineup.tsx";
+import { Lineup, type LineupPlayer, type OffNightPlayer } from "./lineup.tsx";
 import { DayStrip, label, window7 } from "./daystrip.tsx";
 import { NextLock } from "./nextlock.tsx";
 import { Avatar } from "../ui/identity.tsx";
-import { AvailabilityTag, Empty, LiveTag, Score } from "../ui/bits.tsx";
-import { Dot, PlayerRow } from "../ui/playerrow.tsx";
+import { Empty, LiveTag, Score } from "../ui/bits.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +58,19 @@ export default async function TeamPage({
     };
   });
 
+  // Rostered, but their real team is not playing this night. They belong on
+  // the bench with everyone else who is not scoring — scoring zero, because
+  // that is what a player with no game scores.
   const idle = roster.filter((p) => !startable.some((s) => s.playerId === p.playerId));
+  const offNight: OffNightPlayer[] = idle.map((p) => ({
+    playerId: p.playerId,
+    name: p.name,
+    role: p.role,
+    teamName: p.teamName,
+    primaryColor: p.primaryColor,
+    availability: availability.get(p.playerId),
+    acquiredVia: p.acquiredVia,
+  }));
 
   const starters = players.filter((p) => p.slot !== "BENCH" && p.slot !== "IR");
   const liveNow = starters.filter((p) => p.state === "live").length;
@@ -124,50 +135,17 @@ export default async function TeamPage({
           </div>
         </div>
 
-        {players.length === 0 ? (
+        {players.length === 0 && idle.length === 0 ? (
           <Empty title={`Nobody plays ${isToday ? "tonight" : "that night"}`} glyph="clock">
             College schedules are uneven — most of a week&rsquo;s slate lands on
             Saturday, and a Thursday can be nearly empty for a roster of
             major-conference players. Try another night above.
           </Empty>
         ) : (
-          <Lineup day={day} startable={players} settings={settings} eligible={eligible} />
-        )}
-      </div>
-
-      <div className="panel">
-        <div className="panel-head">
-          <h2>Rest of the roster</h2>
-          <span className="pill">{idle.length}</span>
-        </div>
-        {idle.length === 0 ? (
-          <Empty title="Everyone has a game" glyph="check">
-            Every player on the roster is scheduled {isToday ? "tonight" : "that night"}.
-          </Empty>
-        ) : (
-          idle.map((player) => (
-            <PlayerRow
-              key={player.playerId}
-              playerId={player.playerId}
-              name={player.name}
-              rail={player.primaryColor}
-              meta={
-                <>
-                  <span>{player.teamName ?? "—"}</span>
-                  {player.role ? <><Dot /><span>{player.role}</span></> : null}
-                </>
-              }
-              right={
-                <>
-                  <AvailabilityTag
-                    status={availability.get(player.playerId)?.status}
-                    injury={availability.get(player.playerId)?.injury}
-                  />
-                  <span className="pill ghost">{player.acquiredVia.replace("_", " ")}</span>
-                </>
-              }
-            />
-          ))
+          <Lineup
+            day={day} startable={players} settings={settings} eligible={eligible}
+            offNight={offNight} isToday={isToday}
+          />
         )}
       </div>
     </>

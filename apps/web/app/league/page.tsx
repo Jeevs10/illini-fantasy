@@ -16,6 +16,7 @@ export default async function LeaguePage({
   const viewer = await requireViewer();
   const { leagueId, configId, settings, fantasyTeamId } = viewer.membership;
   const now = viewNow();
+  const today = viewDate();
 
   const [matchups, season] = await Promise.all([
     weekMatchups(db, {
@@ -74,7 +75,7 @@ export default async function LeaguePage({
           <div className="rise" style={{ marginBottom: "var(--s-5)" }}>
             <ScoreBug
               week={mine.week} startsOn={mine.startsOn} endsOn={mine.endsOn}
-              settled={mine.settled} gamesCap={settings.gamesCap}
+              settled={mine.settled} gamesCap={settings.gamesCap} today={today}
               home={bug(mine.home.fantasyTeamId, mine.home.name, outlooks[0], fantasyTeamId)}
               away={bug(mine.away.fantasyTeamId, mine.away.name, outlooks[1], fantasyTeamId)}
             />
