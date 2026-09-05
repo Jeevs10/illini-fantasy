@@ -6,6 +6,13 @@ import {
 import { GAME_CONFIG, type BlockName } from "@illini/scoring";
 import { Avatar } from "../../ui/identity.tsx";
 import { AvailabilityTag, Bar, Empty, Score, StatTile } from "../../ui/bits.tsx";
+
+/** "83rd", "1st" — English ordinals, for a percentile read as a rank rather
+    than a fraction. */
+function ordinal(n: number): string {
+  const suffix = ["th", "st", "nd", "rd"][(n % 100 - (n % 10)) !== 10 ? n % 10 : 0] ?? "th";
+  return `${n}${suffix}`;
+}
 import { RankTrendChart } from "../../ui/charts.tsx";
 import type { PlayerCardData } from "./data.ts";
 
@@ -161,13 +168,32 @@ export function Overview({ card, rankTrend, projection }: {
   );
 }
 
-/** BOX / SHOOTING / ADVANCED, each a table of season averages with a
-    percentile bar against everyone who played the same role this season. */
+/** The percentile as a compact read, e.g. "83rd pct" — a rank against role
+    peers, without a bar's geometry to render it. */
+function PercentileNote({ pct }: { pct?: StatPercentile }) {
+  if (!pct) return null;
+  const rank = Math.round(pct.percentile * 100);
+  return <>{ordinal(rank)} pct</>;
+}
+
+/**
+ * BOX / SHOOTING / ADVANCED, against everyone who played the same role this
+ * season.
+ *
+ * Box is the handful of headline counting stats a reader actually leads
+ * with, so it gets a KPI row — one cube per stat, the percentile as its
+ * caption. Shooting and advanced are a dozen-odd rate and model stats nobody
+ * scans as a group of five-word headlines; a table reads all of them at once
+ * without competing for cube-sized space. Neither uses a bar: a percentile
+ * is a rank, not a share of a whole, and a number reads faster than
+ * eyeballing a fill against a track.
+ */
 export function SeasonAveragesSection({
   averages, percentileOf,
 }: {
   averages: StatAverages; percentileOf: Map<StatKey, StatPercentile>;
 }) {
+  const [boxGroup, ...rateGroups] = STAT_GROUPS;
   return (
     <div className="panel">
       <div className="panel-head">
@@ -176,32 +202,43 @@ export function SeasonAveragesSection({
           <p>Per-game, against everyone who played the same role this season.</p>
         </div>
       </div>
+
+      {boxGroup ? (
+        <>
+          <div className="panel-body" style={{ paddingBottom: 0 }}>
+            <span className="eyebrow">{boxGroup.label}</span>
+          </div>
+          <div className="tiles">
+            {boxGroup.stats.map((stat) => (
+              <StatTile
+                key={stat}
+                label={STAT_LABEL[stat]}
+                value={formatStat(stat, averages[stat])}
+                note={<PercentileNote pct={percentileOf.get(stat)} />}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+
       <div className="panel-body" style={{ display: "grid", gap: "var(--s-5)" }}>
-        {STAT_GROUPS.map((group) => (
+        {rateGroups.map((group) => (
           <div key={group.label}>
             <span className="eyebrow">{group.label}</span>
             <div className="scroll">
               <table>
                 <tbody>
-                  {group.stats.map((stat) => {
-                    const pct = percentileOf.get(stat);
-                    return (
-                      <tr key={stat}>
-                        <td style={{ whiteSpace: "nowrap" }}>{STAT_LABEL[stat]}</td>
-                        <td className="r" style={{ fontFamily: "var(--f-mono)" }}>
-                          {formatStat(stat, averages[stat])}
-                        </td>
-                        <td style={{ width: "40%" }}>
-                          {pct ? (
-                            <Bar
-                              percent={pct.percentile * 100}
-                              label={`${STAT_LABEL[stat]}, ${Math.round(pct.percentile * 100)}th percentile at this role`}
-                            />
-                          ) : null}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {group.stats.map((stat) => (
+                    <tr key={stat}>
+                      <td style={{ whiteSpace: "nowrap" }}>{STAT_LABEL[stat]}</td>
+                      <td className="r" style={{ fontFamily: "var(--f-mono)" }}>
+                        {formatStat(stat, averages[stat])}
+                      </td>
+                      <td className="r faint" style={{ fontSize: "var(--t-xs)", whiteSpace: "nowrap" }}>
+                        <PercentileNote pct={percentileOf.get(stat)} />
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
