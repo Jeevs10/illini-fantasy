@@ -76,6 +76,48 @@ function roundLabel(round: string | null, bracket: string | null): string | null
  * Inside a season this changes nothing: a date the schedule covers still wins
  * on the first clause.
  */
+/**
+ * The scoring period a date falls in, with its bounds.
+ *
+ * The lineup is set for the period, so every screen that lets a manager set
+ * one has to agree with settlement about where the period starts and ends —
+ * which means reading it off the same `matchup` rows settlement reads.
+ */
+export async function periodContaining(
+  db: Db, leagueId: number, on: string,
+): Promise<{ week: number; startsOn: string; endsOn: string } | null> {
+  const { rows } = await db.query<{ week: number; starts_on: string; ends_on: string }>(
+    `SELECT m.week,
+            to_char(m.starts_on,'YYYY-MM-DD') AS starts_on,
+            to_char(m.ends_on,'YYYY-MM-DD') AS ends_on
+       FROM matchup m
+      WHERE m.league_id = $1
+      ORDER BY (m.starts_on <= $2::date AND m.ends_on >= $2::date) DESC,
+               abs(m.starts_on - $2::date)
+      LIMIT 1`,
+    [leagueId, on],
+  );
+  const row = rows[0];
+  return row === undefined ? null
+    : { week: row.week, startsOn: row.starts_on, endsOn: row.ends_on };
+}
+
+/** One period by its week number, for a screen that navigates week to week. */
+export async function periodForWeek(
+  db: Db, leagueId: number, week: number,
+): Promise<{ week: number; startsOn: string; endsOn: string } | null> {
+  const { rows } = await db.query<{ week: number; starts_on: string; ends_on: string }>(
+    `SELECT m.week,
+            to_char(m.starts_on,'YYYY-MM-DD') AS starts_on,
+            to_char(m.ends_on,'YYYY-MM-DD') AS ends_on
+       FROM matchup m WHERE m.league_id = $1 AND m.week = $2 LIMIT 1`,
+    [leagueId, week],
+  );
+  const row = rows[0];
+  return row === undefined ? null
+    : { week: row.week, startsOn: row.starts_on, endsOn: row.ends_on };
+}
+
 async function weekContaining(
   db: Db, leagueId: number, on: string,
 ): Promise<{ week: number } | null> {

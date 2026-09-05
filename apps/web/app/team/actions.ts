@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   InvalidLineupError, LineupLockedError, NotOnRosterError,
-  autoFillDay, setLineup, type Slot,
+  autoFillPeriod, setPeriodLineup, type Slot,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewNow } from "../../lib/session.ts";
@@ -35,11 +35,12 @@ function humanise(error: InvalidLineupError, settings: { bench: number }): strin
 }
 
 /**
- * Moves one player into one slot.
+ * Moves one player into one slot, for the whole scoring period.
  *
  * A single move rather than a whole-lineup submit, because the payload is a
  * patch: naming only what changed is what keeps a stale page from benching
- * someone who tipped off while it was open.
+ * someone who started playing while it was open. The move applies to every
+ * night of the period he plays — a lineup is a decision about the week.
  */
 export async function moveToSlot(
   _state: LineupState, formData: FormData,
@@ -48,18 +49,22 @@ export async function moveToSlot(
   const { fantasyTeamId, configId, settings } = viewer.membership;
   if (fantasyTeamId === null) return { error: "You do not manage a team in this league.", at: Date.now() };
 
-  const day = String(formData.get("day") ?? "");
+  const from = String(formData.get("from") ?? "");
+  const to = String(formData.get("to") ?? "");
   const playerId = Number(formData.get("playerId"));
   const slot = String(formData.get("slot") ?? "") as Slot;
 
   try {
-    await setLineup(db, {
-      fantasyTeamId, day, configId, settings, now: viewNow(),
+    await setPeriodLineup(db, {
+      fantasyTeamId, from, to, configId, settings, now: viewNow(),
       entries: [{ playerId, slot }],
     });
   } catch (error) {
     if (error instanceof LineupLockedError) {
-      return { error: "That game has tipped off — the slot is locked for the night.", at: Date.now() };
+      return {
+        error: "He has already played this week — his slot is set until the week turns over.",
+        at: Date.now(),
+      };
     }
     if (error instanceof InvalidLineupError) {
       return { error: humanise(error, settings), at: Date.now() };
@@ -82,8 +87,10 @@ export async function autoFill(
   const { fantasyTeamId, configId, settings } = viewer.membership;
   if (fantasyTeamId === null) return { error: "You do not manage a team in this league.", at: Date.now() };
 
-  const day = String(formData.get("day") ?? "");
-  const result = await autoFillDay(db, { fantasyTeamId, day, configId, settings, now: viewNow() });
+  const from = String(formData.get("from") ?? "");
+  const to = String(formData.get("to") ?? "");
+  const result = await autoFillPeriod(db,
+    { fantasyTeamId, from, to, configId, settings, now: viewNow() });
   revalidatePath("/team");
 
   const started = result.entries.filter((e) => e.slot !== "BENCH" && e.slot !== "IR").length;

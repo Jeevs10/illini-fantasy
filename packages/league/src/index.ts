@@ -6,6 +6,7 @@ export * from "./membership.ts";
 export * from "./accounts.ts";
 export * from "./roster.ts";
 export * from "./lineups.ts";
+export * from "./periodlineup.ts";
 export * from "./draft.ts";
 export * from "./waivers.ts";
 export * from "./trades.ts";

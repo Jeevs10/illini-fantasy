@@ -1,28 +1,32 @@
 import Link from "next/link";
 import {
-  availabilityFor, eligibleSlots, gameState, rosterLimit, rosterOn, scoresOn, slateByDay,
-  startableOn, type Slot,
+  availabilityFor, eligibleSlots, periodContaining, periodForWeek, rosterLimit, rosterOn,
+  seasonWeeks, slateByDay, startableInPeriod, type Slot,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Lineup, type LineupPlayer, type OffNightPlayer } from "./lineup.tsx";
-import { DayStrip, label, window7 } from "./daystrip.tsx";
+import { buildSlots } from "./slots.ts";
+import { DayStrip, window7 } from "./daystrip.tsx";
 import { NextLock } from "./nextlock.tsx";
 import { Avatar } from "../ui/identity.tsx";
 import { Empty, LiveTag, Score } from "../ui/bits.tsx";
 
 export const dynamic = "force-dynamic";
 
+const SPAN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const span = (from: string, to: string) =>
+  `${SPAN.format(new Date(`${from}T00:00:00Z`))} – ${SPAN.format(new Date(`${to}T00:00:00Z`))}`;
+
 export default async function TeamPage({
   searchParams,
-}: { searchParams: Promise<{ date?: string }> }) {
-  const { date } = await searchParams;
+}: { searchParams: Promise<{ date?: string; week?: string }> }) {
+  const { date, week } = await searchParams;
   const viewer = await requireViewer();
-  const { fantasyTeamId, fantasyTeamName, settings, configId, leagueName } = viewer.membership;
+  const { leagueId, fantasyTeamId, fantasyTeamName, settings, configId, leagueName } = viewer.membership;
   const day = viewDate(date);
   const today = viewDate();
   const now = viewNow();
-  const isToday = day === today;
 
   if (fantasyTeamId === null) {
     return (
@@ -36,11 +40,31 @@ export default async function TeamPage({
     );
   }
 
+  // The lineup is a decision about the scoring period, so the page is about the
+  // period the browsed date falls in rather than about the date itself — and
+  // can be navigated week to week, since a week ahead is a lineup you can
+  // legitimately be setting now.
+  const [period, season] = await Promise.all([
+    week ? periodForWeek(db, leagueId, Number(week)) : periodContaining(db, leagueId, day),
+    seasonWeeks(db, leagueId),
+  ]);
+  if (period === null) {
+    return (
+      <div className="panel">
+        <Empty title="No schedule yet" glyph="matchup">
+          This league has no matchups, so there is no week to set a lineup for.
+          A commissioner generates the schedule once every team has an owner.
+        </Empty>
+      </div>
+    );
+  }
+
   const { from, to } = window7(today);
-  const [startable, roster, scores, slate] = await Promise.all([
-    startableOn(db, { fantasyTeamId, day, configId, now }),
-    rosterOn(db, fantasyTeamId, day),
-    scoresOn(db, { fantasyTeamId, day, configId }),
+  const [starters, roster, slate] = await Promise.all([
+    startableInPeriod(db, {
+      fantasyTeamId, from: period.startsOn, to: period.endsOn, configId, now,
+    }),
+    rosterOn(db, fantasyTeamId, today),
     slateByDay(db, { fantasyTeamId, from, to }),
   ]);
   const availability = await availabilityFor(db, roster.map((p) => p.playerId));
@@ -48,20 +72,16 @@ export default async function TeamPage({
   // Eligibility is resolved here rather than in the browser: it comes from the
   // role Torvik assigned, so the two cannot disagree.
   const eligible: Record<number, Slot[]> = {};
-  for (const player of startable) eligible[player.playerId] = eligibleSlots(player.role);
+  for (const player of starters) eligible[player.playerId] = eligibleSlots(player.role);
 
-  const players: LineupPlayer[] = startable.map((p) => {
-    const score = scores.get(p.playerId) ?? null;
-    return {
-      ...p, score, state: gameState({ tipoff: p.tipoff, score }, now),
-      availability: availability.get(p.playerId),
-    };
-  });
+  const players: LineupPlayer[] = starters.map((p) => ({
+    ...p, availability: availability.get(p.playerId),
+  }));
 
-  // Rostered, but their real team is not playing this night. They belong on
-  // the bench with everyone else who is not scoring — scoring zero, because
-  // that is what a player with no game scores.
-  const idle = roster.filter((p) => !startable.some((s) => s.playerId === p.playerId));
+  // Rostered, but their real team plays nothing this week. They belong on the
+  // bench with everyone else who is not scoring — scoring zero, because that
+  // is what a player with no games scores.
+  const idle = roster.filter((p) => !starters.some((s) => s.playerId === p.playerId));
   const offNight: OffNightPlayer[] = idle.map((p) => ({
     playerId: p.playerId,
     name: p.name,
@@ -72,15 +92,26 @@ export default async function TeamPage({
     acquiredVia: p.acquiredVia,
   }));
 
-  const starters = players.filter((p) => p.slot !== "BENCH" && p.slot !== "IR");
-  const liveNow = starters.filter((p) => p.state === "live").length;
-  const scored = starters.reduce((a, p) => a + (p.score ?? 0), 0);
-  const projected = starters.reduce((a, p) => a + (p.score ?? p.projected), 0);
+  // Totalled from the same slot assignment the table draws, not from "whose
+  // slot is not BENCH". Legacy rows written a night at a time can leave more
+  // players holding a starting slot than there are slots, and the two readings
+  // then disagree on one screen.
+  const started = buildSlots(players, settings)
+    .map((r) => r.player)
+    .filter((p): p is LineupPlayer => p !== null);
+  const scored = started.reduce((a, p) => a + p.scored, 0);
+  const projected = started.reduce((a, p) => a + p.projected, 0);
+  const liveNow = started.filter((p) => p.games.some(
+    (g) => g.score === null && g.tipoff !== null && new Date(g.tipoff) <= now)).length;
 
-  // The earliest game not yet under way — the deadline the page is really about.
+  // The earliest game that has not started, across every player who can still
+  // be moved — the deadline the page is really about.
   const next = players
-    .filter((p) => !p.locked && p.tipoff !== null)
+    .filter((p) => !p.locked)
+    .flatMap((p) => p.games.filter((g) => g.score === null && g.tipoff !== null))
     .sort((a, b) => a.tipoff!.localeCompare(b.tipoff!))[0];
+
+  const isThisWeek = today >= period.startsOn && today <= period.endsOn;
 
   return (
     <>
@@ -96,10 +127,16 @@ export default async function TeamPage({
             </p>
           </div>
         </div>
-        <div className="controls">
+        <nav className="controls" aria-label="Week navigation">
+          {period.week > (season?.first ?? 1) ? (
+            <Link className="button" href={`/team?week=${period.week - 1}`}>← Week {period.week - 1}</Link>
+          ) : null}
+          {season !== null && period.week < season.last ? (
+            <Link className="button" href={`/team?week=${period.week + 1}`}>Week {period.week + 1} →</Link>
+          ) : null}
           <Link className="button" href="/waivers">Add or drop</Link>
           <Link className="button" href="/league">Matchup</Link>
-        </div>
+        </nav>
       </div>
 
       <DayStrip day={day} today={today} slate={slate} />
@@ -108,7 +145,9 @@ export default async function TeamPage({
         <div className="panel-head">
           <div className="row" style={{ gap: "var(--s-5)" }}>
             <div>
-              <div className="eyebrow">{isToday ? "Tonight" : label(day)}</div>
+              <div className="eyebrow">
+                Week {period.week} · {span(period.startsOn, period.endsOn)}
+              </div>
               <div className="row" style={{ gap: "var(--s-2)", marginTop: 2 }}>
                 <Score value={scored} size="md" />
                 {projected > scored + 0.05 ? (
@@ -126,25 +165,34 @@ export default async function TeamPage({
                 iso={next.tipoff!}
                 nowIso={now.toISOString()}
                 label={new Intl.DateTimeFormat("en-US", {
-                  hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
+                  weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
                 }).format(new Date(next.tipoff!))}
               />
             ) : players.length > 0 ? (
-              <span className="pill">Every game has tipped off</span>
+              <span className="pill">{isThisWeek ? "Every game has tipped off" : "Week complete"}</span>
             ) : null}
           </div>
         </div>
 
+        {/* One decision for the whole week: a starter is started for the period
+          * and everything he plays in it counts, so the page says so once
+          * rather than asking the same question again every night. */}
+        <p className="sethelp" style={{ padding: "0 var(--s-4) var(--s-3)" }}>
+          Set once for the week. Every game a starter plays between{" "}
+          {span(period.startsOn, period.endsOn)} counts, and each player locks
+          when he tips off for the first time.
+        </p>
+
         {players.length === 0 && idle.length === 0 ? (
-          <Empty title={`Nobody plays ${isToday ? "tonight" : "that night"}`} glyph="clock">
-            College schedules are uneven — most of a week&rsquo;s slate lands on
-            Saturday, and a Thursday can be nearly empty for a roster of
-            major-conference players. Try another night above.
+          <Empty title="Nobody plays this week" glyph="clock">
+            College schedules are uneven, and a roster can draw a week where
+            nothing lands. Try another week from the strip above.
           </Empty>
         ) : (
           <Lineup
-            day={day} startable={players} settings={settings} eligible={eligible}
-            offNight={offNight} isToday={isToday}
+            from={period.startsOn} to={period.endsOn}
+            startable={players} settings={settings} eligible={eligible}
+            offNight={offNight}
           />
         )}
       </div>

@@ -3,8 +3,11 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import type { GameState, LeagueSettings, PlayerAvailability, Slot, Startable } from "@illini/league";
+import type {
+  LeagueSettings, PeriodStarter, PlayerAvailability, Slot,
+} from "@illini/league";
 import { autoFill, moveToSlot, type LineupState } from "./actions.ts";
+import { buildSlots } from "./slots.ts";
 import { AvailabilityTag, RoleTag, Score } from "../ui/bits.tsx";
 
 /**
@@ -18,23 +21,25 @@ import { AvailabilityTag, RoleTag, Score } from "../ui/bits.tsx";
 const ET = new Intl.DateTimeFormat("en-US", {
   hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
 });
+const DAY = new Intl.DateTimeFormat("en-US", {
+  weekday: "short", month: "numeric", day: "numeric", timeZone: "UTC",
+});
 const time = (iso: string | null) => (iso === null ? "—" : ET.format(new Date(iso)));
+const dayOf = (ymd: string) => DAY.format(new Date(`${ymd}T00:00:00Z`));
 
-/** A player, plus what his night is doing. Resolved on the server. */
-export interface LineupPlayer extends Startable {
-  score: number | null;
-  state: GameState;
+/** A starter, plus the availability note the roster screens share. */
+export interface LineupPlayer extends PeriodStarter {
   availability?: PlayerAvailability;
 }
 
 /**
- * A rostered player whose real team is not playing tonight.
+ * A rostered player whose real team plays no game at all this week.
  *
- * He has no game, so no slot, no tip-off and no projection — but he is still on
- * the roster, and a manager scanning the bench for cover should find him there
- * rather than in a second list further down the page. Kept as its own type
- * because he has no `Startable` to stand on: there is no game to be startable
- * for, and inventing one would put him in the auto-fill's pool.
+ * He has no game, so no slot and no projection — but he is still on the roster,
+ * and a manager scanning the bench for cover should find him there rather than
+ * in a second list further down the page. Kept as its own type because he has
+ * no `PeriodStarter` to stand on: there is nothing to be startable for, and
+ * inventing a game would put him in the auto-fill's pool.
  */
 export interface OffNightPlayer {
   playerId: number;
@@ -45,8 +50,6 @@ export interface OffNightPlayer {
   availability?: PlayerAvailability;
   acquiredVia: string;
 }
-
-interface SlotRow { key: string; slot: Slot; player: LineupPlayer | null }
 
 /**
  * A `<select>` disabled only while its own form is submitting.
@@ -62,36 +65,17 @@ function SlotSelect(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} disabled={pending} />;
 }
 
-/**
- * The starting lineup as positions, not as a player list.
- *
- * The roster is what a manager owns; the lineup is what they set. Rendering the
- * roster sorted by projection with the slot in a column makes an unfilled
- * position invisible — the one thing they came to the page to check.
- */
-function buildSlots(startable: LineupPlayer[], settings: LeagueSettings): SlotRow[] {
-  const pool = [...startable];
-  const rows: SlotRow[] = [];
-  for (const { slot, count } of settings.starters) {
-    for (let i = 0; i < count; i += 1) {
-      const index = pool.findIndex((p) => p.slot === slot);
-      rows.push({ key: `${slot}-${i}`, slot, player: index < 0 ? null : pool.splice(index, 1)[0]! });
-    }
-  }
-  return rows;
-}
-
 export function Lineup({
-  day, startable, settings, eligible, offNight = [], isToday = true,
+  from, to, startable, settings, eligible, offNight = [],
 }: {
-  day: string;
+  from: string;
+  to: string;
   startable: LineupPlayer[];
   settings: LeagueSettings;
   /** Slots each player may take, resolved on the server from their archetype. */
   eligible: Record<number, Slot[]>;
-  /** Rostered players with no game tonight — shown on the bench, scoring nothing. */
+  /** Rostered players with no game this week — shown on the bench, scoring nothing. */
   offNight?: OffNightPlayer[];
-  isToday?: boolean;
 }) {
   const [state, submitMove] = useActionState<LineupState, FormData>(moveToSlot, {});
   const [fillState, submitFill, filling] = useActionState<LineupState, FormData>(autoFill, {});
@@ -106,21 +90,25 @@ export function Lineup({
   const started = new Set(slots.map((r) => r.player?.playerId).filter(Boolean));
   const bench = startable
     .filter((p) => !started.has(p.playerId))
-    .sort((a, b) => (a.tipoff ?? "~").localeCompare(b.tipoff ?? "~"));
+    .sort((a, b) => b.projected - a.projected);
 
   const open = slots.filter((r) => r.player === null).length;
   const everyoneLocked = startable.every((p) => p.locked);
-  const missed = bench.filter((p) => p.locked && p.state !== "upcoming");
-  const missedPoints = missed.reduce((a, p) => a + (p.score ?? p.projected), 0);
+  // Points sitting on the bench that the week can still be losing — a benched
+  // player who has already played is a decision that cost something, and one
+  // who has not is a decision that still can.
+  const missed = bench.filter((p) => p.projected > 0);
+  const missedPoints = missed.reduce((a, p) => a + p.projected, 0);
 
   return (
     <>
       <div className="subhead">
         <div className="row" style={{ gap: "var(--s-2)" }}>
           <form action={submitFill}>
-            <input type="hidden" name="day" value={day} />
+            <input type="hidden" name="from" value={from} />
+            <input type="hidden" name="to" value={to} />
             <button type="submit" disabled={filling || everyoneLocked} className={open > 0 ? "primary" : ""}>
-              {filling ? "Filling…" : "Auto-fill"}
+              {filling ? "Filling…" : "Auto-fill the week"}
             </button>
           </form>
           {open > 0
@@ -135,18 +123,18 @@ export function Lineup({
 
       <div className="lineup">
         <div className="lineup-head" aria-hidden="true">
-          <span>Slot</span><span>Player</span><span>Opponent</span><span>Tip-off ET</span><span className="r">Score</span><span>Move</span>
+          <span>Slot</span><span>Player</span><span>Games this week</span><span>Next</span><span className="r">Points</span><span>Move</span>
         </div>
         {slots.map((row) => (
           row.player === null ? (
             <EmptyRow
-              key={row.key} slot={row.slot} day={day}
+              key={row.key} slot={row.slot} from={from} to={to}
               bench={bench.filter((p) => !p.locked && (eligible[p.playerId] ?? []).includes(row.slot))}
               submit={submitMove}
             />
           ) : (
             <Row
-              key={row.key} player={row.player} slot={row.slot} day={day}
+              key={row.key} player={row.player} slot={row.slot} from={from} to={to}
               eligible={eligible[row.player.playerId] ?? []}
               submit={submitMove} revision={latest.at ?? 0}
             />
@@ -156,17 +144,17 @@ export function Lineup({
 
       <div className="subhead">
         <h3>Bench — {bench.length + offNight.length}</h3>
-        {missed.length > 0 ? (
-          <span className="pill crit">{missedPoints.toFixed(1)} left on the bench</span>
+        {missedPoints > 0 ? (
+          <span className="pill crit">{missedPoints.toFixed(1)} projected on the bench</span>
         ) : null}
       </div>
       {bench.length + offNight.length === 0 ? (
-        <p className="seatless">Everyone with a game tonight is starting.</p>
+        <p className="seatless">Everyone with a game this week is starting.</p>
       ) : (
         <div className="lineup">
           {bench.map((player) => (
             <Row
-              key={player.playerId} player={player} slot="BENCH" day={day}
+              key={player.playerId} player={player} slot="BENCH" from={from} to={to}
               eligible={eligible[player.playerId] ?? []}
               submit={submitMove} onBench revision={latest.at ?? 0}
             />
@@ -177,7 +165,7 @@ export function Lineup({
             * manager can still act on at the top.
             */}
           {offNight.map((player) => (
-            <OffNightRow key={player.playerId} player={player} isToday={isToday} />
+            <OffNightRow key={player.playerId} player={player} />
           ))}
         </div>
       )}
@@ -186,19 +174,20 @@ export function Lineup({
 }
 
 function Row({
-  player, slot, day, eligible, submit, revision, onBench = false,
+  player, slot, from, to, eligible, submit, revision, onBench = false,
 }: {
-  player: LineupPlayer; slot: Slot; day: string; eligible: Slot[];
+  player: LineupPlayer; slot: Slot; from: string; to: string; eligible: Slot[];
   submit: (formData: FormData) => void;
   /** Bumped on every answer, so a refused move snaps the control back. */
   revision: number;
   onBench?: boolean;
 }) {
+  const played = player.games.filter((g) => g.score !== null).length;
+  const next = player.games.find((g) => g.score === null) ?? null;
+  const live = next !== null && next.tipoff !== null && new Date(next.tipoff) <= new Date();
   // A locked starter is the good outcome. A locked bench player is the loss —
-  // those points are gone — so that is where the alarm belongs.
-  const rowState = player.state === "live" && !onBench ? "live"
-    : onBench && player.locked ? "missed"
-    : undefined;
+  // whatever he scored this week is gone — so that is where the alarm belongs.
+  const rowState = live && !onBench ? "live" : onBench && player.locked ? "missed" : undefined;
 
   return (
     <div
@@ -213,48 +202,55 @@ function Row({
           <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
           <RoleTag role={player.role} />
           <AvailabilityTag status={player.availability?.status} injury={player.availability?.injury} compact />
-          {player.state === "live" ? <span className="pill live"><span className="livedot" />Live</span> : null}
         </span>
         <span className="lineup-mobilemeta">
-          <span>{time(player.tipoff)} ET</span>
+          <span>{player.games.length} game{player.games.length === 1 ? "" : "s"}</span>
           <span className="dot" />
-          <span>{player.opponent ?? "TBD"}</span>
+          <span>{played} played</span>
         </span>
       </span>
 
+      {/* The week's slate, which is what a weekly lineup is picked against: a
+        * player with three games is worth more than an equal one with one. */}
       <span className="lineup-when">
-        <span className="op">{player.opponent ?? "—"}</span>
-        {player.opponentStrength !== null ? (
-          <span className="st">strength {player.opponentStrength.toFixed(2)}</span>
-        ) : null}
+        <span className="op">
+          {player.games.length} game{player.games.length === 1 ? "" : "s"}
+          {played > 0 ? ` · ${played} in` : ""}
+        </span>
+        <span className="st">
+          {player.games.map((g) => g.opponent ?? "TBD").join(", ") || "—"}
+        </span>
       </span>
 
       <span className="lineup-when">
         <span className="num" style={{ fontSize: "var(--t-sm)" }}>
-          {player.tipoff ? <time dateTime={player.tipoff}>{time(player.tipoff)}</time> : "—"}
+          {next === null ? "—" : dayOf(next.playedOn)}
         </span>
-        <span className="st">{player.state === "final" ? "final" : player.state === "live" ? "under way" : "ET"}</span>
+        <span className="st">
+          {next === null ? "week done" : next.tipoff === null ? "TBD" : `${time(next.tipoff)} ET`}
+        </span>
       </span>
 
       <span className="lineup-proj">
         <Score
-          value={player.score ?? player.projected}
+          value={player.scored}
           size="xs"
-          tone={player.score === null ? "quiet" : player.state === "live" ? "live" : "default"}
+          tone={played === 0 ? "quiet" : live ? "live" : "default"}
         />
         <span className="cap" style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--ink-3)" }}>
-          {player.score === null ? "proj" : "pts"}
+          {player.projected > player.scored + 0.05 ? `proj ${player.projected.toFixed(0)}` : "pts"}
         </span>
       </span>
 
       <span className="lineup-act">
         {player.locked ? (
           <span className={`pill${onBench ? " crit" : ""}`}>
-            {onBench ? `Missed ${(player.score ?? player.projected).toFixed(1)}` : "Locked"}
+            {onBench ? `Missed ${player.scored.toFixed(1)}` : "Locked"}
           </span>
         ) : (
           <form action={submit}>
-            <input type="hidden" name="day" value={day} />
+            <input type="hidden" name="from" value={from} />
+            <input type="hidden" name="to" value={to} />
             <input type="hidden" name="playerId" value={player.playerId} />
             <SlotSelect
               key={`${player.slot}-${revision}`}
@@ -274,15 +270,15 @@ function Row({
 }
 
 /**
- * A bench row for a player with no game.
+ * A bench row for a player with no game this week.
  *
  * Deliberately the same row as everyone else's — same rail, same columns — so
  * the bench reads as one list. What differs is what the columns can honestly
- * say: no opponent, no tip-off, and a score of 0.0, which is what he will
- * contribute tonight. There is no move control because there is no move: a
- * player cannot be started into a game his team is not playing.
+ * say: no games, no next tip-off, and a score of 0.0, which is what he will
+ * contribute. There is no move control because there is no move: a player
+ * cannot be started into games his team is not playing.
  */
-function OffNightRow({ player, isToday }: { player: OffNightPlayer; isToday: boolean }) {
+function OffNightRow({ player }: { player: OffNightPlayer }) {
   return (
     <div
       className="lineup-row" data-state="offnight"
@@ -300,21 +296,18 @@ function OffNightRow({ player, isToday }: { player: OffNightPlayer; isToday: boo
         <span className="lineup-mobilemeta">
           <span>{player.teamName ?? "—"}</span>
           <span className="dot" />
-          <span>No game</span>
+          <span>No games</span>
         </span>
       </span>
 
-      {/* There is no opponent, so the column says so — the player's own team
-        * goes in the sub-line, where it reads as context rather than as the
-        * side he is up against. */}
       <span className="lineup-when">
-        <span className="op">—</span>
+        <span className="op">No games</span>
         <span className="st">{player.teamName ?? "not scheduled"}</span>
       </span>
 
       <span className="lineup-when">
         <span className="num" style={{ fontSize: "var(--t-sm)" }}>—</span>
-        <span className="st">no game</span>
+        <span className="st">idle week</span>
       </span>
 
       <span className="lineup-proj">
@@ -325,16 +318,16 @@ function OffNightRow({ player, isToday }: { player: OffNightPlayer; isToday: boo
       </span>
 
       <span className="lineup-act">
-        <span className="pill ghost">{isToday ? "No game tonight" : "No game"}</span>
+        <span className="pill ghost">No games this week</span>
       </span>
     </div>
   );
 }
 
 function EmptyRow({
-  slot, day, bench, submit,
+  slot, from, to, bench, submit,
 }: {
-  slot: Slot; day: string; bench: LineupPlayer[];
+  slot: Slot; from: string; to: string; bench: LineupPlayer[];
   submit: (formData: FormData) => void;
 }) {
   return (
@@ -346,14 +339,15 @@ function EmptyRow({
         </span>
         <span className="plr-sub">
           {bench.length === 0
-            ? "Nobody on the bench can take this slot tonight."
+            ? "Nobody on the bench can take this slot this week."
             : `${bench.length} eligible on the bench`}
         </span>
       </span>
       <span className="lineup-act">
         {bench.length === 0 ? <span className="pill">—</span> : (
           <form action={submit}>
-            <input type="hidden" name="day" value={day} />
+            <input type="hidden" name="from" value={from} />
+            <input type="hidden" name="to" value={to} />
             <input type="hidden" name="slot" value={slot} />
             <SlotSelect
               name="playerId"
@@ -364,7 +358,7 @@ function EmptyRow({
               <option value="" disabled>Choose…</option>
               {bench.map((p) => (
                 <option key={p.playerId} value={p.playerId}>
-                  {p.name} · {p.projected.toFixed(1)}
+                  {p.name} · {p.games.length}g · {p.projected.toFixed(1)}
                 </option>
               ))}
             </SlotSelect>
