@@ -40,6 +40,18 @@ export interface PeriodGame {
   score: number | null;
   /** What form expects from this night, for the ones with no score. */
   projected: number;
+  /**
+   * Whether this particular night was started.
+   *
+   * Per night rather than per player because the two can disagree. A lineup set
+   * for the week starts a player on every night he plays, so they agree by
+   * construction — but a week whose lineups were set a night at a time can have
+   * started him on Monday and left him benched on Thursday, and Thursday's
+   * points did not count. Settlement reads exactly these rows, so anything that
+   * totals a week has to read them the same way or report a week that never
+   * happened.
+   */
+  started: boolean;
 }
 
 export interface PeriodStarter {
@@ -167,6 +179,9 @@ export async function startableInPeriod(
   );
 
   const byPlayer = new Map<number, PeriodStarter>();
+  // The first starting slot each player's nights name, kept as the rows go by
+  // so the slot does not have to be searched for again afterwards.
+  const slotOf = new Map<number, Slot>();
   for (const r of rows) {
     const playerId = Number(r.player_id);
     const projected = r.projected === null ? 0 : Number(r.projected);
@@ -178,7 +193,9 @@ export async function startableInPeriod(
       opponentStrength: r.opponent_strength === null ? null : Number(r.opponent_strength),
       score: r.score === null ? null : Number(r.score),
       projected,
+      started: r.slot !== null && r.slot !== "BENCH" && r.slot !== "IR",
     };
+    if (game.started && !slotOf.has(playerId)) slotOf.set(playerId, r.slot!);
 
     const held = byPlayer.get(playerId);
     if (held === undefined) {
@@ -189,10 +206,10 @@ export async function startableInPeriod(
         role: r.role,
         primaryColor: r.primary_color,
         secondaryColor: r.secondary_color,
-        // The period's slot is whatever his nights already say. They are
-        // written together, so the first one is as good as any — and a player
-        // with no row yet has not been picked, which is bench.
-        slot: r.slot ?? "BENCH",
+        // Resolved below from whichever nights say he started: a weekly
+        // lineup writes the same slot to all of them, but legacy nightly rows
+        // can start him on one night and bench him on the next.
+        slot: "BENCH",
         games: [game],
         scored: 0,
         projected: 0,
@@ -211,8 +228,20 @@ export async function startableInPeriod(
       ? (a.tipoff ?? "~").localeCompare(b.tipoff ?? "~")
       : a.playedOn.localeCompare(b.playedOn)));
 
-    starter.scored = starter.games.reduce((a, g) => a + (g.score ?? 0), 0);
-    starter.projected = starter.games.reduce((a, g) => a + (g.score ?? g.projected), 0);
+    // The slot he holds for the period is whichever starting slot his nights
+    // name. A player only ever benched — or with no row at all — has not been
+    // picked, which is bench.
+    starter.slot = slotOf.get(starter.playerId) ?? "BENCH";
+
+    // Banked: only nights he was actually started, which is precisely what
+    // `scorePeriod` counts. Summing every night he played instead would credit
+    // a legacy week with games nobody ever started him for, and this page would
+    // report a bigger week than the matchup screen scores.
+    starter.scored = starter.games.reduce((a, g) => a + (g.started ? (g.score ?? 0) : 0), 0);
+    // Forward-looking, so it takes the whole remaining slate: a lineup set for
+    // the period starts him on every night left in it.
+    starter.projected = starter.scored
+      + starter.games.reduce((a, g) => a + (g.score === null ? g.projected : 0), 0);
 
     // His first night is the one that freezes him. A filed score counts as
     // played whatever the clock says, for the same reason it does nightly:

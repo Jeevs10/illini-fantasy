@@ -87,9 +87,24 @@ export function Lineup({
   const bad = Boolean(latest.error);
 
   const slots = buildSlots(startable, settings);
-  const started = new Set(slots.map((r) => r.player?.playerId).filter(Boolean));
-  const bench = startable
-    .filter((p) => !started.has(p.playerId))
+  const placed = new Set(slots.map((r) => r.player?.playerId).filter(Boolean));
+  const rest = startable.filter((p) => !placed.has(p.playerId));
+
+  // Started, but with no slot row left to sit in.
+  //
+  // Only ever legacy data: a week whose lineups were set a night at a time can
+  // have more players holding a starting slot across the week than the league
+  // has slots — Tuesday's guard and Thursday's guard are two different people,
+  // and both rows say "G". They are starting and they are scoring, so they are
+  // shown here rather than dropped onto the bench, which would have this page
+  // quietly reporting a smaller week than the matchup screen scores. A week set
+  // through this page produces exactly the slots the league has, so this list
+  // is empty for anything set since.
+  const overflow = rest
+    .filter((p) => p.slot !== "BENCH" && p.slot !== "IR")
+    .sort((a, b) => b.projected - a.projected);
+  const bench = rest
+    .filter((p) => p.slot === "BENCH" || p.slot === "IR")
     .sort((a, b) => b.projected - a.projected);
 
   const open = slots.filter((r) => r.player === null).length;
@@ -141,6 +156,31 @@ export function Lineup({
           )
         ))}
       </div>
+
+      {overflow.length > 0 ? (
+        <>
+          <div className="subhead">
+            <h3>Also started this week — {overflow.length}</h3>
+            <span className="pill">
+              {overflow.reduce((a, p) => a + p.scored, 0).toFixed(1)} scored
+            </span>
+          </div>
+          <p className="seatless">
+            Set night by night, before lineups were weekly. These count for the
+            week — they are in the matchup total — but there is no slot left to
+            show them in. Setting this week&rsquo;s lineup replaces them.
+          </p>
+          <div className="lineup">
+            {overflow.map((player) => (
+              <Row
+                key={player.playerId} player={player} slot={player.slot} from={from} to={to}
+                eligible={eligible[player.playerId] ?? []}
+                submit={submitMove} revision={latest.at ?? 0}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
 
       <div className="subhead">
         <h3>Bench — {bench.length + offNight.length}</h3>

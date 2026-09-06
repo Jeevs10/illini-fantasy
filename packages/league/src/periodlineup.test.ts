@@ -225,3 +225,39 @@ test("what the week is set to is what the week scores", async () => {
   assert.equal(one.games, 2, "both of his nights are his");
   assert.ok(Math.abs(one.total - (scoreOf(1, 10) + scoreOf(1, 12))) < 1e-9);
 });
+
+test("a night that was not started does not count, however well he played", async () => {
+  // The legacy shape: lineups set a night at a time can start a player on one
+  // night and bench him on the next. Player 3 plays the 17th and the 20th; only
+  // the 17th was started. Reading his week as "every game he played" credits a
+  // night nobody started him for, and the team page then reports a bigger week
+  // than the matchup screen settles — which is what it did.
+  await db.query("DELETE FROM lineup_entry WHERE fantasy_team_id = 1");
+  await db.query(
+    `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot, game_id) VALUES
+       (1, '2026-11-17', 3, 'F', 1),
+       (1, '2026-11-20', 3, 'BENCH', 2)`);
+
+  const now = new Date("2026-11-23T12:00:00Z"); // after the period
+  const starters = await startableInPeriod(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, configId, now });
+  const three = starters.find((s) => s.playerId === 3)!;
+
+  assert.equal(three.games.length, 2, "he played twice");
+  assert.deepEqual(three.games.map((g) => g.started), [true, false],
+    "and was started for only the first");
+  assert.equal(three.slot, "F", "the slot he actually held");
+
+  const only = scoreOf(3, 7);
+  assert.ok(Math.abs(three.scored - only) < 1e-9,
+    `only the started night counts: ${three.scored} vs ${only}`);
+
+  // And the page total built from this agrees with what settlement scores.
+  const period = await scorePeriod(db,
+    { fantasyTeamId: 1, configId, from: FROM, to: TO, settings: SETTINGS });
+  const pageTotal = starters
+    .filter((s) => s.slot !== "BENCH" && s.slot !== "IR")
+    .reduce((a, s) => a + s.scored, 0);
+  assert.ok(Math.abs(pageTotal - period.total) < 1e-9,
+    `the team page and the matchup screen must report one week: ${pageTotal} vs ${period.total}`);
+});

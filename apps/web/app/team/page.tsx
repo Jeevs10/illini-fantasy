@@ -6,7 +6,6 @@ import {
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Lineup, type LineupPlayer, type OffNightPlayer } from "./lineup.tsx";
-import { buildSlots } from "./slots.ts";
 import { DayStrip, window7 } from "./daystrip.tsx";
 import { NextLock } from "./nextlock.tsx";
 import { Avatar } from "../ui/identity.tsx";
@@ -92,13 +91,11 @@ export default async function TeamPage({
     acquiredVia: p.acquiredVia,
   }));
 
-  // Totalled from the same slot assignment the table draws, not from "whose
-  // slot is not BENCH". Legacy rows written a night at a time can leave more
-  // players holding a starting slot than there are slots, and the two readings
-  // then disagree on one screen.
-  const started = buildSlots(players, settings)
-    .map((r) => r.player)
-    .filter((p): p is LineupPlayer => p !== null);
+  // Everyone in a starting slot, which is exactly what `scorePeriod` counts —
+  // so this header and the matchup screen cannot report different weeks. A
+  // legacy week can hold more starters than there are slots; the table shows
+  // those below the lineup rather than dropping them, because they scored.
+  const started = players.filter((p) => p.slot !== "BENCH" && p.slot !== "IR");
   const scored = started.reduce((a, p) => a + p.scored, 0);
   const projected = started.reduce((a, p) => a + p.projected, 0);
   const liveNow = started.filter((p) => p.games.some(
