@@ -1,6 +1,8 @@
 import type { Db } from "@illini/db";
 import { upsertScoringConfig, writeScores, type StoredScore } from "@illini/db";
-import { GAME_CONFIG, scoreLine, type PlayerLine, type ScoringConfig } from "@illini/scoring";
+import {
+  FLAT_GAME_CONFIG, GAME_CONFIG, scoreLine, type PlayerLine, type ScoringConfig,
+} from "@illini/scoring";
 import {
   COL, num, seasonRatesFrom, toBio, toBoxScore, toPlayerLine,
   type BoxScore, type CbbdClient, type CbbdGame, type TorvikClient, type SeasonRates,
@@ -313,11 +315,30 @@ dedupeOn: [0, 1],
     });
 
     const scoresWritten = await writeScores(db, configId, day, scores);
+
+    // The same night, scored again with the opponent taken out of it.
+    //
+    // A league can turn the strength-of-schedule multiplier off, and that is a
+    // different `config_id` rather than a different code path — so those rows
+    // have to exist for every night, not only for the nights somebody thought
+    // to backfill. Derived from what was just scored rather than re-run
+    // through the model: the unadjusted score is `raw × minutesGate` by
+    // construction, and computing it twice invites the two from drifting.
+    //
+    // Skipped when the league config in use is already unadjusted, since then
+    // these rows are the ones just written.
+    let flatWritten = 0;
+    if (config.multiplier.span !== 0) {
+      const { id: flatConfigId } = await upsertScoringConfig(db, "game-flat", FLAT_GAME_CONFIG);
+      flatWritten = await writeScores(db, flatConfigId, day,
+        scores.map((s) => ({ ...s, multiplier: 1, score: s.raw * s.minutesGate })));
+    }
     await db.query(
       `UPDATE ingest_run SET finished_at = now(), status = 'ok', rows_written = $2 WHERE id = $1`,
       [runId, statsWritten],
     );
-    return { date: day, statsWritten, scoresWritten, withoutOpponent, configId };
+    return { date: day, statsWritten, scoresWritten: scoresWritten + flatWritten,
+             withoutOpponent, configId };
   } catch (error) {
     await db.query(
       `UPDATE ingest_run SET finished_at = now(), status = 'failed', error = $2 WHERE id = $1`,

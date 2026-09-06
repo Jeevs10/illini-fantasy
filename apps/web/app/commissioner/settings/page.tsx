@@ -1,10 +1,12 @@
 import Link from "next/link";
 import {
-  SETTING_FIELDS, STARTER_SLOTS, settingLabel, settingsContext, settingsHistory, tradingClosed,
+  SETTING_FIELDS, STARTER_SLOTS, settingLabel, settingsContext, settingsHistory,
+  strengthAdjustment, tradingClosed,
 } from "@illini/league";
 import { db } from "../../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../../lib/session.ts";
 import { SettingsForm } from "./form.tsx";
+import { StrengthToggle } from "./strength.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +40,10 @@ export default async function Settings() {
     );
   }
 
-  const [context, changes] = await Promise.all([
+  const [context, changes, strength] = await Promise.all([
     settingsContext(db, { leagueId, on: viewDate() }),
     settingsHistory(db, { leagueId, limit: 8 }),
+    strengthAdjustment(db, leagueId),
   ]);
   const closed = tradingClosed(settings, viewNow());
 
@@ -89,6 +92,8 @@ export default async function Settings() {
           ) : null}
         </div>
       </div>
+
+      <StrengthToggle state={strength} />
 
       <SettingsForm
         settings={settings}

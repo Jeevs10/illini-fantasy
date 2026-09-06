@@ -93,3 +93,22 @@ export const GAME_CONFIG: ScoringConfig = {
   shrinkagePriorAttempts: 10,
   normaliseWeights: false,
 };
+
+/**
+ * The per-game model with the strength-of-schedule band collapsed.
+ *
+ * `multiplier.span = 0` pins `contextMultiplier` at the floor, and a floor of
+ * 1 makes the context term the identity — so a score is `raw × minutesGate`
+ * and thirty points is thirty points whoever it came against. Everything else
+ * is `GAME_CONFIG` untouched: same weights, same bounds, same shrinkage, same
+ * minutes gate. The only thing a league turns off here is the opponent.
+ *
+ * A separate config rather than a flag on the existing one, because
+ * `scoring_config` is content-addressed and `player_game_score` is keyed by
+ * it: two configs mean two sets of rows that can both exist, be compared, and
+ * be switched between without either destroying the other.
+ */
+export const FLAT_GAME_CONFIG: ScoringConfig = {
+  ...GAME_CONFIG,
+  multiplier: { floor: 1, span: 0 },
+};

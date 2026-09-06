@@ -1,7 +1,8 @@
 import type { Db } from "@illini/db";
 import { GAME_CONFIG, archetypeFor, type Archetype, type ScoringConfig } from "@illini/scoring";
 import {
-  DEFAULT_SETTINGS, autoFill, validateLineup, type LeagueSettings, type LineupSlot, type Slot,
+  DEFAULT_SETTINGS, autoFill, isEligible, validateLineup,
+  type LeagueSettings, type LineupSlot, type Slot,
 } from "./slots.ts";
 import { InvalidLineupError, LineupLockedError, NotOnRosterError } from "./lineups.ts";
 import { nightState, type GameState } from "./outlook.ts";
@@ -326,11 +327,25 @@ export async function setPeriodLineup(
 }
 
 /**
- * Fans one period decision out across the nights it applies to.
+ * Fans one period decision out across the nights it still applies to.
  *
  * A row per player per game night, carrying the game he was started for — the
  * shape settlement already reads. A player's nights all get the same slot,
  * because that is what "set for the week" means.
+ *
+ * Only nights that have not started, though, and that is the whole subtlety.
+ * This used to rewrite every night of every player named in the lineup, which
+ * meant moving one player on Wednesday reached back and restamped Monday for
+ * everybody — and Monday has been played. Two ways that goes wrong. A week set
+ * a night at a time can have started a player on Monday and benched him on
+ * Thursday; `startableInPeriod` resolves him to a single slot for the period,
+ * so rewriting Thursday from that slot retroactively started him in a game
+ * nobody started him in. And a player newly moved into a slot mid-week would
+ * pick up rows for nights already in the books, banking points he was not
+ * fielded for.
+ *
+ * A played night is a fact, not a preference. The lock exists to say so, and
+ * the write has to honour it as well as the check does.
  */
 async function writePeriodLineup(
   db: Db, fantasyTeamId: number, lineup: LineupSlot[],
@@ -342,6 +357,7 @@ async function writePeriodLineup(
     const starter = starters.get(entry.playerId);
     if (starter === undefined) continue;
     for (const game of starter.games) {
+      if (game.state !== "upcoming") continue;
       values.push(fantasyTeamId, game.playedOn, entry.playerId, entry.slot, game.gameId);
       const base = values.length - 5;
       tuples.push(`($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5})`);
@@ -356,6 +372,97 @@ async function writePeriodLineup(
        slot = EXCLUDED.slot, game_id = EXCLUDED.game_id, locked_at = now()`,
     values,
   );
+}
+
+
+/**
+ * Carries the last lineup a team set into a period nobody has set yet.
+ *
+ * A lineup is a standing decision, not a weekly chore. Left alone, the app
+ * asked the same question every seven days and scored a zero for anyone who
+ * forgot to answer it — a manager whose team has not changed had to re-pick
+ * the same seven players to keep the ones they already picked. So an untouched
+ * period inherits: whoever was starting most recently and still plays this
+ * week starts this week, in the slot he already held.
+ *
+ * Three things it deliberately will not do.
+ *
+ * It never overwrites a decision. If any player already holds a starting slot
+ * in the period, somebody has been here — even to bench everyone but one — and
+ * the carry stands down entirely rather than second-guessing them.
+ *
+ * It does not fill the gaps. A carried guard who has no game this week leaves
+ * his slot empty, and the page says so. That is a real decision with a real
+ * cost, and quietly auto-filling it would hide the one thing the manager needs
+ * to be told. `autoFillPeriod` is still there, one button away, for anybody who
+ * wants the machine to choose.
+ *
+ * It seats by recency, not by projection. The carried slots come from
+ * `lineup_entry`, most recent night first, so a legacy week that named three
+ * different guards across three nights resolves to the guard who was most
+ * recently in that seat rather than to whoever the model likes best. Anyone the
+ * shape cannot seat — because the slot filled up, or because he is no longer
+ * eligible for it — lands on the bench, where the manager can see him.
+ */
+export async function carryForwardLineup(
+  db: Db,
+  { fantasyTeamId, from, to, settings = DEFAULT_SETTINGS, startable }: {
+    fantasyTeamId: number; from: string; to: string;
+    settings?: LeagueSettings;
+    /** The period's startable players, when the caller has already read them. */
+    startable: PeriodStarter[];
+  },
+): Promise<number> {
+  if (startable.length === 0) return 0;
+  // Somebody has already decided this week. Nothing to carry into.
+  if (startable.some((s) => s.slot !== "BENCH" && s.slot !== "IR")) return 0;
+
+  const { rows } = await db.query<{ player_id: string; slot: Slot }>(
+    `SELECT DISTINCT ON (l.player_id) l.player_id, l.slot
+       FROM lineup_entry l
+      WHERE l.fantasy_team_id = $1 AND l.played_on < $2
+        AND l.slot NOT IN ('BENCH', 'IR')
+      ORDER BY l.player_id, l.played_on DESC`,
+    [fantasyTeamId, from],
+  );
+  if (rows.length === 0) return 0;
+
+  const held = new Map(rows.map((r) => [Number(r.player_id), r.slot]));
+  const room = new Map<Slot, number>(settings.starters.map((s) => [s.slot, s.count]));
+
+  // Most recently started first, so the scarcest seats go to whoever most
+  // recently held them when a legacy week names more players than there are.
+  const byRecency = startable
+    .filter((s) => held.has(s.playerId))
+    .sort((a, b) => (b.lockedAt ?? "").localeCompare(a.lockedAt ?? ""));
+
+  const lineup: LineupSlot[] = [];
+  const seated = new Set<number>();
+  for (const player of byRecency) {
+    const slot = held.get(player.playerId)!;
+    const left = room.get(slot) ?? 0;
+    if (left <= 0 || !isEligible(player.role, slot)) continue;
+    room.set(slot, left - 1);
+    lineup.push({ playerId: player.playerId, role: player.role, slot });
+    seated.add(player.playerId);
+  }
+  if (lineup.length === 0) return 0;
+
+  for (const player of startable) {
+    if (seated.has(player.playerId)) continue;
+    lineup.push({ playerId: player.playerId, role: player.role, slot: "BENCH" });
+  }
+
+  // The bench can be over its seat count here — a roster whose starters mostly
+  // sat out this week piles everyone onto it — and that is not a reason to
+  // carry nothing. Only the rules that would corrupt a lineup are enforced;
+  // the bench overflow is the page's problem to show, not this one's to refuse.
+  const violations = validateLineup(lineup, settings)
+    .filter((v) => v.slot !== "BENCH");
+  if (violations.length > 0) throw new InvalidLineupError(violations);
+
+  await writePeriodLineup(db, fantasyTeamId, lineup, new Map(startable.map((s) => [s.playerId, s])));
+  return lineup.filter((l) => l.slot !== "BENCH").length;
 }
 
 /**

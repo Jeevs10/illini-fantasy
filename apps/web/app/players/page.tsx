@@ -179,9 +179,6 @@ export default async function PlayersPage({
           offset={offset}
           full={full}
           canAct={fantasyTeamId !== null && draftComplete}
-          best={Math.max(...rows.map((r) => (picked === null
-            ? r.averageScore
-            : historic ? r.week?.scored ?? 0 : r.week?.projected ?? 0)), 0)}
           week={picked === null ? null : { week: picked.week, historic }}
           sort={sortBy}
           sortHrefs={{

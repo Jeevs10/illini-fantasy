@@ -7,7 +7,7 @@ import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { buildSlots } from "../team/slots.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { AvailabilityTag, Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
+import { AvailabilityTag, Empty, ET, LiveTag, Score } from "../ui/bits.tsx";
 import { MatchupCarousel } from "../ui/matchup-carousel.tsx";
 import { ScoreBug, type BugSide } from "../ui/scorebug.tsx";
 
@@ -41,9 +41,11 @@ export default async function LeaguePage({
     );
   }
 
-  const mine = matchups.find(
+  // The viewer's own matchup is where the carousel opens rather than a second
+  // copy pinned above it: one matchup on the screen at a time, and the
+  // schedule's order kept around it so stepping left and right is stable.
+  const mineIndex = matchups.findIndex(
     (m) => m.home.fantasyTeamId === fantasyTeamId || m.away.fantasyTeamId === fantasyTeamId);
-  const others = matchups.filter((m) => m !== mine);
   const { week: weekNumber, startsOn, endsOn } = matchups[0]!;
 
   // Every starter on every side, so the carousel's rosters carry the same
@@ -76,38 +78,27 @@ export default async function LeaguePage({
         </nav>
       </div>
 
-      {mine ? (
-        <div className="rise" style={{ marginBottom: "var(--s-5)" }}>
-          <Matchup
-            view={mine} fantasyTeamId={fantasyTeamId} today={today} now={now}
-            settings={settings} availability={availability}
-          />
-        </div>
-      ) : null}
-
-      <SectionHead title={mine ? "Around the league" : "This week"} />
-      {others.length === 0 ? (
-        <div className="panel">
-          <Empty title="No other matchups this week" glyph="matchup" />
-        </div>
-      ) : (
-        /* The full matchup rather than a score line. A grid of minibugs said
-         * "here they all are" and told a reader nothing the standings page
-         * does not; stepping through gives every matchup in the league the
-         * same detail the viewer's own gets — both rosters, both projections,
-         * who is still to play. */
+      <div className="rise">
         <MatchupCarousel
-          items={others.map((m) => ({
+          initialIndex={mineIndex < 0 ? 0 : mineIndex}
+          labels={matchups.map((m, i) => (i === mineIndex
+            ? "Your matchup"
+            : `${m.home.name} v ${m.away.name}`))}
+          items={matchups.map((m, i) => ({
             id: m.matchupId,
             node: (
               <Matchup
-                view={m} fantasyTeamId={null} today={today} now={now}
-                settings={settings} availability={availability}
+                view={m} today={today} now={now} settings={settings}
+                availability={availability}
+                // Only the viewer's own matchup names a side as theirs. On
+                // everyone else's, neither team is "yours" and the home side
+                // simply goes on the left.
+                fantasyTeamId={i === mineIndex ? fantasyTeamId : null}
               />
             ),
           }))}
         />
-      )}
+      </div>
     </>
   );
 }

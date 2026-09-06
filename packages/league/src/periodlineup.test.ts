@@ -7,7 +7,9 @@ import {
 import { claimPlayer } from "./roster.ts";
 import { scorePeriod } from "./settle.ts";
 import { InvalidLineupError, LineupLockedError } from "./lineups.ts";
-import { autoFillPeriod, setPeriodLineup, startableInPeriod } from "./periodlineup.ts";
+import {
+  autoFillPeriod, carryForwardLineup, setPeriodLineup, startableInPeriod,
+} from "./periodlineup.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
 
 let db: Db;
@@ -291,4 +293,95 @@ test("a night that was not started does not count, however well he played", asyn
     .reduce((a, s) => a + s.scored, 0);
   assert.ok(Math.abs(pageTotal - period.total) < 1e-9,
     `the team page and the matchup screen must report one week: ${pageTotal} vs ${period.total}`);
+});
+
+test("a played night is not rewritten by a move made afterwards", async () => {
+  // The lineup for the 17th is a fact once the 17th has been played. Moving
+  // somebody on the 19th used to restamp every night of every player named in
+  // the write, which meant a player resolved to one slot for the period had
+  // his benched Thursday retroactively started — and a player newly moved in
+  // picked up rows for nights already in the books.
+  await db.query("DELETE FROM lineup_entry WHERE fantasy_team_id = 1");
+  await db.query(
+    `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot, game_id) VALUES
+       (1, '2026-11-17', 3, 'F', 1),
+       (1, '2026-11-20', 3, 'BENCH', 2)`);
+
+  // Eight on the 17th: Illinois has tipped off, Purdue plays tomorrow. So
+  // player 4 is still movable and the 17th is already history.
+  const now = new Date("2026-11-17T20:00:00Z");
+  await setPeriodLineup(db, {
+    fantasyTeamId: 1, from: FROM, to: TO, configId, settings: SETTINGS, now,
+    entries: [{ playerId: 4, slot: "FLEX" }],
+  });
+
+  const { rows } = await db.query<{ played_on: string; player_id: string; slot: string }>(
+    `SELECT to_char(played_on,'YYYY-MM-DD') AS played_on, player_id, slot
+       FROM lineup_entry WHERE fantasy_team_id = 1 ORDER BY played_on, player_id`);
+
+  const seventeenth = rows.filter((r) => r.played_on === "2026-11-17");
+  assert.deepEqual(seventeenth.map((r) => `${r.player_id}:${r.slot}`), ["3:F"],
+    "the played night is exactly as it was — nobody added, nobody moved");
+
+  assert.equal(rows.find((r) => r.played_on === "2026-11-18" && r.player_id === "4")?.slot,
+    "FLEX", "the night still to come takes the new decision");
+  assert.equal(rows.find((r) => r.played_on === "2026-11-20" && r.player_id === "3")?.slot,
+    "F", "and player 3's open night follows the slot he holds for the period");
+});
+
+test("an untouched week inherits the last lineup that was set", async () => {
+  await db.query("DELETE FROM lineup_entry WHERE fantasy_team_id = 1");
+  // What was set the week before: 1 and 2 at G, 3 at F, 4 at FLEX.
+  await db.query(
+    `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot, game_id) VALUES
+       (1, '2026-11-10', 1, 'G', 1), (1, '2026-11-10', 2, 'G', 1),
+       (1, '2026-11-10', 3, 'F', 1), (1, '2026-11-10', 4, 'FLEX', 1),
+       (1, '2026-11-10', 5, 'BENCH', 1)`);
+
+  const now = new Date("2026-11-15T12:00:00Z"); // before the period opens
+  const before = await startableInPeriod(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, configId, now });
+  assert.ok(before.every((s) => s.slot === "BENCH"), "nothing is set for the new week");
+
+  const carried = await carryForwardLineup(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, settings: SETTINGS, startable: before });
+  assert.equal(carried, 4, "the four who were starting are starting again");
+
+  const after = await startableInPeriod(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, configId, now });
+  const slotOf = new Map(after.map((s) => [s.playerId, s.slot]));
+  assert.deepEqual(
+    [1, 2, 3, 4, 5].map((id) => slotOf.get(id)),
+    ["G", "G", "F", "FLEX", "BENCH"],
+    "each keeps the seat he already held, and the bench stays benched");
+
+  // And it is a carry, not a re-decision: run again and it stands down rather
+  // than reshuffling whatever it finds.
+  const again = await carryForwardLineup(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, settings: SETTINGS, startable: after });
+  assert.equal(again, 0, "a week that has been decided is left alone");
+});
+
+test("carrying forward never overwrites a decision somebody made", async () => {
+  await db.query("DELETE FROM lineup_entry WHERE fantasy_team_id = 1");
+  await db.query(
+    `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot, game_id) VALUES
+       (1, '2026-11-10', 1, 'G', 1), (1, '2026-11-10', 2, 'G', 1),
+       (1, '2026-11-10', 3, 'F', 1)`);
+  // The manager has already started exactly one player this week, deliberately.
+  // Player 5 is Purdue, so his night in the period is the 18th.
+  await db.query(
+    `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot, game_id)
+     VALUES (1, '2026-11-18', 5, 'FLEX', 3)`);
+
+  const now = new Date("2026-11-15T12:00:00Z");
+  const startable = await startableInPeriod(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, configId, now });
+  const carried = await carryForwardLineup(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, settings: SETTINGS, startable });
+
+  assert.equal(carried, 0, "somebody has been here");
+  const { rows } = await db.query<{ n: string }>(
+    "SELECT count(*) AS n FROM lineup_entry WHERE fantasy_team_id = 1 AND played_on >= $1", [FROM]);
+  assert.equal(rows[0]!.n, "1", "and their one decision is all there is");
 });

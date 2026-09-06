@@ -1,5 +1,6 @@
 export * from "./slots.ts";
 export * from "./settings.ts";
+export * from "./strength.ts";
 export * from "./settle.ts";
 export * from "./schedule.ts";
 export * from "./membership.ts";

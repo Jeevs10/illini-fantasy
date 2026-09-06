@@ -321,6 +321,10 @@ const LABELS: Record<string, string> = {
   consolation: "Consolation bracket",
   reseed: "Re-seed each round",
   playoffTiebreak: "Playoff tiebreak",
+  // Not a key in `settings` — it lives on `league.config_id`, because it
+  // selects a set of stored scores rather than a number. It is logged to the
+  // same place, so it needs a name here to be readable there.
+  strengthAdjustment: "Strength of schedule",
   ...Object.fromEntries(SETTING_FIELDS.map((f) => [f.key, f.label])),
 };
 

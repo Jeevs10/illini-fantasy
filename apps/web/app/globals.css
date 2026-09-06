@@ -959,7 +959,28 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 .carousel-nav .button { min-width: 2.25rem; }
 /* The stepped matchup is a page section, not a card — it brings its own
    scorebug and its own two panels, so the carousel only owns the controls. */
-.carousel > .carousel-nav { margin-bottom: var(--s-3); }
+.carousel > .carousel-nav { margin-bottom: var(--s-2); }
+
+/* Where you are in the week, and a way to jump. Small enough that ten of them
+   read as a position indicator rather than as ten more buttons. */
+.carousel-dots {
+  display: flex; justify-content: center; gap: var(--s-2);
+  margin-bottom: var(--s-3);
+}
+/* `min-height: 40px` from the base button rule is what makes a 7px dot render
+   as a 7×40 sliver, so it is overridden rather than merely set. */
+.carousel-dots button {
+  position: relative; flex: none;
+  width: 7px; height: 7px; min-width: 0; min-height: 0; padding: 0;
+  border: 0; border-radius: 50%;
+  background: var(--line-hard); cursor: pointer;
+  transition: background-color var(--d-1) var(--e-out), transform var(--d-1) var(--e-out);
+}
+.carousel-dots button:hover:not(:disabled) { border: 0; }
+.carousel-dots button:hover { background: var(--ink-3); }
+.carousel-dots button[data-on] { background: var(--accent); transform: scale(1.35); }
+/* The dot is 7px; the thing a thumb has to hit is not. */
+.carousel-dots button::after { content: ""; position: absolute; inset: -9px; }
 
 /* ---- player rows ------------------------------------------------------ */
 
@@ -1728,8 +1749,10 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 .pool-row:hover { background: var(--surface-2); }
 .pool-rank { color: var(--ink-3); font-size: var(--t-sm); text-align: right; }
 .pool-num { font-size: var(--t-sm); }
-.pool-total { display: grid; gap: 3px; justify-items: stretch; text-align: right; }
-.pool-total .bar { width: 100%; }
+/* Just the number. The share bar that used to sit under it scaled against
+   whatever happened to be on the page, so the same player drew a different bar
+   on page 1 and page 2 — a column that looked like data and was decoration. */
+.pool-total { text-align: right; font-size: var(--t-sm); font-weight: 650; }
 .pool-act { display: flex; justify-content: flex-end; }
 .pool-inline { display: none; }
 .pool-conf { display: contents; }

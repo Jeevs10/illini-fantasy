@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
-  availabilityFor, eligibleSlots, periodContaining, periodForWeek, rosterLimit, rosterOn,
-  seasonWeeks, slateByDay, startableInPeriod, type Slot,
+  availabilityFor, carryForwardLineup, eligibleSlots, periodContaining, periodForWeek,
+  rosterLimit, rosterOn, seasonWeeks, slateByDay, startableInPeriod, type Slot,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
@@ -59,13 +59,29 @@ export default async function TeamPage({
   }
 
   const { from, to } = window7(today);
-  const [starters, roster, slate] = await Promise.all([
+  let [starters, roster, slate] = await Promise.all([
     startableInPeriod(db, {
       fantasyTeamId, from: period.startsOn, to: period.endsOn, configId, now,
     }),
     rosterOn(db, fantasyTeamId, today),
     slateByDay(db, { fantasyTeamId, from, to }),
   ]);
+
+  // A lineup is a standing decision. A week nobody has touched inherits the
+  // last one set, so a manager whose team has not changed does not have to
+  // re-pick the same seven players every seven days to keep them. Only for a
+  // week still open — a finished one is a record, and writing into it now
+  // would be inventing a lineup nobody set at the time.
+  if (period.endsOn >= today) {
+    const carried = await carryForwardLineup(db, {
+      fantasyTeamId, from: period.startsOn, to: period.endsOn, settings, startable: starters,
+    });
+    if (carried > 0) {
+      starters = await startableInPeriod(db, {
+        fantasyTeamId, from: period.startsOn, to: period.endsOn, configId, now,
+      });
+    }
+  }
   const availability = await availabilityFor(db, roster.map((p) => p.playerId));
 
   // Eligibility is resolved here rather than in the browser: it comes from the
@@ -106,8 +122,6 @@ export default async function TeamPage({
     .filter((p) => !p.locked)
     .flatMap((p) => p.games.filter((g) => g.state === "upcoming" && g.tipoff !== null))
     .sort((a, b) => a.tipoff!.localeCompare(b.tipoff!))[0];
-
-  const isThisWeek = today >= period.startsOn && today <= period.endsOn;
 
   return (
     <>
@@ -165,7 +179,15 @@ export default async function TeamPage({
                 }).format(new Date(next.tipoff!))}
               />
             ) : players.length > 0 ? (
-              <span className="pill">{isThisWeek ? "Every game has tipped off" : "Week complete"}</span>
+              // No *movable* player has a game left, which is not the same as
+              // the week being over: a roster can be locked solid on Wednesday
+              // with three games still to play. Saying "every game has tipped
+              // off" while the page lists a Saturday tip-off is just wrong.
+              <span className="pill">
+                {players.some((p) => p.games.some((g) => g.state !== "final"))
+                  ? "Every starter is locked"
+                  : "Week complete"}
+              </span>
             ) : null}
           </div>
         </div>

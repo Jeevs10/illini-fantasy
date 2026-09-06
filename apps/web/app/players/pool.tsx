@@ -27,15 +27,13 @@ export interface PoolWeekView {
  * appears somewhere the reader is not looking.
  */
 export function Pool({
-  players, offset, full, canAct, best, sort, sortHrefs, week = null,
+  players, offset, full, canAct, sort, sortHrefs, week = null,
 }: {
   players: PoolRow[];
   offset: number;
   /** A full roster has to drop somebody, and that form lives on the waivers page. */
   full: boolean;
   canAct: boolean;
-  /** The top figure on this page — average, or week — for the share bars. */
-  best: number;
   /** The active sort, so its column header can say so. */
   sort: PoolSort;
   /** One href per sort, pre-built on the server — never a callback into a
@@ -60,12 +58,6 @@ export function Pool({
   /** What he averaged inside the week — over nights he actually played. */
   const perGame = (p: PoolRow) =>
     ((p.week?.played ?? 0) === 0 ? 0 : (p.week!.scored) / p.week!.played);
-
-  // Scaled across what is on this page rather than from zero. Fifty players
-  // inside twenty points of each other all read as full bars against a zero
-  // baseline, which is a column of decoration.
-  const floor = Math.min(...players.map(figure), best) * 0.97;
-  const share = (v: number) => (best <= floor ? 0 : Math.max(5, ((v - floor) / (best - floor)) * 100));
 
   return (
     <div className="panel" data-density="compact">
@@ -160,12 +152,7 @@ export function Pool({
               <span className="pool-num r">
                 <Score value={player.averageScore} size="xs" />
               </span>
-              <span className="pool-total">
-                <span className="tnum faint" style={{ fontSize: "var(--t-xs)" }}>{player.totalScore.toFixed(1)}</span>
-                <span className="bar thin" aria-hidden="true">
-                  <span style={{ width: `${share(player.averageScore)}%` }} />
-                </span>
-              </span>
+              <span className="pool-total tnum">{player.totalScore.toFixed(1)}</span>
             </>
           ) : (
             <>
@@ -183,16 +170,7 @@ export function Pool({
                   />
                 )}
               </span>
-              <span className="pool-total">
-                <span className="tnum" style={{
-                  fontSize: "var(--t-sm)", fontWeight: 650, color: "var(--ink)",
-                }}>
-                  {figure(player).toFixed(1)}
-                </span>
-                <span className="bar thin" aria-hidden="true">
-                  <span style={{ width: `${share(figure(player))}%` }} />
-                </span>
-              </span>
+              <span className="pool-total tnum">{figure(player).toFixed(1)}</span>
             </>
           )}
 

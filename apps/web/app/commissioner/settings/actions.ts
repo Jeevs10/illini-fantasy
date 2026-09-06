@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  SETTING_FIELDS, STARTER_SLOTS, SettingsRefusedError, settingLabel, updateSettings,
-  type LeagueSettings,
+  SETTING_FIELDS, STARTER_SLOTS, SettingsRefusedError, setStrengthAdjustment, settingLabel,
+  updateSettings, type LeagueSettings,
 } from "@illini/league";
 import { db } from "../../../lib/db.ts";
 import { requireViewer, viewNow } from "../../../lib/session.ts";
@@ -96,4 +96,49 @@ export async function save(
     console.error("settings save failed", error);
     return { error: "The settings could not be saved.", at: Date.now() };
   }
+}
+
+export interface StrengthState {
+  error?: string;
+  ok?: string;
+  /** Where the setting ended up, so the control can re-label without a refetch. */
+  on?: boolean;
+  at?: number;
+}
+
+/**
+ * Turns the opponent-strength multiplier on or off.
+ *
+ * Its own action rather than a field on the settings form: it does not save a
+ * number, it repoints the league at a different set of already-computed
+ * scores, and the receipt a commissioner wants back is how much history that
+ * touched.
+ */
+export async function setStrength(
+  _state: StrengthState, formData: FormData,
+): Promise<StrengthState> {
+  const viewer = await requireViewer();
+  const { leagueId, role } = viewer.membership;
+  if (role !== "commissioner") {
+    return { error: "Only the commissioner can change how the league scores.", at: Date.now() };
+  }
+
+  const on = String(formData.get("on") ?? "") === "on";
+  const result = await setStrengthAdjustment(db, { leagueId, byUserId: viewer.userId, on });
+
+  revalidatePath("/", "layout");
+
+  if (!result.changed) {
+    return { on, ok: `Already ${on ? "adjusted for" : "ignoring"} strength of schedule.`, at: Date.now() };
+  }
+  const kept = result.settledWeeks > 0
+    ? ` The ${result.settledWeeks} settled week${result.settledWeeks === 1 ? "" : "s"} keep the rules they settled under.`
+    : "";
+  return {
+    on,
+    ok: on
+      ? `Scores are weighted by opponent strength again.${kept}`
+      : `Strength of schedule is off — scores are raw production now.${kept}`,
+    at: Date.now(),
+  };
 }
