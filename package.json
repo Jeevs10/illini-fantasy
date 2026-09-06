@@ -25,6 +25,7 @@
     "replay": "tsx scripts/replay.ts",
     "season": "tsx scripts/season.ts",
     "season-midway": "tsx scripts/season-midway.ts",
+    "reweek": "tsx scripts/reweek.ts",
     "dev": "npm run dev --workspace @illini/web",
     "build": "npm run build --workspace @illini/web"
   },

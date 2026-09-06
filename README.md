@@ -327,11 +327,18 @@ Two things about how it is built:
 - **The auto-draft ranks by season-total Player-Score**, which is hindsight.
   That is the right hindsight here — the league exists to show what a full
   roster of real players scores, not to simulate draft-day ignorance.
-- **Auto-fill runs as of midnight UTC each night.** Nothing tips before 16:00
-  UTC, so no game is locked yet. Against the real clock every game in a past
-  season has already tipped off, so every roster would be frozen on the bench
-  and the season would settle as zeroes — the lineup lock working exactly as
-  designed, on a season that is entirely in the past.
+- **One lineup per team per scoring period**, picked on form from before the
+  period opened and written across every night in it — the decision a manager
+  actually makes, made once. Seeding it a night at a time instead (which is how
+  this season was first built) leaves a dozen players having started somewhere
+  inside a week the league has seven slots for: every point real, and no lineup
+  anybody could have set. `npm run reweek -- <league>` re-cuts a season built
+  that way and settles it again.
+- **Nothing is picked with hindsight.** Form is cut off at the Monday, so
+  March's totals never reach back to choose November's lineup. The lock is not
+  consulted at all, which is what makes seeding different from auto-fill:
+  against the real clock every game in a past season has already tipped off, so
+  a season generated through the lock would settle as zeroes.
 
 ## Phase 3 — league core
 

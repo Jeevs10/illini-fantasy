@@ -8,7 +8,7 @@ import { claimPlayer } from "./roster.ts";
 import { scorePeriod } from "./settle.ts";
 import { InvalidLineupError, LineupLockedError } from "./lineups.ts";
 import {
-  autoFillPeriod, carryForwardLineup, setPeriodLineup, startableInPeriod,
+  autoFillPeriod, carryForwardLineup, seedPeriodLineup, setPeriodLineup, startableInPeriod,
 } from "./periodlineup.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
 
@@ -384,4 +384,72 @@ test("carrying forward never overwrites a decision somebody made", async () => {
   const { rows } = await db.query<{ n: string }>(
     "SELECT count(*) AS n FROM lineup_entry WHERE fantasy_team_id = 1 AND played_on >= $1", [FROM]);
   assert.equal(rows[0]!.n, "1", "and their one decision is all there is");
+});
+
+test("a season seeded a night at a time is re-cut into one decision a week", async () => {
+  // What nightly auto-fill leaves behind: five different players holding a
+  // starting slot across a week the league has four of, each of them started
+  // for the one night he happened to be picked on.
+  await db.query("DELETE FROM lineup_entry WHERE fantasy_team_id = 1");
+  await db.query(
+    `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot, game_id) VALUES
+       (1, '2026-11-17', 1, 'G', 1), (1, '2026-11-17', 3, 'F', 1),
+       (1, '2026-11-18', 4, 'G', 3), (1, '2026-11-18', 5, 'FLEX', 3),
+       (1, '2026-11-20', 2, 'G', 2), (1, '2026-11-20', 3, 'BENCH', 2)`);
+
+  const seeded = await seedPeriodLineup(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, configId, settings: SETTINGS });
+  const started = seeded.entries.filter((e) => e.slot !== "BENCH" && e.slot !== "IR");
+  assert.equal(started.length, 4, "two guards, a forward and a flex — the slots the league has");
+
+  const { rows } = await db.query<{ played_on: string; player_id: string; slot: string }>(
+    `SELECT to_char(played_on,'YYYY-MM-DD') AS played_on, player_id, slot
+       FROM lineup_entry WHERE fantasy_team_id = 1 AND played_on BETWEEN $1 AND $2
+      ORDER BY played_on, player_id`, [FROM, TO]);
+
+  const startersByNight = new Map<string, string[]>();
+  for (const r of rows) {
+    if (r.slot === "BENCH" || r.slot === "IR") continue;
+    startersByNight.set(r.played_on, [...startersByNight.get(r.played_on) ?? [], r.player_id]);
+  }
+  const distinct = new Set([...startersByNight.values()].flat());
+  assert.equal(distinct.size, 4, "and only those four started anywhere in the week");
+
+  // Every starter on every night he plays, in the one slot he was set to.
+  for (const entry of started) {
+    const his = rows.filter((r) => r.player_id === String(entry.playerId));
+    assert.ok(his.length > 0);
+    assert.ok(his.every((r) => r.slot === entry.slot),
+      `player ${entry.playerId} holds one slot all week`);
+    assert.equal(his.length, entry.playerId <= 3 ? 2 : 1,
+      "written across each of his game nights and no others");
+  }
+
+  // The page and settlement now agree on a week nobody has to explain: the
+  // week's total is the four starters' whole week.
+  const period = await scorePeriod(db,
+    { fantasyTeamId: 1, configId, from: FROM, to: TO, settings: SETTINGS });
+  assert.equal(new Set(period.players.map((p) => p.playerId)).size, 4);
+});
+
+test("seeding a period ranks on what its Monday knew", async () => {
+  await db.query("DELETE FROM lineup_entry WHERE fantasy_team_id = 1");
+  const first = await seedPeriodLineup(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, configId, settings: SETTINGS });
+  const picked = first.entries
+    .filter((e) => e.slot !== "BENCH" && e.slot !== "IR")
+    .map((e) => e.playerId).sort();
+
+  // A benched player has the week of his life inside the period. Form is cut
+  // off at the Monday, so it cannot reach back and pick him — a hindsight
+  // lineup is not a lineup anybody could have set.
+  const benched = first.entries.find((e) => e.slot === "BENCH")!;
+  await fileLine(benched.playerId, benched.playerId <= 3 ? "2026-11-17" : "2026-11-18", 60);
+
+  await db.query("DELETE FROM lineup_entry WHERE fantasy_team_id = 1");
+  const again = await seedPeriodLineup(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, configId, settings: SETTINGS });
+  assert.deepEqual(
+    again.entries.filter((e) => e.slot !== "BENCH" && e.slot !== "IR").map((e) => e.playerId).sort(),
+    picked, "the same lineup the Monday would have picked");
 });

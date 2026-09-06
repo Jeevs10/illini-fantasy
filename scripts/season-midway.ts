@@ -7,9 +7,12 @@
  * whole season up front — but carry no lineups and no settlement, so they read
  * as "not yet played" rather than "played and blank."
  *
- * The night CUTOFF itself is deliberately *not* auto-filled: it is the night
- * the demo clock (`ILLINI_TODAY`/`ILLINI_NOW`) should be pinned to, so the
- * "set your lineup tonight" panel has something real to do.
+ * The week CUTOFF falls in *is* filled, and is the week the demo clock
+ * (`ILLINI_TODAY`/`ILLINI_NOW`) should be pinned inside. Lineups are weekly, so
+ * the live thing to do on that clock is not "set tonight" but "look again at
+ * the week you set on Monday" — the nights still to come are movable, the ones
+ * already played are not, and leaving the week unset instead would mean nobody
+ * fielded anybody for the half of it that has already happened.
  *
  *   npm run ingest -- setup 2026
  *   npm run ingest -- range 2026 20251101 20260408
@@ -20,7 +23,7 @@
 import { connect, upsertScoringConfig } from "@illini/db";
 import { GAME_CONFIG } from "@illini/scoring";
 import {
-  DEFAULT_SETTINGS, autoDraft, autoFillLeague, createDraft, generateSchedule,
+  DEFAULT_SETTINGS, autoDraft, createDraft, generateSchedule, seedPeriodLeague,
   settleWeek, standings, startDraft,
 } from "@illini/league";
 import { loadEnv } from "./env.ts";
@@ -29,7 +32,7 @@ const NAME = "Illini Fantasy — Midseason";
 /** Teams, members and owners are taken from here, so the same people run it. */
 const SOURCE_LEAGUE = 1;
 const SEASON = 2026;
-/** Last night to auto-fill. Left un-filled so it is the night the demo clock pins to. */
+/** The clock the demo pins to. Its week is filled; everything after it is not. */
 const CUTOFF = "2026-01-14";
 
 loadEnv();
@@ -105,20 +108,23 @@ async function build(): Promise<void> {
   const picks = await autoDraft(db, { leagueId, now: opensAt });
   console.log(`draft: ${picks} picks over ${draft.rounds} rounds, ${matchups} matchups scheduled`);
 
-  // Every night up to (but not including) CUTOFF. Auto-fill is run as of
-  // midnight UTC that day — before anything tips — or the lock would freeze
-  // every roster on the bench, which is what "set a lineup in hindsight"
-  // would actually look like.
-  const { rows: nights } = await db.query<{ day: string }>(
-    `SELECT DISTINCT to_char(played_on, 'YYYY-MM-DD') AS day
-       FROM game WHERE season = $1 AND played_on < $2 ORDER BY 1`, [SEASON, CUTOFF]);
+  // Every period that has opened by CUTOFF, including the one it falls in —
+  // that week is half played, and a manager sets his week on the Monday, not
+  // one night at a time. Each lineup is picked on form from before its period
+  // opened, so nothing here is chosen with knowledge the Monday did not have.
+  // Periods after CUTOFF are left unset: nobody has played them.
+  const { rows: periods } = await db.query<{ from: string; to: string }>(
+    `SELECT to_char(starts_on, 'YYYY-MM-DD') AS from, to_char(ends_on, 'YYYY-MM-DD') AS to
+       FROM matchup WHERE league_id = $1 AND starts_on <= $2
+      GROUP BY starts_on, ends_on ORDER BY starts_on`, [leagueId, CUTOFF]);
 
   let started = 0;
-  for (const [i, { day }] of nights.entries()) {
-    const r = await autoFillLeague(db, leagueId, day, new Date(`${day}T00:00:00Z`));
+  for (const [i, period] of periods.entries()) {
+    const r = await seedPeriodLeague(db, leagueId, period.from, period.to);
     started += r.started;
-    if ((i + 1) % 20 === 0 || i === nights.length - 1) {
-      console.log(`lineups ${String(i + 1).padStart(3)}/${nights.length} nights  ${day}  ${started} starts`);
+    if ((i + 1) % 5 === 0 || i === periods.length - 1) {
+      console.log(`lineups ${String(i + 1).padStart(3)}/${periods.length} periods` +
+        `  ${period.from}  ${started} starts`);
     }
   }
 

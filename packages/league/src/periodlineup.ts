@@ -505,3 +505,167 @@ export async function autoFillPeriod(
   await writePeriodLineup(db, fantasyTeamId, lineup, new Map(startable.map((s) => [s.playerId, s])));
   return { from, to, entries: lineup, locked: locked.map((l) => l.playerId) };
 }
+
+export interface SeededPeriod extends PeriodLineupResult {
+  /** How many player-nights the decision was written across. */
+  nights: number;
+}
+
+/**
+ * Sets a period's lineup from scratch, as if the manager had set it on the
+ * Monday — over nights already played, if that is what the period holds.
+ *
+ * This is the seeding path, and it is the only one allowed to rewrite a night
+ * that has been played. `setPeriodLineup` and `autoFillPeriod` deliberately
+ * cannot: a played night is a decision the clock has already made, and the lock
+ * exists to say so. A generated season has no such decision to protect. Nobody
+ * managed those teams; the rows are there because a script put them there, and
+ * a script re-cutting them into weeks is not overruling anybody.
+ *
+ * That is also why this is not the fallback for a manager who missed a week.
+ * It answers "what would this period have looked like, decided once" — for a
+ * season being generated, and for one generated a night at a time that now has
+ * to read as weekly, which is the same question asked twice.
+ *
+ * Two rules keep the answer honest.
+ *
+ * **It ranks on what the Monday knew.** A player's week is his scoring average
+ * from before the period opened, multiplied by the games he plays inside it —
+ * so a heavier slate is worth more, which is the whole point of picking for a
+ * week, and March's totals never reach back to pick November's lineup. Form is
+ * cut off at `from` rather than at each night, so every night of the period is
+ * ranked by the same numbers: one decision, one basis for it.
+ *
+ * **It writes the period and nothing else.** Every existing row inside it is
+ * replaced, so the nightly leftovers that made a week look like seven separate
+ * decisions go with them, and a player is written only for the nights he was
+ * actually owned on — a mid-week waiver claim does not retroactively start
+ * somebody for a game his manager did not have him for.
+ */
+export async function seedPeriodLineup(
+  db: Db,
+  { fantasyTeamId, from, to, configId, settings = DEFAULT_SETTINGS }: {
+    fantasyTeamId: number; from: string; to: string; configId: number;
+    settings?: LeagueSettings;
+  },
+): Promise<SeededPeriod> {
+  const { rows } = await db.query<{
+    player_id: string; role: string | null; form: number | null;
+    game_id: string; played_on: string;
+  }>(
+    `WITH roster AS (
+       SELECT r.player_id, p.team_id, r.acquired_on, r.released_on
+         FROM roster_slot r
+         JOIN player p ON p.id = r.player_id
+        WHERE r.fantasy_team_id = $1
+          AND r.acquired_on <= $3
+          AND (r.released_on IS NULL OR r.released_on > $2)
+     ),
+     slate AS (
+       SELECT g.id AS game_id, g.played_on, g.tipoff, g.home_team_id AS team_id
+         FROM game g WHERE g.played_on BETWEEN $2 AND $3
+       UNION ALL
+       SELECT g.id, g.played_on, g.tipoff, g.away_team_id
+         FROM game g WHERE g.played_on BETWEEN $2 AND $3
+     )
+     SELECT roster.player_id,
+            (SELECT st.role FROM player_game_stat st
+              WHERE st.player_id = roster.player_id AND st.role IS NOT NULL
+              ORDER BY st.played_on DESC LIMIT 1) AS role,
+            (SELECT avg(sc.score) FROM player_game_score sc
+              WHERE sc.player_id = roster.player_id AND sc.config_id = $4
+                AND sc.played_on < $2) AS form,
+            slate.game_id, to_char(slate.played_on, 'YYYY-MM-DD') AS played_on
+       FROM roster
+       JOIN slate ON slate.team_id = roster.team_id
+      WHERE roster.acquired_on <= slate.played_on
+        AND (roster.released_on IS NULL OR roster.released_on > slate.played_on)
+      ORDER BY roster.player_id, slate.played_on, slate.tipoff NULLS LAST`,
+    [fantasyTeamId, from, to, configId],
+  );
+
+  interface Candidate {
+    playerId: number; role: string | null; form: number;
+    games: { gameId: number; playedOn: string }[];
+  }
+  const byPlayer = new Map<number, Candidate>();
+  for (const r of rows) {
+    const playerId = Number(r.player_id);
+    const game = { gameId: Number(r.game_id), playedOn: r.played_on };
+    const held = byPlayer.get(playerId);
+    if (held === undefined) {
+      byPlayer.set(playerId, {
+        playerId, role: r.role, form: r.form === null ? 0 : Number(r.form), games: [game],
+      });
+      continue;
+    }
+    // One night per player: a team on the schedule twice in a day is still one
+    // night, and the earlier tip is the game he is started for.
+    if (!held.games.some((g) => g.playedOn === game.playedOn)) held.games.push(game);
+  }
+
+  const candidates = [...byPlayer.values()];
+  const lineup = autoFill(
+    candidates.map((c) => ({ playerId: c.playerId, role: c.role, projected: c.form * c.games.length })),
+    settings,
+  );
+
+  const values: unknown[] = [];
+  const tuples: string[] = [];
+  for (const entry of lineup) {
+    for (const game of byPlayer.get(entry.playerId)!.games) {
+      values.push(fantasyTeamId, game.playedOn, entry.playerId, entry.slot, game.gameId);
+      const base = values.length - 5;
+      tuples.push(`($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5})`);
+    }
+  }
+
+  // The clear and the write are one statement pair or neither: a period left
+  // cleared because the insert failed is a team that fielded nobody, which is a
+  // worse state than the one being repaired.
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "DELETE FROM lineup_entry WHERE fantasy_team_id = $1 AND played_on BETWEEN $2 AND $3",
+      [fantasyTeamId, from, to]);
+    if (tuples.length > 0) {
+      await client.query(
+        `INSERT INTO lineup_entry (fantasy_team_id, played_on, player_id, slot, game_id)
+         VALUES ${tuples.join(",")}`,
+        values);
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return { from, to, entries: lineup, locked: [], nights: tuples.length };
+}
+
+/** Seeds one period for every team in a league. */
+export async function seedPeriodLeague(
+  db: Db, leagueId: number, from: string, to: string,
+): Promise<{ teams: number; started: number }> {
+  const { rows } = await db.query<{ id: string; config_id: string; settings: LeagueSettings }>(
+    `SELECT t.id, l.config_id, l.settings
+       FROM fantasy_team t JOIN league l ON l.id = t.league_id
+      WHERE t.league_id = $1 ORDER BY t.id`,
+    [leagueId],
+  );
+
+  let started = 0;
+  for (const row of rows) {
+    const result = await seedPeriodLineup(db, {
+      fantasyTeamId: Number(row.id),
+      from, to,
+      configId: Number(row.config_id),
+      settings: { ...DEFAULT_SETTINGS, ...(row.settings ?? {}) },
+    });
+    started += result.entries.filter((e) => e.slot !== "BENCH" && e.slot !== "IR").length;
+  }
+  return { teams: rows.length, started };
+}

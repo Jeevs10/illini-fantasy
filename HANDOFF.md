@@ -9,11 +9,12 @@ say.
 | | |
 |---|---|
 | Branch | `phase-1-scoring-model` — misnamed, carries Phases 1 through 12 |
-| Tests | 198 passing (`npm test`, needs local Postgres — see README) |
+| Tests | 222 passing (`npm test`, needs local Postgres — see README) |
 | Typecheck | clean (`npm run typecheck`, and `npx tsc --noEmit` inside `apps/web`) |
 | Build | clean (`npm run build`) |
 | Production data | Neon `floral-shape-81709658`, 5 ingested game days, Feb 10–14 2026 |
 | Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games — **not yet migrated to 014 or re-ingested for the box/bio widening, team identity, or per-matchup settings; see below** |
+| Demo | Neon branch `demo-live` (`br-muddy-unit-ax0fqzju`), a branch of `full-season-2026` carrying league 6 `Illini Fantasy`, midseason — lineups re-cut from nights into weeks on 2026-09-06, see "The nightly re-cut" |
 | Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) · 4 `Illini Fantasy — 2025-26` (branch only, drafted and played out) |
 
 **Phase 11 needs no migration** — `player_availability` and the `rotowire`
@@ -172,15 +173,71 @@ Three things about it that are decisions rather than accidents:
   players scores, not to simulate draft-day ignorance. If you want a blind
   draft, `autoDraft` is the wrong tool and the fix is a config cut off at the
   draft date.
-- **Auto-fill runs as of midnight UTC on each night.** Nothing tips before
-  16:00 UTC, so at midnight no game is locked. Running it against the real
-  clock instead would find every game already tipped off, freeze every roster
-  on the bench, and settle a season of zeroes — the lineup lock working exactly
-  as designed, against a season that is entirely in the past.
+- **Lineups are seeded a period at a time, not a night at a time.**
+  `seedPeriodLineup` picks one lineup per team per scoring period on form from
+  before the period opened, and writes it across every night in it. It is the
+  one path allowed to write over a played night, because a generated season has
+  no manager's decision to protect; the lock is not consulted at all, and could
+  not be — against the real clock every game in a past season has already tipped
+  off, so a season generated through the lock would freeze every roster on the
+  bench and settle as zeroes. Seasons seeded the old way (nightly `autoFillDay`)
+  carry a week of seven separate decisions, which is what
+  `npm run reweek -- <league>` re-cuts. See "The nightly re-cut" below.
 - **The two existing leagues are untouched.** `createDraft` refuses a league
   that already has rostered players, so the season is a third league beside
   `Illini Fantasy` and `Draft Night`, with the same members and owners copied
   across so the same three accounts can see it in the picker.
+
+## The nightly re-cut
+
+Every season in this repo older than the weekly-lineup change was seeded by
+auto-filling each night on its own. That never produced a weekly lineup — it
+produced seven of them, whose union is most of the roster. Across a single week
+five different players could hold a "G" on different nights, and all twelve
+starters counted, because settlement counts started nights. The points were
+real; the lineup was one nobody could have set, and the team page had to grow an
+"Also started this week" list for the players with no slot left to sit in.
+
+The fix is in three parts:
+
+- `seedPeriodLineup` / `seedPeriodLeague` (`packages/league/src/periodlineup.ts`)
+  pick one lineup per team per period, rank it on form from before the period
+  opened times the games each player has inside it, and write it across every
+  night in it. It is the only write path allowed over a played night; see the
+  docstring for why that is safe here and nowhere else.
+- `scripts/season.ts` and `scripts/season-midway.ts` now seed by period, so a
+  rebuilt season never has the scar. `season-midway` also fills the week its
+  CUTOFF falls in, rather than the nights before it — a half-played week that
+  nobody set is a week where nobody fielded anybody.
+- `npm run reweek -- <league> [--dry-run] [--weeks 1-10]` re-cuts a season that
+  already exists and settles again the weeks that were settled. It is
+  idempotent: a second run reports every period as "already weekly" and writes
+  nothing.
+
+**Run against the `demo-live` branch (`br-muddy-unit-ax0fqzju`), league 6, on
+2026-09-06.** Eleven periods re-cut, ten re-settled. Every team-week went from
+8–12 starters to exactly the league's seven (week 8, the holiday week, has 2–6
+because that is how many teams played at all), and the weekly totals fell to
+what seven starters actually score: week 10 went from 981–1335 across the league
+to 697–985. The old settled points were stale in a second way as well — they had
+been written under the `gamesCap` best-of-9 rule that no longer exists, so the
+matchup rows and the team page had been disagreeing since that rule came out.
+
+`br-green-pond-ax6u697r` (`demo-live-before-reweek`) is a branch of `demo-live`
+taken immediately before the run, if the old numbers are ever wanted back.
+
+Two things it did not do. **Team 1's week 11 lineup, set through the page, was
+re-picked with everybody else's** — a period is re-cut for all ten teams or
+none, because a matchup is two sides of one week and has to be scored under one
+rule. And **the other branches still carry the scar**: `full-season-2026`
+(leagues 4 and 6) and anything forked from it before this date. The same command
+fixes them, one league at a time.
+
+The overflow list on `/team` and the "Also started this week" caption on
+`/league` were deliberately left in place. Nothing in the app writes a nightly
+lineup any more, but `npm run league -- autofill <day>` still can, and a league
+carrying rows from before the re-cut should be shown honestly rather than
+silently under-reported.
 
 ## Start here
 

@@ -4,7 +4,7 @@
  * `replay.ts` re-cuts the five ingested days into three periods so the seeded
  * league has something to show. This is the other thing: a league that is
  * drafted from the full player pool on opening night, has a lineup set for
- * every night of the season, and settles every week of it. Nothing here invents
+ * every week of the season, and settles every one of them. Nothing here invents
  * a statistic — every point is a stored `player_game_score` row written by the
  * ingest, under the league's own config.
  *
@@ -24,7 +24,7 @@
 import { connect, upsertScoringConfig } from "@illini/db";
 import { GAME_CONFIG } from "@illini/scoring";
 import {
-  DEFAULT_SETTINGS, autoDraft, autoFillLeague, createDraft, generateSchedule,
+  DEFAULT_SETTINGS, autoDraft, createDraft, generateSchedule, seedPeriodLeague,
   settleWeek, standings, startDraft,
 } from "@illini/league";
 import { loadEnv } from "./env.ts";
@@ -103,19 +103,24 @@ async function build(): Promise<void> {
   const picks = await autoDraft(db, { leagueId, now: opensAt });
   console.log(`draft: ${picks} picks over ${draft.rounds} rounds, ${matchups} matchups scheduled`);
 
-  // Every night with a game on it. Auto-fill is run as of midnight UTC that
-  // day — before anything tips — or the lock would freeze every roster on the
-  // bench, which is what "set a lineup in hindsight" would actually look like.
-  const { rows: nights } = await db.query<{ day: string }>(
-    `SELECT DISTINCT to_char(played_on, 'YYYY-MM-DD') AS day
-       FROM game WHERE season = $1 ORDER BY 1`, [SEASON]);
+  // One lineup per team per scoring period, picked on form from before the
+  // period opened and written across every night in it. A season filled a night
+  // at a time instead ends up with a dozen players having started somewhere
+  // inside a week the league has seven slots for — every point real, and no
+  // lineup any manager could have set.
+  const { rows: periods } = await db.query<{ week: string; from: string; to: string }>(
+    `SELECT week, to_char(starts_on, 'YYYY-MM-DD') AS from,
+            to_char(ends_on, 'YYYY-MM-DD') AS to
+       FROM matchup WHERE league_id = $1
+      GROUP BY week, starts_on, ends_on ORDER BY week, starts_on`, [leagueId]);
 
   let started = 0;
-  for (const [i, { day }] of nights.entries()) {
-    const r = await autoFillLeague(db, leagueId, day, new Date(`${day}T00:00:00Z`));
+  for (const [i, period] of periods.entries()) {
+    const r = await seedPeriodLeague(db, leagueId, period.from, period.to);
     started += r.started;
-    if ((i + 1) % 20 === 0 || i === nights.length - 1) {
-      console.log(`lineups ${String(i + 1).padStart(3)}/${nights.length} nights  ${day}  ${started} starts`);
+    if ((i + 1) % 5 === 0 || i === periods.length - 1) {
+      console.log(`lineups ${String(i + 1).padStart(3)}/${periods.length} periods` +
+        `  ${period.from}  ${started} starts`);
     }
   }
 
