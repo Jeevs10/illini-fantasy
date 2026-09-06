@@ -957,6 +957,9 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
   margin-bottom: var(--s-2);
 }
 .carousel-nav .button { min-width: 2.25rem; }
+/* The stepped matchup is a page section, not a card — it brings its own
+   scorebug and its own two panels, so the carousel only owns the controls. */
+.carousel > .carousel-nav { margin-bottom: var(--s-3); }
 
 /* ---- player rows ------------------------------------------------------ */
 
@@ -1738,6 +1741,16 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 }
 .pool-sort:hover { text-decoration: underline; }
 .pool-sort[data-active="true"] { color: var(--accent-ink); }
+
+/* Which week the pool is ranked for. Sits in the filter row with the
+   segmented controls, so it borrows their height rather than setting its own. */
+.weekpick { display: flex; align-items: center; gap: var(--s-2); }
+.weekpick label {
+  font-size: var(--t-xs); font-weight: 700; font-stretch: 88%;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3);
+  white-space: nowrap;
+}
+.weekpick select { max-width: 15rem; }
 
 /* Row density. Applied to the matchup and pool lists only — a ledger screen
    like the roster or the lineup stays at the spacious default. */

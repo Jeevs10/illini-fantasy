@@ -1,11 +1,12 @@
 import Link from "next/link";
 import {
-  availabilityFor, draftFor, playerPool, rosterLimit, rosterOn, settleWaivers, waiverWire,
-  type PoolSort, type PositionRole,
+  availabilityFor, draftFor, playerPool, rosterLimit, rosterOn, seasonSchedule, settleWaivers,
+  waiverWire, type PoolSort, type PoolWindow, type PositionRole,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Pool, type PoolRow } from "./pool.tsx";
+import { WeekPicker } from "./weekpicker.tsx";
 import { Glyph } from "../ui/glyphs.tsx";
 import { Empty, RoleGlossary, SubTabs } from "../ui/bits.tsx";
 
@@ -14,12 +15,20 @@ export const dynamic = "force-dynamic";
 const VIEWS = [{ href: "/players", label: "Players" }, { href: "/leaders", label: "Leaders" }];
 const PAGE = 50;
 const ROLES: PositionRole[] = ["G", "F", "B"];
-const SORTS: PoolSort[] = ["total", "avg", "games"];
+const SORTS: PoolSort[] = ["total", "avg", "games", "weekProj", "weekPts"];
+
+const SPAN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const span = (from: string, to: string) =>
+  `${SPAN.format(new Date(`${from}T00:00:00Z`))}–${SPAN.format(new Date(`${to}T00:00:00Z`))}`;
 
 export default async function PlayersPage({
   searchParams,
-}: { searchParams: Promise<{ q?: string; free?: string; page?: string; role?: string; sort?: string }> }) {
-  const { q, free, page, role, sort } = await searchParams;
+}: {
+  searchParams: Promise<{
+    q?: string; free?: string; page?: string; role?: string; sort?: string; week?: string;
+  }>;
+}) {
+  const { q, free, page, role, sort, week } = await searchParams;
   const viewer = await requireViewer();
   const { leagueId, season, configId, fantasyTeamId, settings } = viewer.membership;
   const now = viewNow();
@@ -30,16 +39,36 @@ export default async function PlayersPage({
   await settleWaivers(db, { leagueId, now });
 
   const roleFilter = ROLES.includes(role as PositionRole) ? (role as PositionRole) : null;
-  const sortBy = SORTS.includes(sort as PoolSort) ? (sort as PoolSort) : "total";
   const offset = Math.max(0, Number(page ?? 0)) * PAGE;
   const availableOnly = free === "1";
+  const today = viewDate();
+
+  // Which scoring period the ranking is about, if the reader picked one. The
+  // schedule is what a week even means here — the pool has no calendar of its
+  // own, and inventing seven-day blocks beside the league's would rank a
+  // "week" no matchup is ever played over.
+  const schedule = await seasonSchedule(db, leagueId);
+  const picked = week ? schedule.find((w) => w.week === Number(week)) ?? null : null;
+  const window: PoolWindow | undefined = picked === null
+    ? undefined
+    : { from: picked.startsOn, to: picked.endsOn, today };
+  // A week already behind us has nothing left to project, so ranking it by a
+  // projection would be ranking it by its own result under a misleading
+  // heading. It is sorted, and read, on what actually happened — which is what
+  // makes the picker useful for scouting a free agent's last month as well as
+  // for planning next week.
+  const historic = picked !== null && picked.endsOn < today;
+  const defaultSort: PoolSort = picked === null ? "total" : historic ? "weekPts" : "weekProj";
+  const asked = SORTS.includes(sort as PoolSort) ? (sort as PoolSort) : null;
+  const sortBy: PoolSort = asked ?? defaultSort;
+
   const [players, wire, roster, draft] = await Promise.all([
     playerPool(db, {
       leagueId, season, configId, limit: PAGE + 1, offset, availableOnly, search: q,
-      roles: roleFilter ? [roleFilter] : undefined, sort: sortBy, asOf: viewDate(),
+      roles: roleFilter ? [roleFilter] : undefined, sort: sortBy, asOf: today, window,
     }),
     waiverWire(db, { leagueId, now }),
-    fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, viewDate()),
+    fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, today),
     draftFor(db, leagueId),
   ]);
   const draftComplete = draft?.status === "complete";
@@ -53,7 +82,7 @@ export default async function PlayersPage({
 
   const query = (over: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
-    for (const [key, value] of Object.entries({ q, free, page, role, sort, ...over })) {
+    for (const [key, value] of Object.entries({ q, free, page, role, sort, week, ...over })) {
       if (value) params.set(key, value);
     }
     const s = params.toString();
@@ -68,7 +97,13 @@ export default async function PlayersPage({
         <div>
           <h1>Players</h1>
           <p className="meta">
-            <span>Ranked by season Player-Score under this league&rsquo;s config</span>
+            <span>
+              {picked === null
+                ? "Ranked by season Player-Score under this league\u2019s config"
+                : historic
+                ? `Week ${picked.week} · ${span(picked.startsOn, picked.endsOn)} · what they actually scored`
+                : `Week ${picked.week} · ${span(picked.startsOn, picked.endsOn)} · projected from form and the slate`}
+            </span>
             {wire.length > 0 ? <span>{wire.length} on waivers</span> : null}
             {fantasyTeamId !== null
               ? <span>{roster.length} of {rosterLimit(settings)} rostered</span>
@@ -91,6 +126,7 @@ export default async function PlayersPage({
           </span>
           {availableOnly ? <input type="hidden" name="free" value="1" /> : null}
           {roleFilter ? <input type="hidden" name="role" value={roleFilter} /> : null}
+          {picked ? <input type="hidden" name="week" value={picked.week} /> : null}
           <button type="submit">Search</button>
         </form>
         <div className="controls" style={{ marginTop: "var(--s-2)" }}>
@@ -112,6 +148,12 @@ export default async function PlayersPage({
               </Link>
             ))}
           </nav>
+          <WeekPicker
+            weeks={schedule.map((w) => ({ week: w.week, label: span(w.startsOn, w.endsOn) }))}
+            active={picked?.week ?? null}
+            hidden={Object.fromEntries(Object.entries({ q, free, role })
+              .filter(([, v]) => Boolean(v)) as [string, string][])}
+          />
           {q ? (
             <Link className="button sm" href={query({ q: undefined, page: undefined })}>
               Clear &ldquo;{q}&rdquo; ×
@@ -127,7 +169,7 @@ export default async function PlayersPage({
         <div className="panel">
           <Empty title="No players match" glyph="search"
                  action={<Link className="button" href="/players">Clear filters</Link>}>
-            {q ? `Nothing named “${q}”` : "No players"}
+            {q ? `Nothing named \u201c${q}\u201d` : "No players"}
             {availableOnly ? " is unowned in this league." : " has scored games this season."}
           </Empty>
         </div>
@@ -137,12 +179,17 @@ export default async function PlayersPage({
           offset={offset}
           full={full}
           canAct={fantasyTeamId !== null && draftComplete}
-          best={Math.max(...rows.map((r) => r.averageScore), 0)}
+          best={Math.max(...rows.map((r) => (picked === null
+            ? r.averageScore
+            : historic ? r.week?.scored ?? 0 : r.week?.projected ?? 0)), 0)}
+          week={picked === null ? null : { week: picked.week, historic }}
           sort={sortBy}
           sortHrefs={{
             total: query({ sort: undefined, page: undefined }),
             avg: query({ sort: "avg", page: undefined }),
             games: query({ sort: "games", page: undefined }),
+            weekProj: query({ sort: "weekProj", page: undefined }),
+            weekPts: query({ sort: "weekPts", page: undefined }),
           }}
         />
       )}

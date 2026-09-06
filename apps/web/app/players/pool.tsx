@@ -10,6 +10,13 @@ import { Dot } from "../ui/playerrow.tsx";
 
 export type PoolRow = PoolPlayer & { onWaivers: boolean; availability?: PlayerAvailability };
 
+/** Which scoring period the table is reporting, when it is not the season. */
+export interface PoolWeekView {
+  week: number;
+  /** The week is over, so the numbers are results and not forecasts. */
+  historic: boolean;
+}
+
 /**
  * The pool, ranked, with the one verb the season has.
  *
@@ -20,27 +27,44 @@ export type PoolRow = PoolPlayer & { onWaivers: boolean; availability?: PlayerAv
  * appears somewhere the reader is not looking.
  */
 export function Pool({
-  players, offset, full, canAct, best, sort, sortHrefs,
+  players, offset, full, canAct, best, sort, sortHrefs, week = null,
 }: {
   players: PoolRow[];
   offset: number;
   /** A full roster has to drop somebody, and that form lives on the waivers page. */
   full: boolean;
   canAct: boolean;
-  /** The top average on this page, for the share bars. */
+  /** The top figure on this page — average, or week — for the share bars. */
   best: number;
   /** The active sort, so its column header can say so. */
   sort: PoolSort;
   /** One href per sort, pre-built on the server — never a callback into a
       client component; see Phase 8's note on why that fails at runtime. */
   sortHrefs: Record<PoolSort, string>;
+  /**
+   * Set when the reader picked a week. The three number columns then report
+   * that week rather than the season — games in it, what he banked, and where
+   * the week lands — because "who is the best player" and "who should I start
+   * on Thursday" are different questions and only the second one has an
+   * answer that changes week to week.
+   */
+  week?: PoolWeekView | null;
 }) {
   const [state, submit, pending] = useActionState<WaiverActionState, FormData>(add, {});
+
+  // Whichever number this table is ranked on: the season average, or the
+  // week's result, or where the week is projected to land.
+  const figure = (p: PoolRow) => (week === null ? p.averageScore
+    : week.historic ? p.week?.scored ?? 0 : p.week?.projected ?? 0);
+
+  /** What he averaged inside the week — over nights he actually played. */
+  const perGame = (p: PoolRow) =>
+    ((p.week?.played ?? 0) === 0 ? 0 : (p.week!.scored) / p.week!.played);
 
   // Scaled across what is on this page rather than from zero. Fifty players
   // inside twenty points of each other all read as full bars against a zero
   // baseline, which is a column of decoration.
-  const floor = Math.min(...players.map((p) => p.averageScore), best) * 0.97;
+  const floor = Math.min(...players.map(figure), best) * 0.97;
   const share = (v: number) => (best <= floor ? 0 : Math.max(5, ((v - floor) / (best - floor)) * 100));
 
   return (
@@ -57,9 +81,29 @@ export function Pool({
         <span aria-hidden="true">#</span>
         <span aria-hidden="true">Player</span>
         <span className="pool-role" aria-hidden="true">Pos</span>
-        <SortHead label="GP" sortKey="games" active={sort} href={sortHrefs.games} />
-        <SortHead label="Avg" sortKey="avg" active={sort} href={sortHrefs.avg} />
-        <SortHead label="Total" sortKey="total" active={sort} href={sortHrefs.total} />
+        {/* A finished week reads exactly like the season does, scoped to the
+            week: games, per game, total. One still to come has no per-game
+            result to report and one number worth ranking on, so the third
+            column becomes the forecast instead. */}
+        {week === null ? (
+          <>
+            <SortHead label="GP" sortKey="games" active={sort} href={sortHrefs.games} />
+            <SortHead label="Avg" sortKey="avg" active={sort} href={sortHrefs.avg} />
+            <SortHead label="Total" sortKey="total" active={sort} href={sortHrefs.total} />
+          </>
+        ) : week.historic ? (
+          <>
+            <span className="r" aria-hidden="true">G</span>
+            <span className="r" aria-hidden="true">Avg</span>
+            <SortHead label="Pts" sortKey="weekPts" active={sort} href={sortHrefs.weekPts} />
+          </>
+        ) : (
+          <>
+            <span className="r" aria-hidden="true">G</span>
+            <SortHead label="Pts" sortKey="weekPts" active={sort} href={sortHrefs.weekPts} />
+            <SortHead label="Proj" sortKey="weekProj" active={sort} href={sortHrefs.weekProj} />
+          </>
+        )}
         <span aria-hidden="true" style={{ textAlign: "right" }}>Status</span>
       </div>
 
@@ -83,25 +127,74 @@ export function Pool({
                 {player.conference ? (
                   <span className="pool-conf"><Dot /><span>{player.conference}</span></span>
                 ) : null}
+                {/* On a phone the number columns are gone, so the ranking
+                    number has to travel with the name or the list is sorted by
+                    something the reader cannot see. */}
                 <span className="pool-inline">
-                  <Dot /><span>{player.averageScore.toFixed(1)} avg</span>
-                  <Dot /><span>{player.games} GP</span>
+                  {week === null ? (
+                    <>
+                      <Dot /><span>{player.averageScore.toFixed(1)} avg</span>
+                      <Dot /><span>{player.games} GP</span>
+                    </>
+                  ) : (
+                    <>
+                      <Dot />
+                      <span>
+                        {week.historic
+                          ? `${(player.week?.scored ?? 0).toFixed(1)} in week ${week.week}`
+                          : `${(player.week?.projected ?? 0).toFixed(1)} proj wk ${week.week}`}
+                      </span>
+                      <Dot />
+                      <span>{player.week?.games ?? 0} game{(player.week?.games ?? 0) === 1 ? "" : "s"}</span>
+                    </>
+                  )}
                 </span>
               </span>
             </span>
           </span>
 
           <span className="pool-role"><RoleTag role={player.role} /></span>
-          <span className="pool-num r faint tnum">{player.games}</span>
-          <span className="pool-num r">
-            <Score value={player.averageScore} size="xs" />
-          </span>
-          <span className="pool-total">
-            <span className="tnum faint" style={{ fontSize: "var(--t-xs)" }}>{player.totalScore.toFixed(1)}</span>
-            <span className="bar thin" aria-hidden="true">
-              <span style={{ width: `${share(player.averageScore)}%` }} />
-            </span>
-          </span>
+          {week === null ? (
+            <>
+              <span className="pool-num r faint tnum">{player.games}</span>
+              <span className="pool-num r">
+                <Score value={player.averageScore} size="xs" />
+              </span>
+              <span className="pool-total">
+                <span className="tnum faint" style={{ fontSize: "var(--t-xs)" }}>{player.totalScore.toFixed(1)}</span>
+                <span className="bar thin" aria-hidden="true">
+                  <span style={{ width: `${share(player.averageScore)}%` }} />
+                </span>
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="pool-num r faint tnum">{player.week?.games ?? 0}</span>
+              <span className="pool-num r">
+                {week.historic ? (
+                  <Score
+                    value={perGame(player)} size="xs"
+                    tone={(player.week?.played ?? 0) === 0 ? "quiet" : "default"}
+                  />
+                ) : (
+                  <Score
+                    value={player.week?.scored ?? 0} size="xs"
+                    tone={(player.week?.played ?? 0) === 0 ? "quiet" : "default"}
+                  />
+                )}
+              </span>
+              <span className="pool-total">
+                <span className="tnum" style={{
+                  fontSize: "var(--t-sm)", fontWeight: 650, color: "var(--ink)",
+                }}>
+                  {figure(player).toFixed(1)}
+                </span>
+                <span className="bar thin" aria-hidden="true">
+                  <span style={{ width: `${share(figure(player))}%` }} />
+                </span>
+              </span>
+            </>
+          )}
 
           <span className="pool-act">
             {player.ownedBy ? (

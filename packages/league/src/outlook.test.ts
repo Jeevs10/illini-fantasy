@@ -4,7 +4,7 @@ import { GAME_CONFIG, scoreLine, type PlayerLine } from "@illini/scoring";
 import { connect, migrate, upsertScoringConfig, writeScores, type Db, type StoredScore } from "@illini/db";
 import { claimPlayer } from "./roster.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
-import { periodOutlook } from "./outlook.ts";
+import { nightState, periodOutlook } from "./outlook.ts";
 
 let db: Db;
 let configId: number;
@@ -199,4 +199,29 @@ test("a week the database already has the answer to is still projected, not reve
 
   await db.query("DELETE FROM player_game_score WHERE played_on = $1", [ahead]);
   await db.query("DELETE FROM player_game_stat WHERE played_on = $1", [ahead]);
+});
+
+test("a night is live for the length of a game, not for the rest of the season", () => {
+  // A tip-off at 8:30pm Eastern is already tomorrow in UTC, so "was this game
+  // today?" answers no while the game is being played. The window is what
+  // separates a game under way from one that finished in November — both have
+  // a tip-off in the past and neither has a filed box score.
+  const night = { playedOn: "2026-11-20", tipoff: "2026-11-21T01:30:00Z", score: null };
+
+  assert.equal(nightState(night, new Date("2026-11-21T01:00:00Z")), "upcoming",
+    "half an hour before it goes up");
+  assert.equal(nightState(night, new Date("2026-11-21T03:00:00Z")), "live",
+    "in the second half, and past midnight UTC");
+  assert.equal(nightState(night, new Date("2026-11-21T15:00:00Z")), "final",
+    "the morning after — nobody filed a line, so he did not dress");
+  assert.equal(nightState(night, new Date("2027-02-01T15:00:00Z")), "final",
+    "and it is no more in progress in February");
+
+  assert.equal(nightState({ ...night, score: 40 }, new Date("2026-11-21T02:00:00Z")), "final",
+    "a filed box score settles it whatever the clock says");
+
+  // Nothing but a date to go on, which is what an unscheduled tip-off leaves.
+  const undated = { playedOn: "2026-11-20", tipoff: null, score: null };
+  assert.equal(nightState(undated, new Date("2026-11-20T15:00:00Z")), "upcoming");
+  assert.equal(nightState(undated, new Date("2026-11-22T15:00:00Z")), "final");
 });

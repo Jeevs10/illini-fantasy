@@ -193,6 +193,34 @@ export async function clearFutureLineups(
   return rowCount ?? 0;
 }
 
+/**
+ * One player's slice of a single scoring period.
+ *
+ * The pool is a season ranking by default, which is the wrong question for
+ * "who should I start in week 12" — the answer to that is who *plays* in week
+ * 12, and a two-game week from a good player beats a three-game week from
+ * nobody about as often as it does not.
+ *
+ * A week behind us reports what actually happened and projects nothing; a week
+ * still to come has no results to report and is entirely projection; the week
+ * under way is both, which is why `scored` and `projected` are two fields and
+ * not one. `projected` is always the whole week — banked plus form for the
+ * nights left — so it is comparable across all three cases.
+ */
+export interface PoolWeek {
+  /** Game nights his real team plays inside the period. */
+  games: number;
+  /** Of those, the ones with a filed box score on or before the viewing date. */
+  played: number;
+  /** What he has actually banked inside the period. */
+  scored: number;
+  /**
+   * Where his week lands: banked, plus his form for every night in it that has
+   * not finished. Equal to `scored` for a period that is over.
+   */
+  projected: number;
+}
+
 export interface PoolPlayer {
   playerId: number;
   name: string;
@@ -207,9 +235,11 @@ export interface PoolPlayer {
   totalScore: number;
   averageScore: number;
   ownedBy: string | null;
+  /** Present only when the pool was asked for one scoring period. */
+  week?: PoolWeek;
 }
 
-export type PoolSort = "total" | "avg" | "games";
+export type PoolSort = "total" | "avg" | "games" | "weekProj" | "weekPts";
 
 const POOL_ORDER: Record<PoolSort, string> = {
   total: "totals.total DESC",
@@ -217,7 +247,19 @@ const POOL_ORDER: Record<PoolSort, string> = {
   // from twenty is the ordering the games-column exists to let a reader catch.
   avg: "(totals.total / totals.games) DESC, totals.games DESC",
   games: "totals.games DESC, totals.total DESC",
+  // Both tie into the season total, so a week nobody plays in still ranks
+  // sensibly rather than in whatever order the planner happened to produce.
+  weekProj: "week_projected DESC, totals.total DESC",
+  weekPts: "week_scored DESC, totals.total DESC",
 };
+
+/** The scoring period a pool ranking can be asked about instead of the season. */
+export interface PoolWindow {
+  from: string;
+  to: string;
+  /** The date the viewer treats as today — the barrier future scores sit behind. */
+  today: string;
+}
 
 /**
  * The player pool, ranked by season Player-Score, with ownership attached.
@@ -229,11 +271,18 @@ export async function playerPool(
   db: Queryable,
   {
     leagueId, season, configId, limit = 200, offset = 0, availableOnly = false, search, roles,
-    sort = "total", asOf,
+    sort = "total", asOf, window,
   }: {
     leagueId: number; season: number; configId: number;
     limit?: number; offset?: number; availableOnly?: boolean; search?: string; roles?: PositionRole[];
     sort?: PoolSort;
+    /**
+     * Rank and report one scoring period rather than the season. The season
+     * columns still come back — a week is read against what a player usually
+     * does — but each row gains its `week`, and the two week sorts become
+     * available.
+     */
+    window?: PoolWindow;
     /**
      * Only count games played on or before this date. Without it the total is
      * the whole season's box scores regardless of what day the viewer is
@@ -252,11 +301,72 @@ export async function playerPool(
     ? KNOWN_ROLES.filter((raw) => rolesFor(raw).some((r) => roles.includes(r)))
     : null;
 
+  // A week sort with no week to sort by would be a SQL error rather than an
+  // empty column, so it falls back to the season ranking the screen shows
+  // anyway.
+  const ranking = window === undefined && (sort === "weekProj" || sort === "weekPts")
+    ? "total" : sort;
+
+  /*
+   * The week, when one is asked for.
+   *
+   * `remaining` counts nights rather than summing a per-night projection,
+   * because every night it counts is on or after today and so prices off
+   * exactly the same form average: what the player has done before today. One
+   * aggregate for the whole pool instead of a lateral average per player per
+   * night, and the arithmetic is identical.
+   *
+   * The three-way split is the same barrier every other screen reads under. A
+   * night behind us is finished whatever the box score says — a starter with
+   * no line did not play, which is zero and not a game still to come. A night
+   * after today is the season's own future and its stored score must not be
+   * read, or a week the database already holds the answer to would report it.
+   */
+  const weekCte = window === undefined ? "" : `,
+     nights AS (
+       SELECT DISTINCT ON (p.id, g.played_on) p.id AS player_id, g.played_on
+         FROM player p
+         JOIN game g ON (g.home_team_id = p.team_id OR g.away_team_id = p.team_id)
+        WHERE g.played_on BETWEEN $10 AND $11
+        ORDER BY p.id, g.played_on, g.tipoff NULLS LAST
+     ),
+     form AS (
+       SELECT sc.player_id, avg(sc.score) AS per_game
+         FROM player_game_score sc
+        WHERE sc.config_id = $3 AND sc.played_on < $12
+        GROUP BY sc.player_id
+     ),
+     week AS (
+       SELECT n.player_id,
+              count(*) AS games,
+              count(*) FILTER (WHERE s.score IS NOT NULL AND n.played_on <= $12) AS played,
+              coalesce(sum(s.score) FILTER (WHERE s.score IS NOT NULL AND n.played_on <= $12), 0) AS scored,
+              count(*) FILTER (
+                WHERE n.played_on >= $12 AND (s.score IS NULL OR n.played_on > $12)
+              ) AS remaining
+         FROM nights n
+         LEFT JOIN player_game_score s
+           ON s.player_id = n.player_id AND s.played_on = n.played_on AND s.config_id = $3
+        GROUP BY n.player_id
+     )`;
+
+  const weekColumns = window === undefined ? "" : `,
+            coalesce(week.games, 0) AS week_games,
+            coalesce(week.played, 0) AS week_played,
+            coalesce(week.scored, 0) AS week_scored,
+            coalesce(week.scored, 0)
+              + coalesce(week.remaining, 0) * coalesce(form.per_game, 0) AS week_projected`;
+
+  const weekJoins = window === undefined ? "" : `
+       LEFT JOIN week ON week.player_id = p.id
+       LEFT JOIN form ON form.player_id = p.id`;
+
   const { rows } = await db.query<{
     player_id: string; name: string; team_name: string | null;
     primary_color: string | null; secondary_color: string | null; conference: string | null;
     role: string | null; archetype: Archetype | null; games: string; total: number;
     owned_by: string | null;
+    week_games?: string; week_played?: string; week_scored?: number; week_projected?: number;
   }>(
     `WITH owned AS (
        SELECT r.player_id, t.name
@@ -273,22 +383,23 @@ export async function playerPool(
         WHERE s.config_id = $3 AND st.season = $2
           AND ($9::date IS NULL OR st.played_on <= $9)
         GROUP BY s.player_id
-     )
+     )${weekCte}
      SELECT p.id AS player_id, p.name, t.name AS team_name,
             t.primary_color, t.secondary_color, t.conference,
             totals.role, totals.archetype, totals.games, totals.total,
-            owned.name AS owned_by
+            owned.name AS owned_by${weekColumns}
        FROM totals
        JOIN player p ON p.id = totals.player_id
        LEFT JOIN team t ON t.id = p.team_id
-       LEFT JOIN owned ON owned.player_id = p.id
+       LEFT JOIN owned ON owned.player_id = p.id${weekJoins}
       WHERE ($6::boolean IS NOT TRUE OR owned.player_id IS NULL)
         AND ($7::text IS NULL OR p.normalised LIKE '%' || $7 || '%')
         AND ($8::text[] IS NULL OR totals.role = ANY($8))
-      ORDER BY ${POOL_ORDER[sort]}
+      ORDER BY ${POOL_ORDER[ranking]}
       LIMIT $4 OFFSET $5`,
     [leagueId, season, configId, limit, offset, availableOnly,
-     search?.trim().toLowerCase() || null, rawRoles, asOf ?? null],
+     search?.trim().toLowerCase() || null, rawRoles, asOf ?? null,
+     ...(window === undefined ? [] : [window.from, window.to, window.today])],
   );
 
   return rows.map((r) => ({
@@ -304,5 +415,13 @@ export async function playerPool(
     totalScore: Number(r.total),
     averageScore: Number(r.total) / Math.max(1, Number(r.games)),
     ownedBy: r.owned_by,
+    ...(window === undefined ? {} : {
+      week: {
+        games: Number(r.week_games ?? 0),
+        played: Number(r.week_played ?? 0),
+        scored: Number(r.week_scored ?? 0),
+        projected: Number(r.week_projected ?? 0),
+      },
+    }),
   }));
 }

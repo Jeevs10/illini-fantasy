@@ -82,6 +82,46 @@ export function gameState(
   return "upcoming";
 }
 
+/**
+ * How long after tip-off a game with no box score is still worth calling live.
+ *
+ * Forty minutes of basketball takes something over two hours to play, and the
+ * feed files the line some time after that. Six hours is comfortably past both
+ * and comfortably short of the next night's slate, which is all this has to
+ * separate.
+ */
+const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * The same three states, but able to tell a game under way from one that
+ * finished months ago.
+ *
+ * `gameState` asks only whether the tip-off has passed and no box score has
+ * landed. That is "live" for one evening and a lie every evening after it: a
+ * November night has no filed line for a player who did not dress, and its
+ * tip-off is very much in the past — which is how a finished week came to sit
+ * on the team page in February with a player still on the floor.
+ *
+ * The fix is a window rather than a date. "Was this game today?" looks like
+ * the same question and is not: college tip-offs run from 00:00 to 04:00 UTC,
+ * so a game in progress at half past eight Eastern is already the next UTC day
+ * and a date comparison would call it over while it is being played. What
+ * actually distinguishes the two is how long ago the ball went up, so that is
+ * what this measures. A night the schedule gives no tip-off time for has only
+ * its date to go on, and falls back to it.
+ */
+export function nightState(
+  night: { playedOn: string; tipoff: string | null; score: number | null }, now: Date,
+): GameState {
+  if (night.score !== null) return "final";
+  if (night.tipoff === null) {
+    return night.playedOn < now.toISOString().slice(0, 10) ? "final" : "upcoming";
+  }
+  const since = now.getTime() - new Date(night.tipoff).getTime();
+  if (since < 0) return "upcoming";
+  return since < LIVE_WINDOW_MS ? "live" : "final";
+}
+
 interface FrozenStarter { name: string; slot: string }
 
 /**

@@ -16,13 +16,20 @@ import type { LeagueSettings, Slot } from "@illini/league";
  * that fit, the two numbers on one screen were both defensible and different.
  * Whoever fits the slots is starting; that is the only answer either should give.
  */
-export interface SlotRow<P extends { playerId: number; slot: Slot }> {
+export interface SlotRow<P extends { playerId: number; slot: string }> {
   key: string;
   slot: Slot;
   player: P | null;
 }
 
-export function buildSlots<P extends { playerId: number; slot: Slot }>(
+/**
+ * `slot` is widened to `string` because the matchup screen lays its two
+ * rosters out through this too, and what it holds is a `PlayerWeek` — a slot
+ * read back off a `lineup_entry` row, which the database types as text. The
+ * comparison is the same either way, and the row still names a real league
+ * slot: that comes from the settings, not from the player.
+ */
+export function buildSlots<P extends { playerId: number; slot: string }>(
   startable: P[], settings: LeagueSettings,
 ): SlotRow<P>[] {
   const pool = [...startable];

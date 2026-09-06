@@ -226,6 +226,37 @@ test("what the week is set to is what the week scores", async () => {
   assert.ok(Math.abs(one.total - (scoreOf(1, 10) + scoreOf(1, 12))) < 1e-9);
 });
 
+test("a night behind us is over, box score or not", async () => {
+  // Player 2 played on the 17th and never dressed on the 20th, so that night
+  // has no line and never will. Comparing its tip-off to the clock says "it has
+  // started and it has not finished" — for one evening that is live, and every
+  // evening after it that is a finished week still glowing on the team page,
+  // with a projection quoted above the score it actually ended on.
+  const later = new Date("2027-02-01T12:00:00Z");
+  const done = (await startableInPeriod(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, configId, now: later }))
+    .find((s) => s.playerId === 2)!;
+
+  assert.deepEqual(done.games.map((g) => g.state), ["final", "final"],
+    "both nights are behind us, whatever the box score says");
+  assert.equal(done.games[1]!.score, null, "and the second one never filed one");
+  assert.ok(done.locked, "a week months gone cannot be re-set");
+  assert.ok(Math.abs(done.scored - scoreOf(2, 6)) < 1e-9, "the one night he played");
+  assert.ok(Math.abs(done.projected - done.scored) < 1e-9,
+    `a finished week has nothing left to project: ${done.projected} vs ${done.scored}`);
+
+  // Read from inside that same night, the answer is different — which is the
+  // whole reason the state is resolved against a clock rather than assumed.
+  const during = new Date("2026-11-20T20:00:00Z"); // game 2 tipped at 19:00
+  const live = (await startableInPeriod(db,
+    { fantasyTeamId: 1, from: FROM, to: TO, configId, now: during }))
+    .find((s) => s.playerId === 2)!;
+
+  assert.deepEqual(live.games.map((g) => g.state), ["final", "live"]);
+  assert.ok(live.projected > live.scored + 1e-9,
+    "the night under way is still worth projecting");
+});
+
 test("a night that was not started does not count, however well he played", async () => {
   // The legacy shape: lineups set a night at a time can start a player on one
   // night and bench him on the next. Player 3 plays the 17th and the 20th; only

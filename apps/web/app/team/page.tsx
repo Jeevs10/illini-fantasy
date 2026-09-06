@@ -98,14 +98,13 @@ export default async function TeamPage({
   const started = players.filter((p) => p.slot !== "BENCH" && p.slot !== "IR");
   const scored = started.reduce((a, p) => a + p.scored, 0);
   const projected = started.reduce((a, p) => a + p.projected, 0);
-  const liveNow = started.filter((p) => p.games.some(
-    (g) => g.score === null && g.tipoff !== null && new Date(g.tipoff) <= now)).length;
+  const liveNow = started.filter((p) => p.games.some((g) => g.state === "live")).length;
 
   // The earliest game that has not started, across every player who can still
   // be moved — the deadline the page is really about.
   const next = players
     .filter((p) => !p.locked)
-    .flatMap((p) => p.games.filter((g) => g.score === null && g.tipoff !== null))
+    .flatMap((p) => p.games.filter((g) => g.state === "upcoming" && g.tipoff !== null))
     .sort((a, b) => a.tipoff!.localeCompare(b.tipoff!))[0];
 
   const isThisWeek = today >= period.startsOn && today <= period.endsOn;

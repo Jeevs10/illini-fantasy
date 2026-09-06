@@ -223,8 +223,12 @@ function Row({
   onBench?: boolean;
 }) {
   const played = player.games.filter((g) => g.score !== null).length;
-  const next = player.games.find((g) => g.score === null) ?? null;
-  const live = next !== null && next.tipoff !== null && new Date(next.tipoff) <= new Date();
+  // Read off the state the server resolved against the app's clock, not off a
+  // tip-off compared to `new Date()` here. A browser knows only the wall clock,
+  // and every tip-off in a finished week is behind that — which is what had a
+  // November night rendering as a game still in progress.
+  const next = player.games.find((g) => g.state !== "final") ?? null;
+  const live = player.games.some((g) => g.state === "live");
   // A locked starter is the good outcome. A locked bench player is the loss —
   // whatever he scored this week is gone — so that is where the alarm belongs.
   const rowState = live && !onBench ? "live" : onBench && player.locked ? "missed" : undefined;
@@ -267,7 +271,9 @@ function Row({
           {next === null ? "—" : dayOf(next.playedOn)}
         </span>
         <span className="st">
-          {next === null ? "week done" : next.tipoff === null ? "TBD" : `${time(next.tipoff)} ET`}
+          {next === null ? "week done"
+            : next.state === "live" ? "on the floor"
+            : next.tipoff === null ? "TBD" : `${time(next.tipoff)} ET`}
         </span>
       </span>
 
@@ -278,7 +284,9 @@ function Row({
           tone={played === 0 ? "quiet" : live ? "live" : "default"}
         />
         <span className="cap" style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--ink-3)" }}>
-          {player.projected > player.scored + 0.05 ? `proj ${player.projected.toFixed(0)}` : "pts"}
+          {next !== null && player.projected > player.scored + 0.05
+            ? `proj ${player.projected.toFixed(0)}`
+            : "pts"}
         </span>
       </span>
 

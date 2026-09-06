@@ -138,6 +138,26 @@ async function weekContaining(
   return rows[0] ?? null;
 }
 
+/**
+ * Every week the schedule holds, with its bounds.
+ *
+ * `seasonWeeks` answers "how far can this screen navigate"; this answers "what
+ * are the choices", which a picker needs and two numbers cannot give it.
+ */
+export async function seasonSchedule(
+  db: Db, leagueId: number,
+): Promise<{ week: number; startsOn: string; endsOn: string }[]> {
+  const { rows } = await db.query<{ week: number; starts_on: string; ends_on: string }>(
+    `SELECT m.week,
+            to_char(min(m.starts_on),'YYYY-MM-DD') AS starts_on,
+            to_char(max(m.ends_on),'YYYY-MM-DD') AS ends_on
+       FROM matchup m WHERE m.league_id = $1
+      GROUP BY m.week ORDER BY m.week`,
+    [leagueId],
+  );
+  return rows.map((r) => ({ week: r.week, startsOn: r.starts_on, endsOn: r.ends_on }));
+}
+
 /** The first and last week the schedule actually holds. */
 export async function seasonWeeks(
   db: Db, leagueId: number,

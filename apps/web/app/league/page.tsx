@@ -1,10 +1,14 @@
 import Link from "next/link";
-import type { CountedGame, MatchupView, PlayerAvailability, TeamOutlook } from "@illini/league";
+import type {
+  CountedGame, LeagueSettings, MatchupView, PendingGame, PlayerAvailability, PlayerWeek, TeamOutlook,
+} from "@illini/league";
 import { availabilityFor, seasonWeeks, weekMatchups } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
+import { buildSlots } from "../team/slots.ts";
 import { Avatar } from "../ui/identity.tsx";
 import { AvailabilityTag, Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
+import { MatchupCarousel } from "../ui/matchup-carousel.tsx";
 import { ScoreBug, type BugSide } from "../ui/scorebug.tsx";
 
 export const dynamic = "force-dynamic";
@@ -40,12 +44,15 @@ export default async function LeaguePage({
   const mine = matchups.find(
     (m) => m.home.fantasyTeamId === fantasyTeamId || m.away.fantasyTeamId === fantasyTeamId);
   const others = matchups.filter((m) => m !== mine);
-  const { week: weekNumber, startsOn, endsOn, settled } = matchups[0]!;
+  const { week: weekNumber, startsOn, endsOn } = matchups[0]!;
 
-  const outlooks: [TeamOutlook, TeamOutlook] | null = mine ? [mine.home, mine.away] : null;
-  const availability = outlooks
-    ? await availabilityFor(db, [...outlooks[0].pending, ...outlooks[1].pending].map((p) => p.playerId))
-    : new Map<number, PlayerAvailability>();
+  // Every starter on every side, so the carousel's rosters carry the same
+  // injury notes the viewer's own does. One lookup rather than one per
+  // matchup: the carousel renders all of them on the server anyway.
+  const everyone = matchups
+    .flatMap((m) => [m.home, m.away])
+    .flatMap((o) => [...o.pending.map((p) => p.playerId), ...o.players.map((p) => p.playerId)]);
+  const availability = await availabilityFor(db, [...new Set(everyone)]);
 
   return (
     <>
@@ -69,43 +76,92 @@ export default async function LeaguePage({
         </nav>
       </div>
 
-      {mine && outlooks ? (
-        <>
-          <div className="rise" style={{ marginBottom: "var(--s-5)" }}>
-            <ScoreBug
-              week={mine.week} startsOn={mine.startsOn} endsOn={mine.endsOn}
-              settled={mine.settled} today={today}
-              home={bug(mine.home.fantasyTeamId, mine.home.name, outlooks[0], fantasyTeamId)}
-              away={bug(mine.away.fantasyTeamId, mine.away.name, outlooks[1], fantasyTeamId)}
-            />
-          </div>
-          <Rosters
-            mine={mine} outlooks={outlooks} fantasyTeamId={fantasyTeamId}
-            now={now} availability={availability}
+      {mine ? (
+        <div className="rise" style={{ marginBottom: "var(--s-5)" }}>
+          <Matchup
+            view={mine} fantasyTeamId={fantasyTeamId} today={today} now={now}
+            settings={settings} availability={availability}
           />
-        </>
+        </div>
       ) : null}
 
       <SectionHead title={mine ? "Around the league" : "This week"} />
-      <div className="panel">
-        {others.length === 0 ? (
+      {others.length === 0 ? (
+        <div className="panel">
           <Empty title="No other matchups this week" glyph="matchup" />
-        ) : (
-          others.map((m) => <MiniBug key={m.matchupId} view={m} />)
-        )}
+        </div>
+      ) : (
+        /* The full matchup rather than a score line. A grid of minibugs said
+         * "here they all are" and told a reader nothing the standings page
+         * does not; stepping through gives every matchup in the league the
+         * same detail the viewer's own gets — both rosters, both projections,
+         * who is still to play. */
+        <MatchupCarousel
+          items={others.map((m) => ({
+            id: m.matchupId,
+            node: (
+              <Matchup
+                view={m} fantasyTeamId={null} today={today} now={now}
+                settings={settings} availability={availability}
+              />
+            ),
+          }))}
+        />
+      )}
+    </>
+  );
+}
+
+/** One matchup in full: the bug, then both rosters under it. */
+function Matchup({
+  view, fantasyTeamId, today, now, settings, availability,
+}: {
+  view: MatchupView;
+  fantasyTeamId: number | null;
+  today: string;
+  now: Date;
+  settings: LeagueSettings;
+  availability: Map<number, PlayerAvailability>;
+}) {
+  // Whoever the viewer runs goes on the left, on both screens — the bug and
+  // the rosters have to agree about which side is which or the two halves of
+  // one matchup read as two different games.
+  const homeIsMine = view.home.fantasyTeamId === fantasyTeamId;
+  const [left, right] = homeIsMine || fantasyTeamId === null
+    ? [view.home, view.away] : [view.away, view.home];
+
+  // A week with nothing left in it has no forecast to give, and a column of
+  // projections that each restate the score beside them is a column of noise.
+  // Decided for the matchup rather than per side, so the two panels keep the
+  // same shape and stay readable across.
+  const projecting = left.live + left.upcoming + right.live + right.upcoming > 0;
+
+  return (
+    <>
+      <ScoreBug
+        week={view.week} startsOn={view.startsOn} endsOn={view.endsOn}
+        settled={view.settled} today={today}
+        home={bug(view.home, fantasyTeamId)}
+        away={bug(view.away, fantasyTeamId)}
+      />
+      <div className="rosters" style={{ marginTop: "var(--s-4)" }}>
+        <RosterPanel side={left} mine={left.fantasyTeamId === fantasyTeamId} projecting={projecting}
+                     now={now} settings={settings} availability={availability} />
+        <RosterPanel side={right} mine={right.fantasyTeamId === fantasyTeamId} projecting={projecting}
+                     now={now} settings={settings} availability={availability} />
       </div>
     </>
   );
 }
 
-function bug(id: number, name: string, o: TeamOutlook, mineId: number | null): BugSide {
+function bug(o: MatchupView["home"], mineId: number | null): BugSide {
   return {
-    fantasyTeamId: id, name,
+    fantasyTeamId: o.fantasyTeamId, name: o.name,
     total: o.total, projected: o.projected,
     gamesPlayed: o.gamesPlayed,
     live: o.live, upcoming: o.upcoming,
     pendingSlots: bySlot(o.pending),
-    mine: id === mineId,
+    mine: o.fantasyTeamId === mineId,
   };
 }
 
@@ -117,197 +173,257 @@ function bySlot(pending: TeamOutlook["pending"]): { slot: string; count: number 
 }
 
 /**
- * Both rosters for the week, side by side.
+ * One side's week, one row per starter.
  *
- * Not ranked against each other and not interleaved — the two teams are
- * fielding different starters against different real games, so pairing them
- * row-for-row invites a comparison the schedule never asked for. Each side is
- * its own roster: who is still to play, and what each starter's week adds up
- * to so far, under the total that roster projects to.
+ * Laid out in the league's own slot order — every G, then every F, then the
+ * B, then the FLEXes — with an empty row wherever a side has nobody in a
+ * slot, so the two panels line up rank for rank and a reader can compare
+ * across without counting. Ranking each side by its own points would put a
+ * guard opposite a centre and make the side-by-side an accident.
+ *
+ * The number on a row is the player's *week*: what he has banked, with what
+ * the rest of his slate is expected to add quoted under it. A starter with
+ * three games is one row, not three — the game-by-game breakdown is evidence
+ * for that number and opens underneath it, which is the right way round. The
+ * old layout led with a list of individual pending games and made a reader
+ * add up a player's week themselves.
  */
-function Rosters({
-  mine, outlooks, fantasyTeamId, now, availability,
-}: {
-  mine: MatchupView; outlooks: [TeamOutlook, TeamOutlook];
-  fantasyTeamId: number | null; now: Date;
-  availability: Map<number, PlayerAvailability>;
-}) {
-  const homeIsMine = mine.home.fantasyTeamId === fantasyTeamId;
-  const [left, right] = homeIsMine || fantasyTeamId === null
-    ? [{ view: mine.home, out: outlooks[0] }, { view: mine.away, out: outlooks[1] }]
-    : [{ view: mine.away, out: outlooks[1] }, { view: mine.home, out: outlooks[0] }];
-
-  return (
-    <div className="rosters">
-      <RosterPanel side={left} mine={left.view.fantasyTeamId === fantasyTeamId}
-                   now={now} availability={availability} />
-      <RosterPanel side={right} mine={right.view.fantasyTeamId === fantasyTeamId}
-                   now={now} availability={availability} />
-    </div>
-  );
-}
-
 function RosterPanel({
-  side, mine, now, availability,
+  side, mine, projecting, now, settings, availability,
 }: {
-  side: { view: MatchupView["home"]; out: TeamOutlook };
-  mine: boolean; now: Date;
+  side: MatchupView["home"];
+  mine: boolean;
+  /** Whether this week still has games in it worth quoting a forecast for. */
+  projecting: boolean;
+  now: Date; settings: LeagueSettings;
   availability: Map<number, PlayerAvailability>;
 }) {
-  const { view, out } = side;
-  const pending = [...out.pending].sort((a, b) => (a.tipoff ?? "~").localeCompare(b.tipoff ?? "~"));
-  const scored = [...out.games].sort((a, b) => b.score - a.score);
-  // Games by player, so a starter's row can be opened to see the nights it is
-  // made of. The week is the sum of these; the individual nights are evidence.
-  const nightsOf = new Map<number, typeof scored>();
-  for (const g of scored) {
-    const held = nightsOf.get(g.playerId);
-    if (held === undefined) nightsOf.set(g.playerId, [g]);
-    else held.push(g);
+  // Each starter's nights, played and still to come, so a row can be opened
+  // for the games its total is made of.
+  const played = new Map<number, CountedGame[]>();
+  for (const g of [...side.games].sort((a, b) => a.playedOn.localeCompare(b.playedOn))) {
+    played.set(g.playerId, [...(played.get(g.playerId) ?? []), g]);
   }
+  const pending = new Map<number, PendingGame[]>();
+  for (const p of [...side.pending].sort((a, b) => (a.tipoff ?? "~").localeCompare(b.tipoff ?? "~"))) {
+    pending.set(p.playerId, [...(pending.get(p.playerId) ?? []), p]);
+  }
+
+  const rows = buildSlots(side.players, settings);
+  const seated = new Set(rows.map((r) => r.player?.playerId).filter(Boolean));
+  // Legacy weeks set a night at a time can hold more starters than the league
+  // has slots. They scored, so they are listed rather than dropped — after the
+  // slots, where they cannot knock the two panels out of alignment.
+  const overflow = side.players.filter((p) => !seated.has(p.playerId));
+
+  const toPlay = side.live + side.upcoming;
 
   return (
     <div className="panel" data-density="compact">
       <div className="panel-head">
         <span className="row" style={{ gap: "var(--s-3)", minWidth: 0 }}>
-          <Avatar name={view.name} seed={view.fantasyTeamId} size="md" mine={mine} />
+          <Avatar name={side.name} seed={side.fantasyTeamId} size="md" mine={mine} />
           <span style={{ minWidth: 0 }}>
-            <h2 style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{view.name}</h2>
+            <h2 style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{side.name}</h2>
             <p>
-              {out.players.length} starter{out.players.length === 1 ? "" : "s"}
-              {" · "}{out.gamesPlayed} game{out.gamesPlayed === 1 ? "" : "s"} played
+              {side.gamesPlayed} game{side.gamesPlayed === 1 ? "" : "s"} played
+              {toPlay > 0 ? ` · ${toPlay} to play` : ""}
             </p>
           </span>
         </span>
+        {/* The score, with where the week is heading under it — the shape
+          * every scoreboard in the sport uses, and the one a manager reads
+          * without being told which number is which. */}
         <span style={{ textAlign: "right", flex: "none" }}>
-          <div className="eyebrow">Projected</div>
-          <Score value={out.projected} size="lg" tone={mine ? "accent" : "default"} />
+          <div className="eyebrow">Score</div>
+          <Score value={side.total} size="lg" tone={mine ? "accent" : "default"} />
+          <div className="faint tnum" style={{ fontSize: "var(--t-xs)", marginTop: 1 }}>
+            {toPlay > 0 ? <>proj <strong>{side.projected.toFixed(1)}</strong></>
+              : side.gamesPlayed > 0 ? "final"
+              : /* A week nobody played is not final; it is empty. */ "\u2014"}
+          </div>
         </span>
       </div>
 
-      {pending.length > 0 ? (
-        <>
-          <div className="subhead"><h3>Still to play — {pending.length}</h3></div>
-          {pending.map((p) => {
-            const live = p.tipoff !== null && new Date(p.tipoff) <= now;
-            return (
-              <div className="plr" key={`${p.playerId}-${p.playedOn}`} data-state={live ? "live" : undefined}>
-                <span className="plr-lead">
-                  <span className="slot" data-slot={p.slot} style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{p.slot}</span>
-                </span>
-                <span className="plr-id">
-                  <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
-                    <Link className="plr-name" href={`/players/${p.playerId}`} style={{ minWidth: 0, flex: "1 1 auto" }}>{p.playerName}</Link>
-                    <AvailabilityTag status={availability.get(p.playerId)?.status} injury={availability.get(p.playerId)?.injury} compact />
-                  </span>
-                  <span className="plr-sub">
-                    <span>{p.opponent ? `vs ${p.opponent}` : "TBD"}</span>
-                    <span className="dot" />
-                    <span>{p.playedOn}</span>
-                  </span>
-                </span>
-                <span className="plr-right">
-                  {live ? <LiveTag /> : p.tipoff ? <span className="pill ghost"><ET iso={p.tipoff} /> ET</span> : <span className="pill ghost">TBD</span>}
-                  <span className="plr-figure">
-                    <Score value={p.projected} size="xs" tone="quiet" />
-                    <span className="cap">proj</span>
-                  </span>
-                </span>
-              </div>
-            );
-          })}
-        </>
-      ) : null}
+      <div className="subhead">
+        <h3>The week, by starter</h3>
+        <span className="pill ghost">{projecting ? "Week total · projected" : "Week total"}</span>
+      </div>
 
-      <div className="subhead"><h3>The week, by starter</h3></div>
-      {out.players.length === 0 ? (
-        <Empty title="No games scored yet" glyph="clock">
-          Nothing has a filed box score yet. Scores appear the morning after a
-          night is ingested.
+      {side.players.length === 0 ? (
+        <Empty title="No lineup for this week" glyph="clock">
+          Nobody is set to start, so there is nothing to project. Lineups are
+          set on the team page.
         </Empty>
       ) : (
-        out.players.map((p) => {
-          const nights = nightsOf.get(p.playerId) ?? [];
-          const ahead = (p.projected ?? p.total) - p.total;
-          return (
-            <details key={p.playerId} className="wk">
-              <summary className="plr">
-                <span className="plr-lead">
-                  <span className="slot" data-slot={p.slot}
-                        style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{p.slot}</span>
-                </span>
-                <span className="plr-id">
-                  <span className="plr-name">{p.playerName}</span>
-                  <span className="plr-sub">
-                    <span>{p.games} game{p.games === 1 ? "" : "s"}</span>
-                    {ahead > 0.05 ? (
-                      <>
-                        <span className="dot" />
-                        <span>proj {(p.projected ?? p.total).toFixed(1)}</span>
-                      </>
-                    ) : null}
-                  </span>
-                </span>
-                <span className="plr-right">
-                  <span className="plr-figure">
-                    <Score value={p.total} size="sm" tone={p.games === 0 ? "quiet" : "default"} />
-                    <span className="cap">pts</span>
-                  </span>
-                </span>
-              </summary>
-              {nights.map((g) => <ScoredRow key={`${g.playerId}-${g.playedOn}`} game={g} />)}
-            </details>
-          );
-        })
+        <>
+          {rows.map((row) => (
+            row.player === null
+              ? <EmptySlot key={row.key} slot={row.slot} />
+              : (
+                <StarterRow
+                  key={row.key} slot={row.slot} player={row.player} now={now}
+                  projecting={projecting}
+                  played={played.get(row.player.playerId) ?? []}
+                  pending={pending.get(row.player.playerId) ?? []}
+                  availability={availability.get(row.player.playerId)}
+                />
+              )
+          ))}
+          {overflow.length > 0 ? (
+            <>
+              <div className="capline"><span>Also started this week</span></div>
+              {overflow.map((p) => (
+                <StarterRow
+                  key={p.playerId} slot={p.slot} player={p} now={now}
+                  projecting={projecting}
+                  played={played.get(p.playerId) ?? []}
+                  pending={pending.get(p.playerId) ?? []}
+                  availability={availability.get(p.playerId)}
+                />
+              ))}
+            </>
+          ) : null}
+        </>
       )}
     </div>
   );
 }
 
-function ScoredRow({ game }: { game: CountedGame }) {
+const DAY = new Intl.DateTimeFormat("en-US", {
+  weekday: "short", month: "numeric", day: "numeric", timeZone: "UTC",
+});
+const dayOf = (ymd: string) => DAY.format(new Date(`${ymd}T00:00:00Z`));
+
+function StarterRow({
+  slot, player, played, pending, now, projecting, availability,
+}: {
+  slot: string;
+  player: PlayerWeek;
+  played: CountedGame[];
+  pending: PendingGame[];
+  now: Date;
+  projecting: boolean;
+  availability?: PlayerAvailability;
+}) {
+  const projected = player.projected ?? player.total;
+  const next = pending[0];
+  const live = pending.some((p) => p.tipoff !== null && new Date(p.tipoff) <= now);
+  const games = played.length + pending.length;
+
   return (
-    <div className="plr">
-      <span className="plr-lead">
-        <span className="slot" data-slot={game.slot} style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{game.slot}</span>
-      </span>
-      <span className="plr-id">
-        <Link className="plr-name" href={`/players/${game.playerId}`}>{game.playerName}</Link>
-        <span className="plr-sub"><span>{game.playedOn}</span></span>
-      </span>
-      <span className="plr-right">
-        <Score value={game.score} size="xs" tone={game.counted ? "default" : "quiet"} />
-      </span>
-    </div>
+    <details className="wk">
+      <summary className="plr" data-state={live ? "live" : undefined}>
+        <span className="plr-lead">
+          <span className="slot" data-slot={slot}
+                style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{slot}</span>
+        </span>
+        <span className="plr-id">
+          <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
+            <span className="plr-name">{player.playerName}</span>
+            <AvailabilityTag status={availability?.status} injury={availability?.injury} compact />
+          </span>
+          <span className="plr-sub">
+            <span>{games} game{games === 1 ? "" : "s"}</span>
+            {played.length > 0 && pending.length > 0 ? (
+              <><span className="dot" /><span>{played.length} in</span></>
+            ) : null}
+            {live ? (
+              <><span className="dot" /><LiveTag /></>
+            ) : next ? (
+              <>
+                <span className="dot" />
+                <span>
+                  {next.opponent ? `vs ${next.opponent} ` : ""}
+                  {next.tipoff ? <ET iso={next.tipoff} /> : dayOf(next.playedOn)}
+                </span>
+              </>
+            ) : null}
+          </span>
+        </span>
+        {/* Banked and projected, one above the other. Two numbers rather than
+          * one because they answer different questions, and a week that still
+          * has games in it is not described by either alone. */}
+        <span className="plr-right">
+          <span className="plr-figure">
+            <Score value={player.total} size="sm" tone={played.length === 0 ? "quiet" : "default"} />
+            <span className="cap">pts</span>
+          </span>
+          {projecting ? (
+            <span className="plr-figure" style={{ minWidth: "3.1rem" }}>
+              <span className="tnum" style={{
+                fontSize: "var(--t-sm)", fontWeight: 650,
+                color: pending.length > 0 ? "var(--ink-2)" : "var(--ink-3)",
+              }}>
+                {projected.toFixed(1)}
+              </span>
+              <span className="cap">proj</span>
+            </span>
+          ) : null}
+        </span>
+      </summary>
+
+      {played.map((g) => (
+        <div className="plr" key={`p-${g.playedOn}`}>
+          <span className="plr-lead">
+            <span className="slot" data-slot={g.slot}
+                  style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{g.slot}</span>
+          </span>
+          <span className="plr-id">
+            <span className="plr-name">{dayOf(g.playedOn)}</span>
+            <span className="plr-sub"><span>final</span></span>
+          </span>
+          <span className="plr-right"><Score value={g.score} size="xs" /></span>
+        </div>
+      ))}
+      {pending.map((g) => (
+        <div className="plr" key={`n-${g.playedOn}`}>
+          <span className="plr-lead">
+            <span className="slot" data-slot={g.slot}
+                  style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{g.slot}</span>
+          </span>
+          <span className="plr-id">
+            <span className="plr-name">{dayOf(g.playedOn)}</span>
+            <span className="plr-sub">
+              <span>{g.opponent ? `vs ${g.opponent}` : "TBD"}</span>
+              {g.tipoff ? <><span className="dot" /><span><ET iso={g.tipoff} /> ET</span></> : null}
+            </span>
+          </span>
+          <span className="plr-right">
+            <span className="plr-figure">
+              <Score value={g.projected} size="xs" tone="quiet" />
+              <span className="cap">proj</span>
+            </span>
+          </span>
+        </div>
+      ))}
+    </details>
   );
 }
 
-function MiniBug({ view }: { view: MatchupView }) {
-  const sum = view.home.total + view.away.total;
-  const homeLeads = sum > 0 && view.home.total > view.away.total;
-  const awayLeads = sum > 0 && view.away.total > view.home.total;
-  const remaining = view.home.live + view.home.upcoming + view.away.live + view.away.upcoming;
+/**
+ * A slot this side has nobody in.
+ *
+ * Rendered rather than skipped: the two panels are read across, and a missing
+ * row would slide every row under it out of line with the opponent's.
+ */
+function EmptySlot({ slot }: { slot: string }) {
   return (
-    <div className="minibug">
-      <Link className="side" href={`/teams/${view.home.fantasyTeamId}`}>
-        <Avatar name={view.home.name} seed={view.home.fantasyTeamId} size="xs" />
-        <span className="nm">{view.home.name}</span>
-      </Link>
-      <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-        <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
-          <span className="score score-xs sc" data-lead={homeLeads}>{view.home.total.toFixed(1)}</span>
-          <span className="dash">–</span>
-          <span className="score score-xs sc" data-lead={awayLeads}>{view.away.total.toFixed(1)}</span>
-        </span>
-        {remaining > 0 ? (
-          <span className="sub" style={{ fontSize: 10, whiteSpace: "nowrap" }}>
-            Proj {view.home.projected.toFixed(1)} – {view.away.projected.toFixed(1)}
-          </span>
-        ) : null}
+    <div className="plr" data-state="empty">
+      <span className="plr-lead">
+        <span className="slot" data-slot={slot} data-empty="true"
+              style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{slot}</span>
       </span>
-      <Link className="side them" href={`/teams/${view.away.fantasyTeamId}`}>
-        <Avatar name={view.away.name} seed={view.away.fantasyTeamId} size="xs" />
-        <span className="nm">{view.away.name}</span>
-      </Link>
+      <span className="plr-id">
+        <span className="plr-name" style={{ color: "var(--warn)" }}>Empty {slot}</span>
+        <span className="plr-sub"><span>nobody is scoring here</span></span>
+      </span>
+      <span className="plr-right">
+        <span className="plr-figure">
+          <Score value={0} size="sm" tone="quiet" />
+          <span className="cap">pts</span>
+        </span>
+      </span>
     </div>
   );
 }

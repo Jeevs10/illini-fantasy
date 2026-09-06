@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS, autoFill, validateLineup, type LeagueSettings, type LineupSlot, type Slot,
 } from "./slots.ts";
 import { InvalidLineupError, LineupLockedError, NotOnRosterError } from "./lineups.ts";
+import { nightState, type GameState } from "./outlook.ts";
 
 /**
  * The lineup as a decision about the week, not about a night.
@@ -38,6 +39,17 @@ export interface PeriodGame {
   opponentStrength: number | null;
   /** The filed box score, or null for a night not yet played or not yet in. */
   score: number | null;
+  /**
+   * Where the night stands as of the clock this was read under.
+   *
+   * Resolved here rather than in the browser, and from the app's clock rather
+   * than the wall clock, because those are two different questions and the
+   * screens kept answering the second one. A component comparing a tip-off to
+   * `new Date()` cannot tell a game under way from a game that finished in
+   * November — both have a tip-off in the past — so a week months behind us
+   * read as live for every starter who happened to miss a night.
+   */
+  state: GameState;
   /** What form expects from this night, for the ones with no score. */
   projected: number;
   /**
@@ -185,13 +197,17 @@ export async function startableInPeriod(
   for (const r of rows) {
     const playerId = Number(r.player_id);
     const projected = r.projected === null ? 0 : Number(r.projected);
-    const game: PeriodGame = {
-      gameId: Number(r.game_id),
+    const night = {
       playedOn: r.played_on,
       tipoff: r.tipoff === null ? null : r.tipoff.toISOString(),
+      score: r.score === null ? null : Number(r.score),
+    };
+    const game: PeriodGame = {
+      gameId: Number(r.game_id),
+      ...night,
       opponent: r.opponent,
       opponentStrength: r.opponent_strength === null ? null : Number(r.opponent_strength),
-      score: r.score === null ? null : Number(r.score),
+      state: nightState(night, now),
       projected,
       started: r.slot !== null && r.slot !== "BENCH" && r.slot !== "IR",
     };
@@ -239,20 +255,21 @@ export async function startableInPeriod(
     // report a bigger week than the matchup screen scores.
     starter.scored = starter.games.reduce((a, g) => a + (g.started ? (g.score ?? 0) : 0), 0);
     // Forward-looking, so it takes the whole remaining slate: a lineup set for
-    // the period starts him on every night left in it.
+    // the period starts him on every night left in it. Only nights that have
+    // not finished are projected — a night behind us with no box score is a
+    // DNP worth zero, and adding his average to it would have every historic
+    // week quoting a projection above the score it actually finished on.
     starter.projected = starter.scored
-      + starter.games.reduce((a, g) => a + (g.score === null ? g.projected : 0), 0);
+      + starter.games.reduce((a, g) => a + (g.state === "final" ? 0 : g.projected), 0);
 
     // His first night is the one that freezes him. A filed score counts as
     // played whatever the clock says, for the same reason it does nightly:
     // box scores arrive a day at a time and can land before a pinned clock
-    // reaches the tip-off.
+    // reaches the tip-off — and a night already behind us locks him whether or
+    // not it ever filed one.
     const first = starter.games[0];
     if (first !== undefined) {
-      const tipped = first.tipoff !== null && new Date(first.tipoff) <= now;
-      const played = first.score !== null;
-      const behindUs = first.playedOn < today;
-      starter.locked = tipped || played || behindUs;
+      starter.locked = first.state !== "upcoming";
       starter.lockedAt = starter.locked ? first.tipoff : null;
     }
   }
