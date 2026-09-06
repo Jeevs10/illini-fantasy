@@ -273,8 +273,11 @@ export interface PlayerCard {
  * already disbelieves.
  */
 export async function playerCard(
-  db: Db, { playerId, configId, season, leagueId }: {
+  db: Db, { playerId, configId, season, leagueId, asOf }: {
     playerId: number; configId: number; season: number; leagueId?: number;
+    /** Cap the log at nights on or before this date, so a card browsed
+        mid-season shows games played, not the whole schedule. */
+    asOf?: string;
   },
 ): Promise<PlayerCard | null> {
   const { rows: players } = await db.query<{
@@ -314,8 +317,9 @@ export async function playerCard(
           ORDER BY tr.as_of DESC LIMIT 1
        ) rating ON true
       WHERE s.player_id = $1 AND s.config_id = $2 AND st.season = $3
+        AND ($4::date IS NULL OR s.played_on <= $4::date)
       ORDER BY s.played_on DESC`,
-    [playerId, configId, season],
+    [playerId, configId, season, asOf ?? null],
   );
 
   const log: GameLogEntry[] = rows.map((r) => ({

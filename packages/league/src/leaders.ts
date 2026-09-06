@@ -366,11 +366,13 @@ function toAverages(r: AverageRow): StatAverages {
 
 /** A player's season averages, box/shooting/advanced together. */
 export async function seasonAverages(
-  db: Db, { playerId, season }: { playerId: number; season: number },
+  db: Db, { playerId, season, asOf }: { playerId: number; season: number; asOf?: string },
 ): Promise<StatAverages | null> {
   const { rows } = await db.query<AverageRow>(
-    `SELECT ${AVERAGE_SELECT} FROM player_game_stat WHERE player_id = $1 AND season = $2`,
-    [playerId, season],
+    `SELECT ${AVERAGE_SELECT} FROM player_game_stat
+      WHERE player_id = $1 AND season = $2
+        AND ($3::date IS NULL OR played_on <= $3::date)`,
+    [playerId, season, asOf ?? null],
   );
   const r = rows[0];
   if (!r || Number(r.games) === 0) return null;
@@ -394,14 +396,17 @@ export interface StatPercentile {
  * a few hundred players.
  */
 export async function statPercentiles(
-  db: Db, { playerId, season, role }: { playerId: number; season: number; role: string },
+  db: Db, { playerId, season, role, asOf }: {
+    playerId: number; season: number; role: string; asOf?: string;
+  },
 ): Promise<StatPercentile[]> {
   const { rows } = await db.query<{ player_id: string } & AverageRow>(
     `SELECT player_id, ${AVERAGE_SELECT}
        FROM player_game_stat
       WHERE season = $1 AND role = $2
+        AND ($3::date IS NULL OR played_on <= $3::date)
       GROUP BY player_id`,
-    [season, role],
+    [season, role, asOf ?? null],
   );
   const mine = rows.find((r) => Number(r.player_id) === playerId);
   if (!mine) return [];

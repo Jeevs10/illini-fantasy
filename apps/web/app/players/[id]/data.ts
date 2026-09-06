@@ -30,19 +30,19 @@ export async function loadPlayerCard(
   playerId: number, viewer: { leagueId: number; season: number; configId: number },
 ): Promise<PlayerCardData | null> {
   const { leagueId, season, configId } = viewer;
-  const card = await playerCard(db, { playerId, configId, season, leagueId });
+  const today = viewDate();
+  const card = await playerCard(db, { playerId, configId, season, leagueId, asOf: today });
   if (!card) return null;
 
-  const today = viewDate();
   const seasonStart = `${season - 1}-11-01`;
   const [rankTrend, averages, projection, availability] = await Promise.all([
     playerRankTrend(db, { playerId, configId, from: seasonStart, to: today }),
-    seasonAverages(db, { playerId, season }),
+    seasonAverages(db, { playerId, season, asOf: today }),
     playerWeekProjection(db, { playerId, configId, from: today, to: shiftDate(today, 6) }),
     availabilityOf(db, playerId),
   ]);
   const percentiles = card.role
-    ? await statPercentiles(db, { playerId, season, role: card.role })
+    ? await statPercentiles(db, { playerId, season, role: card.role, asOf: today })
     : [];
 
   return {
