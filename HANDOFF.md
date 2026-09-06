@@ -13,7 +13,7 @@ say.
 | Typecheck | clean (`npm run typecheck`, and `npx tsc --noEmit` inside `apps/web`) |
 | Build | clean (`npm run build`) |
 | Production data | Neon `floral-shape-81709658`, 5 ingested game days, Feb 10–14 2026 |
-| Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games — **not yet migrated to 014 or re-ingested for the box/bio widening, team identity, or per-matchup settings; see below** |
+| Full season | Neon branch `full-season-2026`, 147 game days, 113,860 player-games. Migrations are current (014) on this branch and on production as of 2026-09-06, checked directly — the "not yet migrated" note below is stale; whether the re-ingests it also asks for have been run is unverified. Its leagues 4 and 6 still carry nightly lineups; see "The nightly re-cut" |
 | Demo | Neon branch `demo-live` (`br-muddy-unit-ax0fqzju`), a branch of `full-season-2026` carrying league 6 `Illini Fantasy`, midseason — lineups re-cut from nights into weeks on 2026-09-06, see "The nightly re-cut" |
 | Leagues | 1 `Illini Fantasy` (Phases 2–3, seeded rosters) · 2 `Draft Night` (Phase 4, really drafted) · 4 `Illini Fantasy — 2025-26` (branch only, drafted and played out) |
 
