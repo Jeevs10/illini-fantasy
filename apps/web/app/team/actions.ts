@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  InvalidLineupError, LineupLockedError, NotOnRosterError,
-  autoFillPeriod, setPeriodLineup, type Slot,
+  InvalidLineupError, LineupLockedError, NotInjuredError, NotOnRosterError, ReserveFullError, RosterFullError,
+  activateFromReserve, autoFillPeriod, moveToReserve, setPeriodLineup, type Slot,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewNow } from "../../lib/session.ts";
@@ -95,4 +95,46 @@ export async function autoFill(
 
   const started = result.entries.filter((e) => e.slot !== "BENCH" && e.slot !== "IR").length;
   return { ok: `Auto-filled — ${started} starting, ${result.locked.length} already locked.`, at: Date.now() };
+}
+
+/**
+ * Injured reserve, in a league with no lineup: a seat outside the twelve for a
+ * player listed out, which is what lets a manager field a replacement without
+ * dropping him. Takes effect at the next Sunday lock, like every roster move.
+ */
+export async function reserve(
+  _state: LineupState, formData: FormData,
+): Promise<LineupState> {
+  const viewer = await requireViewer();
+  const { fantasyTeamId } = viewer.membership;
+  if (fantasyTeamId === null) return { error: "You do not manage a team in this league.", at: Date.now() };
+  const playerId = Number(formData.get("playerId"));
+  const name = String(formData.get("name") ?? "He");
+  const activate = formData.get("activate") === "1";
+
+  try {
+    if (activate) await activateFromReserve(db, { fantasyTeamId, playerId, now: viewNow() });
+    else await moveToReserve(db, { fantasyTeamId, playerId, now: viewNow() });
+  } catch (error) {
+    if (error instanceof NotInjuredError) {
+      return { error: `${name} is not listed out — IR is only for a player the injury report has out.`, at: Date.now() };
+    }
+    if (error instanceof ReserveFullError) {
+      return { error: `Your IR seat is taken. Activate or drop that player first.`, at: Date.now() };
+    }
+    if (error instanceof RosterFullError) {
+      return { error: `All ${error.limit} seats are full — drop somebody before ${name} comes back.`, at: Date.now() };
+    }
+    if (error instanceof NotOnRosterError) {
+      return { error: "That player is not on your roster.", at: Date.now() };
+    }
+    throw error;
+  }
+  revalidatePath("/team");
+  return {
+    ok: activate
+      ? `${name} is back from IR from Sunday's lock.`
+      : `${name} goes on IR from Sunday's lock — his seat is open for a pickup now.`,
+    at: Date.now(),
+  };
 }

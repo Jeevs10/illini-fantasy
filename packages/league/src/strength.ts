@@ -36,6 +36,13 @@ export interface StrengthAdjustment {
   configId: number;
   /** Weeks already settled, which keep the rules they settled under. */
   settledWeeks: number;
+  /**
+   * Whether the switch means anything for this league. It swaps between the
+   * two Torvik configs; a league scored on anything else — the forward model's
+   * valAdj, which carries its own opponent adjustment — has neither, and
+   * pointing it at one would leave every one of its stored scores unread.
+   */
+  applies: boolean;
 }
 
 /** Both config versions, registered if this is the first time they are asked for. */
@@ -59,11 +66,13 @@ export async function strengthAdjustment(
   const row = rows[0];
   if (row === undefined) throw new Error(`no league ${leagueId}`);
 
-  const { flat } = await configPair(db);
+  const { adjusted, flat } = await configPair(db);
+  const configId = Number(row.config_id);
   return {
-    on: Number(row.config_id) !== flat,
-    configId: Number(row.config_id),
+    on: configId !== flat,
+    configId,
     settledWeeks: Number(row.settled),
+    applies: configId === adjusted || configId === flat,
   };
 }
 
@@ -118,6 +127,9 @@ export async function setStrengthAdjustment(
 ): Promise<StrengthChange> {
   await requireCommissioner(db, leagueId, byUserId);
   const before = await strengthAdjustment(db, leagueId);
+  if (!before.applies) {
+    throw new Error("this league is not scored on the Torvik model, so there is no adjustment to switch");
+  }
   if (before.on === on) {
     return { on, changed: false, backfilled: 0, settledWeeks: before.settledWeeks };
   }

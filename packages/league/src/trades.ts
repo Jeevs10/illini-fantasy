@@ -1,7 +1,7 @@
 import type { Db } from "@illini/db";
 import { requireCommissioner, type Queryable } from "./membership.ts";
 import {
-  AlreadyRosteredError, claimPlayer, clearFutureLineups, releasePlayer, rosterLimit, rosterOn,
+  AlreadyRosteredError, activeLimit, claimPlayer, clearFutureLineups, releasePlayer, rosterOn,
 } from "./roster.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
 
@@ -575,11 +575,16 @@ async function assertHonourable(
     if (missing[0] !== undefined) throw new NotTradeableError(missing[0], team);
   }
 
-  const limit = rosterLimit(settings);
+  // An `everyone` league counts IR apart: a player coming off a team's IR
+  // frees no active seat, and one arriving takes one.
+  const limit = activeLimit(settings);
   for (const team of sides) {
-    const size = (await rosterOn(q, team, on)).length;
-    const out = [...from.values()].filter((t) => t === team).length;
-    const after = size - out + (from.size - out);
+    const held = await rosterOn(q, team, on);
+    const reserved = new Set(held.filter((p) => p.reserve).map((p) => p.playerId));
+    const size = held.length - reserved.size;
+    const leaving = [...from.entries()].filter(([, t]) => t === team);
+    const out = leaving.filter(([p]) => !reserved.has(p)).length;
+    const after = size - out + (from.size - leaving.length);
     if (after > limit) {
       const { rows } = await q.query<{ name: string }>(
         "SELECT name FROM fantasy_team WHERE id = $1", [team]);
@@ -745,7 +750,7 @@ async function execute(
   const sides = [Number(rows[0]!.from_team_id), Number(rows[0]!.to_team_id)];
 
   for (const [playerId, giver] of from) {
-    await releasePlayer(q, { fantasyTeamId: giver, playerId, on, via: "trade" });
+    await releasePlayer(q, { fantasyTeamId: giver, playerId, on, via: "trade", at });
     // The lineup rule every path that closes a tenure owes: a player traded on
     // Tuesday can still be in Thursday's starting five for the team that gave
     // him up, and settling would count his points for them.
@@ -753,7 +758,7 @@ async function execute(
   }
   for (const [playerId, giver] of from) {
     const taker = sides.find((id) => id !== giver)!;
-    await claimPlayer(q, { fantasyTeamId: taker, playerId, on, via: "trade", settings });
+    await claimPlayer(q, { fantasyTeamId: taker, playerId, on, via: "trade", settings, at });
   }
 }
 

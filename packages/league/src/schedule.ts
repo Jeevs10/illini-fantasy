@@ -3,7 +3,12 @@ import { insertMany } from "@illini/db";
 
 export interface Week { week: number; startsOn: string; endsOn: string }
 
-/** Monday-to-Sunday scoring periods from a season start date. */
+/**
+ * Scoring periods of `periodDays` from a start date. The day of the week the
+ * start falls on is the day every period starts: a Monday for the demo
+ * leagues' Monday-to-Sunday weeks, a Sunday for the 2026-27 league's
+ * Sunday-to-Saturday ones.
+ */
 export function weeksFrom(firstMonday: string, count: number, periodDays = 7): Week[] {
   const weeks: Week[] = [];
   const cursor = new Date(`${firstMonday}T00:00:00Z`);

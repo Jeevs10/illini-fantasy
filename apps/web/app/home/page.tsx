@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   availabilityFor, claimsFor, eligibleSlots, gameState, leagueActivity, listTrades,
-  rankedStandings, rosterLimit, rosterOn, scoresOn, startableOn, weekMatchups,
+  activeLimit, draftFor, rankedStandings, rosterOn, scoresOn, startableOn, weekMatchups,
   type PlayerAvailability, type Slot, type Startable, type TeamOutlook,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -31,13 +31,14 @@ export default async function HomePage() {
   const mine = matchups.find(
     (m) => m.home.fantasyTeamId === fantasyTeamId || m.away.fantasyTeamId === fantasyTeamId);
 
-  const [tonight, standingsTable, trades, claims, roster, activity] = await Promise.all([
+  const [tonight, standingsTable, trades, claims, roster, activity, draft] = await Promise.all([
     fantasyTeamId === null ? [] : startableOn(db, { fantasyTeamId, day, configId, now }),
     rankedStandings(db, leagueId),
     fantasyTeamId === null ? [] : listTrades(db, { leagueId, involving: fantasyTeamId, limit: 6 }),
     fantasyTeamId === null ? [] : claimsFor(db, { leagueId, fantasyTeamId }),
     fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, day),
     leagueActivity(db, { leagueId, limit: 8 }),
+    draftFor(db, leagueId),
   ]);
 
   const availability = await availabilityFor(db, tonight.map((p) => p.playerId));
@@ -49,6 +50,11 @@ export default async function HomePage() {
   const seat = standingsTable.find((r) => r.fantasyTeamId === fantasyTeamId) ?? null;
   const offers = trades.filter((t) => t.status === "proposed" && t.to.fantasyTeamId === fantasyTeamId);
   const pendingClaims = claims.filter((c) => c.status === "pending");
+  // No lineup in an `everyone` league: the team page is a week to read, not a
+  // form to fill, and IR is a seat of its own rather than part of the twelve.
+  const everyone = settings.lineupMode === "everyone";
+  const held = roster.filter((p) => !p.reserve).length;
+  const teamLabel = everyone ? "My team" : "Set lineup";
 
   return (
     <>
@@ -58,14 +64,24 @@ export default async function HomePage() {
           <p className="meta">
             <span>{leagueName}</span>
             {seat ? <span>{seat.wins}&ndash;{seat.losses}{seat.ties ? `–${seat.ties}` : ""} · {ordinal(seat.rank)}</span> : null}
-            <span>{roster.length} of {rosterLimit(settings)} rostered</span>
+            <span>{held} of {activeLimit(settings)} rostered</span>
           </p>
         </div>
         <div className="controls">
-          <Link className="button" href="/team">Set lineup</Link>
+          <Link className="button" href="/team">{teamLabel}</Link>
           <Link className="button" href="/players?free=1">Free agents</Link>
         </div>
       </div>
+
+      {/* Draft night: the room lives behind the profile menu on desktop, and
+          nobody should have to find it there while their clock is running. */}
+      {draft && draft.status !== "complete" ? (
+        <p className={`notice ${draft.status === "live" ? "good" : ""}`} style={{ marginBottom: "var(--s-4)" }}>
+          {draft.status === "live" ? "The draft is live." : draft.status === "paused" ? "The draft is paused."
+            : "The draft is set up and waiting to start."}{" "}
+          <Link href="/draft">Go to the draft room →</Link>
+        </p>
+      ) : null}
 
       {mine && outlooks ? (
         <div style={{ marginBottom: "var(--s-5)" }} className="rise">
@@ -92,11 +108,12 @@ export default async function HomePage() {
 
       <div className="split">
         <div>
-          <SectionHead title="Tonight" action="Set lineup" href="/team">
+          <SectionHead title="Tonight" action={teamLabel} href="/team">
             <span className="spacer" />
           </SectionHead>
           <div className="panel">
-            <Tonight players={tonight} scores={tonightScores} now={now} settings={settings} availability={availability} />
+            <Tonight players={tonight} scores={tonightScores} now={now} settings={settings} availability={availability}
+                     everyone={everyone} />
           </div>
 
           <SectionHead title="Around the league" action="All matchups" href="/league" />
@@ -133,8 +150,9 @@ export default async function HomePage() {
             settings={settings}
             offers={offers.length}
             claims={pendingClaims.length}
-            roster={roster.length}
-            limit={rosterLimit(settings)}
+            roster={held}
+            limit={activeLimit(settings)}
+            everyone={everyone}
             now={now}
             availability={availability}
           />
@@ -222,13 +240,15 @@ const ordinal = (n: number) =>
  * that has not been made yet, and hiding him is how points get left behind.
  */
 function Tonight({
-  players, scores, now, settings, availability,
+  players, scores, now, settings, availability, everyone = false,
 }: {
   players: Startable[];
   scores: Map<number, number>;
   now: Date;
   settings: { starters: { slot: string; count: number }[] };
   availability: Map<number, PlayerAvailability>;
+  /** No slots to show: everyone held at the lock counts, and anyone else joins on Sunday. */
+  everyone?: boolean;
 }) {
   if (players.length === 0) {
     return (
@@ -257,7 +277,7 @@ function Tonight({
       <div className="card-head">
         <div className="row" style={{ gap: "var(--s-5)" }}>
           <div>
-            <div className="eyebrow">Starters scoring</div>
+            <div className="eyebrow">{everyone ? "Scoring tonight" : "Starters scoring"}</div>
             <Score value={scored} size="md" />
           </div>
           {projected > scored + 0.05 ? (
@@ -267,7 +287,8 @@ function Tonight({
             </div>
           ) : null}
         </div>
-        {live > 0 ? <LiveTag label={`${live} on the floor`} /> : <span className="pill ghost">{started.length} starting</span>}
+        {live > 0 ? <LiveTag label={`${live} on the floor`} />
+          : <span className="pill ghost">{started.length} {everyone ? "playing" : "starting"}</span>}
       </div>
 
       {ordered.map((player) => {
@@ -282,7 +303,8 @@ function Tonight({
             dim={benched}
             rail={player.primaryColor}
             state={!benched && state === "live" ? "live" : undefined}
-            lead={<span className="slot" data-slot={player.slot}>{benched ? "BN" : player.slot}</span>}
+            lead={everyone ? undefined
+              : <span className="slot" data-slot={player.slot}>{benched ? "BN" : player.slot}</span>}
             badge={
               <AvailabilityTag
                 status={availability.get(player.playerId)?.status}
@@ -325,12 +347,18 @@ function Tonight({
  * standing offer is somebody waiting on an answer.
  */
 function Attention({
-  tonight, settings, offers, claims, roster, limit, now, availability,
+  tonight, settings, offers, claims, roster, limit, now, availability, everyone = false,
 }: {
   tonight: Startable[];
   settings: { starters: { slot: Exclude<Slot, "BENCH" | "IR">; count: number }[] };
   offers: number; claims: number; roster: number; limit: number; now: Date;
   availability: Map<number, PlayerAvailability>;
+  /**
+   * No lineup: nobody is "benched" (a player shown off the lineup is one added
+   * since the lock, who joins on Sunday), so the slot alarms do not apply and
+   * the answer to a player ruled out is IR, not a swap.
+   */
+  everyone?: boolean;
 }) {
   const filled = new Map<string, number>();
   for (const p of tonight) {
@@ -347,8 +375,9 @@ function Attention({
     ).length;
     for (let i = 0; i < Math.min(short, available); i += 1) open.push(slot);
   }
+  if (everyone) open.length = 0;
 
-  const missed = tonight.filter((p) => (p.slot === "BENCH" || p.slot === "IR") && p.locked);
+  const missed = everyone ? [] : tonight.filter((p) => (p.slot === "BENCH" || p.slot === "IR") && p.locked);
   const missedPoints = missed.reduce((a, p) => a + p.projected, 0);
 
   const out = tonight.filter(
@@ -357,7 +386,14 @@ function Attention({
 
   const items: { tone: "crit" | "warn" | "" ; glyph: "alert" | "clock" | "trades" | "waivers" | "team"; title: string; body: string; href: string; cta: string }[] = [];
 
-  if (out.length > 0) {
+  if (out.length > 0 && everyone) {
+    items.push({
+      tone: "crit", glyph: "alert",
+      title: `${out.length} player${out.length === 1 ? "" : "s"} ruled out tonight`,
+      body: `${out.map((p) => p.name).join(", ")} — listed out. Moving ${out.length === 1 ? "him" : "them"} to IR opens a seat for a pickup from Sunday's lock.`,
+      href: "/team", cta: "IR",
+    });
+  } else if (out.length > 0) {
     items.push({
       tone: "crit", glyph: "alert",
       title: `${out.length} starter${out.length === 1 ? "" : "s"} ruled out tonight`,
@@ -401,7 +437,9 @@ function Attention({
     items.push({
       tone: "", glyph: "team",
       title: `${limit - roster} roster spot${limit - roster === 1 ? "" : "s"} open`,
-      body: "An empty spot never scores. Free agents can be added outright.",
+      body: everyone
+        ? "An empty spot never scores. A free agent added now plays from Sunday's lock."
+        : "An empty spot never scores. Free agents can be added outright.",
       href: "/players?free=1", cta: "Browse",
     });
   }
@@ -416,7 +454,9 @@ function Attention({
       </div>
       {items.length === 0 ? (
         <Empty title="Nothing outstanding" glyph="check">
-          Every slot is filled, no offer is waiting, and the roster is full.
+          {everyone
+            ? "Nobody is ruled out, no offer is waiting, and the roster is full."
+            : "Every slot is filled, no offer is waiting, and the roster is full."}
         </Empty>
       ) : (
         <div className="stagger">

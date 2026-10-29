@@ -288,6 +288,8 @@ export async function playerWeekProjection(
  */
 export interface StatAverages {
   games: number;
+  /** Stats no game this season reported at all — shown as absent, not as zero. */
+  unreported: ("usage" | "bpm" | "obpm" | "dbpm" | "porpag")[];
   // box
   points: number;
   rebounds: number;
@@ -312,7 +314,7 @@ export interface StatAverages {
   porpag: number;
 }
 
-export const STAT_GROUPS: { label: string; stats: (keyof Omit<StatAverages, "games">)[] }[] = [
+export const STAT_GROUPS: { label: string; stats: (keyof Omit<StatAverages, "games" | "unreported">)[] }[] = [
   { label: "Box", stats: ["points", "rebounds", "assists", "steals", "blocks", "offensiveRebounds", "defensiveRebounds"] },
   { label: "Shooting", stats: ["fieldGoalsMade", "threesMade", "freeThrowsMade", "effectiveFieldGoalPct", "trueShootingPct", "threePointPct", "freeThrowPct"] },
   { label: "Advanced", stats: ["usage", "bpm", "obpm", "dbpm", "porpag"] },
@@ -352,7 +354,12 @@ type AverageRow = {
 
 function toAverages(r: AverageRow): StatAverages {
   const n = (v: string | null): number => Number(v ?? 0);
+  // A stat no row carries averages to null, not zero: the forward feed has
+  // no usage or BPM, and a page that read 0.0 there would be making one up.
+  const advanced = { usage: r.usage, bpm: r.bpm, obpm: r.obpm, dbpm: r.dbpm, porpag: r.porpag };
+  const unreported = Object.entries(advanced).filter(([, v]) => v === null).map(([k]) => k) as StatAverages["unreported"];
   return {
+    unreported,
     games: Number(r.games),
     points: n(r.points), rebounds: n(r.rebounds), assists: n(r.assists),
     steals: n(r.steals), blocks: n(r.blocks),

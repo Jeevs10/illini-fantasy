@@ -65,6 +65,9 @@ export default async function DraftPage({
     done ? Promise.resolve([]) : playerPool(db, {
       leagueId, season, configId, limit: POOL, availableOnly: true, search: q,
       roles: roleFilter ? [roleFilter] : undefined, asOf: viewDate(),
+      // The same order the clock drafts in (`availableRanked`): projection
+      // first where the season has one, season total where it does not.
+      sort: "proj",
     }),
     fantasyTeamId === null ? Promise.resolve([]) : draftQueue(db, { leagueId, fantasyTeamId }),
   ]);

@@ -81,7 +81,7 @@ export async function scorePeriod(
   }>(
     `SELECT l.player_id, p.name, to_char(l.played_on, 'YYYY-MM-DD') AS played_on,
             l.slot, s.score
-       FROM lineup_entry l
+       FROM fielded l
        JOIN player p ON p.id = l.player_id
        JOIN player_game_score s
          ON s.player_id = l.player_id

@@ -13,6 +13,8 @@ export interface RosteredPlayer {
   role: string | null;
   acquiredOn: string;
   acquiredVia: string;
+  /** On injured reserve: held, and scoring nothing. Only an `everyone` league puts anyone here. */
+  reserve: boolean;
 }
 
 /** Raised when a player is already owned, carrying who owns him. */
@@ -35,6 +37,18 @@ export function rosterLimit(settings: LeagueSettings = DEFAULT_SETTINGS): number
 }
 
 /**
+ * How many players a team may hold off injured reserve.
+ *
+ * In a manual league IR is a lineup slot, so it is just part of the roster
+ * limit and this is the whole limit. In an `everyone` league IR is a tenure of
+ * its own: the twelve who score and the one who is hurt are counted apart, so
+ * putting a player on IR is what opens the seat a replacement takes.
+ */
+export function activeLimit(settings: LeagueSettings = DEFAULT_SETTINGS): number {
+  return settings.lineupMode === "everyone" ? rosterLimit(settings) - settings.ir : rosterLimit(settings);
+}
+
+/**
  * The roster as it stood on a given night.
  *
  * Tenures are closed rather than deleted, so settling an old week sees the
@@ -47,14 +61,14 @@ export async function rosterOn(
   const { rows } = await db.query<{
     player_id: string; name: string; team_name: string | null;
     primary_color: string | null; secondary_color: string | null; role: string | null;
-    acquired_on: string; acquired_via: string;
+    acquired_on: string; acquired_via: string; reserve: boolean;
   }>(
     `SELECT r.player_id, p.name, t.name AS team_name,
             t.primary_color, t.secondary_color,
-            (SELECT st.role FROM player_game_stat st
-              WHERE st.player_id = r.player_id AND st.role IS NOT NULL
-              ORDER BY st.played_on DESC LIMIT 1) AS role,
-            to_char(r.acquired_on, 'YYYY-MM-DD') AS acquired_on, r.acquired_via
+            coalesce((SELECT st.role FROM player_game_stat st
+                       WHERE st.player_id = r.player_id AND st.role IS NOT NULL
+                       ORDER BY st.played_on DESC LIMIT 1), p.position) AS role,
+            to_char(r.acquired_on, 'YYYY-MM-DD') AS acquired_on, r.acquired_via, r.reserve
        FROM roster_slot r
        JOIN player p ON p.id = r.player_id
        LEFT JOIN team t ON t.id = p.team_id
@@ -73,6 +87,7 @@ export async function rosterOn(
     role: r.role,
     acquiredOn: r.acquired_on,
     acquiredVia: r.acquired_via,
+    reserve: r.reserve,
   }));
 }
 
@@ -91,9 +106,16 @@ export async function rosterOn(
  */
 export async function claimPlayer(
   db: Queryable,
-  { fantasyTeamId, playerId, on, via = "free_agent", settings = DEFAULT_SETTINGS, byUserId }: {
+  { fantasyTeamId, playerId, on, via = "free_agent", settings = DEFAULT_SETTINGS, byUserId, at }: {
     fantasyTeamId: number; playerId: number; on: string;
     via?: Acquisition; settings?: LeagueSettings; byUserId?: number;
+    /**
+     * The instant the tenure opens. An `everyone` league counts a player for
+     * a period only if he was held at its lock, so a waiver run settled on
+     * read hours after it was due stamps its winners with the run's own time
+     * rather than the moment somebody happened to load a page.
+     */
+    at?: Date;
   },
 ): Promise<void> {
   const { rows: teams } = await db.query<{ league_id: string }>(
@@ -111,15 +133,15 @@ export async function claimPlayer(
     throw new AlreadyRosteredError(playerId, Number(owners[0].id), owners[0].name);
   }
 
-  const size = (await rosterOn(db, fantasyTeamId, on)).length;
-  const limit = rosterLimit(settings);
+  const size = (await rosterOn(db, fantasyTeamId, on)).filter((p) => !p.reserve).length;
+  const limit = activeLimit(settings);
   if (size >= limit) throw new RosterFullError(fantasyTeamId, size, limit);
 
   try {
     await db.query(
-      `INSERT INTO roster_slot (fantasy_team_id, league_id, player_id, acquired_on, acquired_via)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [fantasyTeamId, leagueId, playerId, on, via],
+      `INSERT INTO roster_slot (fantasy_team_id, league_id, player_id, acquired_on, acquired_via, acquired_at)
+       VALUES ($1, $2, $3, $4, $5, coalesce($6::timestamptz, now()))`,
+      [fantasyTeamId, leagueId, playerId, on, via, at ?? null],
     );
   } catch (error) {
     // 23505: the unique index caught a claim that landed between the read above
@@ -145,14 +167,16 @@ export async function claimPlayer(
  * manager goes to find out what happened to him.
  */
 export async function releasePlayer(
-  db: Queryable, { fantasyTeamId, playerId, on, via = "release" }: {
+  db: Queryable, { fantasyTeamId, playerId, on, via = "release", at }: {
     fantasyTeamId: number; playerId: number; on: string; via?: string;
+    /** The instant the tenure closes; see `claimPlayer`'s `at`. */
+    at?: Date;
   },
 ): Promise<boolean> {
   const { rowCount } = await db.query(
-    `UPDATE roster_slot SET released_on = $3
+    `UPDATE roster_slot SET released_on = $3, released_at = coalesce($4::timestamptz, now())
       WHERE fantasy_team_id = $1 AND player_id = $2 AND released_on IS NULL`,
-    [fantasyTeamId, playerId, on],
+    [fantasyTeamId, playerId, on, at ?? null],
   );
   if ((rowCount ?? 0) === 0) return false;
 
@@ -234,23 +258,31 @@ export interface PoolPlayer {
   games: number;
   totalScore: number;
   averageScore: number;
+  /**
+   * The forward model's projected Player Score, latest feed — what a
+   * forward-model league drafts by. Null in a season with no projections.
+   */
+  projected: number | null;
   ownedBy: string | null;
   /** Present only when the pool was asked for one scoring period. */
   week?: PoolWeek;
 }
 
-export type PoolSort = "total" | "avg" | "games" | "weekProj" | "weekPts";
+export type PoolSort = "total" | "avg" | "games" | "weekProj" | "weekPts" | "proj";
 
+// Every order ends on the projection, so a player with no games yet (the whole
+// pool, before the season) still lands where the model puts him.
 const POOL_ORDER: Record<PoolSort, string> = {
-  total: "totals.total DESC",
+  total: "totals.total DESC NULLS LAST, proj.score DESC NULLS LAST",
   // Ties toward more games played — an average from two games outranking one
   // from twenty is the ordering the games-column exists to let a reader catch.
-  avg: "(totals.total / totals.games) DESC, totals.games DESC",
-  games: "totals.games DESC, totals.total DESC",
+  avg: "(totals.total / totals.games) DESC NULLS LAST, totals.games DESC NULLS LAST, proj.score DESC NULLS LAST",
+  games: "totals.games DESC NULLS LAST, totals.total DESC NULLS LAST, proj.score DESC NULLS LAST",
   // Both tie into the season total, so a week nobody plays in still ranks
   // sensibly rather than in whatever order the planner happened to produce.
-  weekProj: "week_projected DESC, totals.total DESC",
-  weekPts: "week_scored DESC, totals.total DESC",
+  weekProj: "week_projected DESC, totals.total DESC NULLS LAST, proj.score DESC NULLS LAST",
+  weekPts: "week_scored DESC, totals.total DESC NULLS LAST, proj.score DESC NULLS LAST",
+  proj: "proj.score DESC NULLS LAST, totals.total DESC NULLS LAST",
 };
 
 /** The scoring period a pool ranking can be asked about instead of the season. */
@@ -365,7 +397,7 @@ export async function playerPool(
     player_id: string; name: string; team_name: string | null;
     primary_color: string | null; secondary_color: string | null; conference: string | null;
     role: string | null; archetype: Archetype | null; games: string; total: number;
-    owned_by: string | null;
+    projected: number | null; owned_by: string | null;
     week_games?: string; week_played?: string; week_scored?: number; week_projected?: number;
   }>(
     `WITH owned AS (
@@ -383,18 +415,36 @@ export async function playerPool(
         WHERE s.config_id = $3 AND st.season = $2
           AND ($9::date IS NULL OR st.played_on <= $9)
         GROUP BY s.player_id
+     ),
+     -- The latest projection per player. Its date is not capped at the viewing
+     -- date: a projection is a forecast, and the freshest one is the best read
+     -- of the season still ahead.
+     proj AS (
+       SELECT DISTINCT ON (player_id) player_id, score
+         FROM player_projection
+        WHERE season = $2
+        ORDER BY player_id, as_of DESC
+     ),
+     -- The season's pool: everyone who has played, and everyone the model
+     -- projects — before the first game that is all of them.
+     pool AS (
+       SELECT player_id FROM totals UNION SELECT player_id FROM proj
      )${weekCte}
      SELECT p.id AS player_id, p.name, t.name AS team_name,
             t.primary_color, t.secondary_color, t.conference,
-            totals.role, totals.archetype, totals.games, totals.total,
+            coalesce(totals.role, p.position) AS role, totals.archetype,
+            coalesce(totals.games, 0) AS games, coalesce(totals.total, 0) AS total,
+            proj.score AS projected,
             owned.name AS owned_by${weekColumns}
-       FROM totals
-       JOIN player p ON p.id = totals.player_id
+       FROM pool
+       JOIN player p ON p.id = pool.player_id
+       LEFT JOIN totals ON totals.player_id = pool.player_id
+       LEFT JOIN proj ON proj.player_id = pool.player_id
        LEFT JOIN team t ON t.id = p.team_id
        LEFT JOIN owned ON owned.player_id = p.id${weekJoins}
       WHERE ($6::boolean IS NOT TRUE OR owned.player_id IS NULL)
         AND ($7::text IS NULL OR p.normalised LIKE '%' || $7 || '%')
-        AND ($8::text[] IS NULL OR totals.role = ANY($8))
+        AND ($8::text[] IS NULL OR coalesce(totals.role, p.position) = ANY($8))
       ORDER BY ${POOL_ORDER[ranking]}
       LIMIT $4 OFFSET $5`,
     [leagueId, season, configId, limit, offset, availableOnly,
@@ -414,6 +464,7 @@ export async function playerPool(
     games: Number(r.games),
     totalScore: Number(r.total),
     averageScore: Number(r.total) / Math.max(1, Number(r.games)),
+    projected: r.projected === null ? null : Number(r.projected),
     ownedBy: r.owned_by,
     ...(window === undefined ? {} : {
       week: {

@@ -50,7 +50,9 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
                   </span>
                   <span className="sub">
                     {player.teamName ?? "—"}
-                    {` · ${player.averageScore.toFixed(1)} avg`}
+                    {player.projected !== null
+                      ? ` · ${player.projected.toFixed(1)} proj`
+                      : ` · ${player.averageScore.toFixed(1)} avg`}
                   </span>
                 </span>
                 {player.available ? (

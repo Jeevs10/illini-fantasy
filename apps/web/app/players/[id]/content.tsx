@@ -193,7 +193,11 @@ export function SeasonAveragesSection({
 }: {
   averages: StatAverages; percentileOf: Map<StatKey, StatPercentile>;
 }) {
-  const [boxGroup, ...rateGroups] = STAT_GROUPS;
+  const [boxGroup, ...allRateGroups] = STAT_GROUPS;
+  const absent = new Set<string>(averages.unreported);
+  const rateGroups = allRateGroups
+    .map((g) => ({ ...g, stats: g.stats.filter((s) => !absent.has(s)) }))
+    .filter((g) => g.stats.length > 0);
   return (
     <div className="panel">
       <div className="panel-head">
@@ -268,9 +272,12 @@ export function GameLogSection({ card }: { card: PlayerCard }) {
         <div>
           <h2>Game log</h2>
           <p>
-            Each night&rsquo;s six blocks, the opponent multiplier applied to
-            them, and the minutes ramp — so a score can be read rather than
-            taken on faith.
+            {card.log.some((g) => (g.archetype as string) === "forward")
+              ? <>Each night&rsquo;s box line through the Player Score&rsquo;s box weights,
+                  plus the credit for the defence it came against.</>
+              : <>Each night&rsquo;s six blocks, the opponent multiplier applied to
+                  them, and the minutes ramp — so a score can be read rather than
+                  taken on faith.</>}
           </p>
         </div>
         <span className="pill">{card.games} scored</span>
@@ -292,6 +299,8 @@ export function GameLogSection({ card }: { card: PlayerCard }) {
  * the archetype's weights, shown alongside each bar.
  */
 function Game({ game, best }: { game: GameLogEntry; best: number }) {
+  // Stored as the archetype by the forward feed, which has no archetype to give.
+  if ((game.archetype as string) === "forward") return <ForwardGame game={game} best={best} />;
   const weights = GAME_CONFIG.weights[game.archetype];
   return (
     <article className="game">
@@ -337,6 +346,38 @@ function Game({ game, best }: { game: GameLogEntry; best: number }) {
             </div>
           );
         })}
+      </div>
+    </article>
+  );
+}
+
+/**
+ * One night on the forward model: the box line through the Player Score's box
+ * weights, plus the credit for the defence it came against — the two parts of
+ * `valAdj`, the number the Daily Update ranks performances by.
+ */
+function ForwardGame({ game, best }: { game: GameLogEntry; best: number }) {
+  const parts = game.blocks as unknown as { box?: number; opponent?: number };
+  return (
+    <article className="game">
+      <div>
+        <div className="game-head">
+          <span className="game-date">{game.playedOn}</span>
+          {game.score === best ? <span className="pill mine">Season best</span> : null}
+          <span className="game-score">
+            <Score value={game.score} size="sm" tone={game.score === best ? "accent" : "default"} />
+          </span>
+        </div>
+        <p className="game-meta">
+          vs {game.opponent ?? "unknown"}
+          {" · "}{game.minutes.toFixed(0)} min · {game.points} pts, {game.rebounds} reb,{" "}
+          {game.assists} ast
+        </p>
+        <p className="game-math">
+          {(parts.box ?? game.raw).toFixed(1)} box value
+          {" + "}{(parts.opponent ?? 0).toFixed(1)} for the defence faced
+          {" = "}{game.score.toFixed(1)}
+        </p>
       </div>
     </article>
   );

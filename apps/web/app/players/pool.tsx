@@ -27,7 +27,7 @@ export interface PoolWeekView {
  * appears somewhere the reader is not looking.
  */
 export function Pool({
-  players, offset, full, canAct, sort, sortHrefs, week = null,
+  players, offset, full, canAct, sort, sortHrefs, week = null, projection = false,
 }: {
   players: PoolRow[];
   offset: number;
@@ -47,6 +47,13 @@ export function Pool({
    * answer that changes week to week.
    */
   week?: PoolWeekView | null;
+  /**
+   * A forward-model league: the season view leads with the projected Player
+   * Score — what the league drafted by and what the model now expects — in
+   * the column games played otherwise takes, and games played moves under
+   * the name.
+   */
+  projection?: boolean;
 }) {
   const [state, submit, pending] = useActionState<WaiverActionState, FormData>(add, {});
 
@@ -79,7 +86,9 @@ export function Pool({
             column becomes the forecast instead. */}
         {week === null ? (
           <>
-            <SortHead label="GP" sortKey="games" active={sort} href={sortHrefs.games} />
+            {projection
+              ? <SortHead label="Proj" sortKey="proj" active={sort} href={sortHrefs.proj} />
+              : <SortHead label="GP" sortKey="games" active={sort} href={sortHrefs.games} />}
             <SortHead label="Avg" sortKey="avg" active={sort} href={sortHrefs.avg} />
             <SortHead label="Total" sortKey="total" active={sort} href={sortHrefs.total} />
           </>
@@ -125,6 +134,8 @@ export function Pool({
                 <span className="pool-inline">
                   {week === null ? (
                     <>
+                      {projection && player.projected !== null
+                        ? <><Dot /><span>{player.projected.toFixed(1)} proj</span></> : null}
                       <Dot /><span>{player.averageScore.toFixed(1)} avg</span>
                       <Dot /><span>{player.games} GP</span>
                     </>
@@ -148,7 +159,9 @@ export function Pool({
           <span className="pool-role"><RoleTag role={player.role} /></span>
           {week === null ? (
             <>
-              <span className="pool-num r faint tnum">{player.games}</span>
+              {projection
+                ? <span className="pool-num r tnum">{player.projected === null ? "—" : player.projected.toFixed(1)}</span>
+                : <span className="pool-num r faint tnum">{player.games}</span>}
               <span className="pool-num r">
                 <Score value={player.averageScore} size="xs" />
               </span>

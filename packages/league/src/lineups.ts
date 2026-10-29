@@ -1,4 +1,5 @@
 import type { Db } from "@illini/db";
+import type { Queryable } from "./membership.ts";
 import { GAME_CONFIG, archetypeFor, type Archetype, type ScoringConfig } from "@illini/scoring";
 import {
   DEFAULT_SETTINGS, autoFill, validateLineup, type LeagueSettings, type LineupSlot, type Slot,
@@ -35,6 +36,30 @@ export class LineupLockedError extends Error {
       : `player ${playerId} tipped off at ${tipoff} and can no longer be moved`);
     this.name = "LineupLockedError";
   }
+}
+
+/**
+ * Raised by every lineup write in an `everyone` league, where there is no
+ * lineup: who scores is who the team held at the lock (the `fielded` view),
+ * and a `lineup_entry` row written there would be read by nothing.
+ */
+export class NoLineupError extends Error {
+  constructor(readonly fantasyTeamId: number) {
+    super(`team ${fantasyTeamId} plays every rostered player — there is no lineup to set`);
+    this.name = "NoLineupError";
+  }
+}
+
+/** Whether a team's league has a lineup at all, read from the league rather than trusted from a caller. */
+export async function hasLineup(db: Queryable, fantasyTeamId: number): Promise<boolean> {
+  const { rows } = await db.query<{ mode: string | null }>(
+    `SELECT l.settings->>'lineupMode' AS mode FROM fantasy_team t JOIN league l ON l.id = t.league_id
+      WHERE t.id = $1`, [fantasyTeamId]);
+  return rows[0]?.mode !== "everyone";
+}
+
+export async function requireLineup(db: Queryable, fantasyTeamId: number): Promise<void> {
+  if (!(await hasLineup(db, fantasyTeamId))) throw new NoLineupError(fantasyTeamId);
 }
 
 export class NotOnRosterError extends Error {
@@ -115,7 +140,7 @@ export async function startableOn(
             AND tr.as_of <= $2
           ORDER BY tr.as_of DESC LIMIT 1
        ) rating ON true
-       LEFT JOIN lineup_entry l
+       LEFT JOIN fielded l
          ON l.fantasy_team_id = $1 AND l.played_on = $2 AND l.player_id = roster.player_id
        LEFT JOIN player_game_score filed
          ON filed.player_id = roster.player_id AND filed.played_on = $2
@@ -198,6 +223,7 @@ export async function setLineup(
     configId: number; config?: ScoringConfig; settings?: LeagueSettings; now?: Date;
   },
 ): Promise<LineupResult> {
+  await requireLineup(db, fantasyTeamId);
   const startable = await startableOn(db, { fantasyTeamId, day, configId, config, now });
   const byId = new Map(startable.map((s) => [s.playerId, s]));
 
@@ -265,6 +291,7 @@ export async function autoFillDay(
     config?: ScoringConfig; settings?: LeagueSettings; now?: Date;
   },
 ): Promise<LineupResult> {
+  await requireLineup(db, fantasyTeamId);
   const startable = await startableOn(db, { fantasyTeamId, day, configId, config, now });
   if (startable.length === 0) return { day, entries: [], locked: [] };
 

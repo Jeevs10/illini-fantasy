@@ -139,7 +139,12 @@ export async function add(
       byUserId: act.viewer.userId, now: act.now,
     });
     refresh();
-    return { ok: `${name} added.`, at: now() };
+    return {
+      ok: act.viewer.membership.settings.lineupMode === "everyone"
+        ? `${name} added. He starts scoring for you at Sunday's lock.`
+        : `${name} added.`,
+      at: now(),
+    };
   } catch (error) {
     if (error instanceof OnWaiversError) {
       return {
@@ -178,7 +183,9 @@ export async function drop(
     });
     refresh();
     return {
-      ok: `${name} dropped. He is on waivers, not back in the pool — anyone who wants him bids.`,
+      ok: act.viewer.membership.settings.lineupMode === "everyone"
+        ? `${name} dropped. He still scores for you through Saturday, and is on waivers until Sunday's run.`
+        : `${name} dropped. He is on waivers, not back in the pool — anyone who wants him bids.`,
       at: now(),
     };
   } catch (error) {

@@ -2,8 +2,8 @@ import type { Db } from "@illini/db";
 import { DraftNotCompleteError, draftFor } from "./draft.ts";
 import type { Queryable } from "./membership.ts";
 import {
-  AlreadyRosteredError, RosterFullError, claimPlayer, clearFutureLineups, releasePlayer,
-  rosterLimit, rosterOn,
+  AlreadyRosteredError, RosterFullError, activeLimit, claimPlayer, clearFutureLineups, releasePlayer,
+  rosterOn,
 } from "./roster.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
 
@@ -64,6 +64,11 @@ export function nextWaiverRun(from: Date, settings: LeagueSettings = DEFAULT_SET
   const run = new Date(Date.UTC(
     from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate(), settings.waiverHour, 0, 0, 0));
   if (run.getTime() <= from.getTime()) run.setUTCDate(run.getUTCDate() + 1);
+  // A weekly league opens bids on one day only: walk forward to it.
+  const weekday = settings.waiverWeekday ?? null;
+  if (weekday !== null) {
+    while (run.getUTCDay() !== weekday) run.setUTCDate(run.getUTCDate() + 1);
+  }
   return run;
 }
 
@@ -526,7 +531,7 @@ async function resolveBatch(
   if (rows.length === 0) return [];
 
   const on = isoDay(runsAt);
-  const limit = rosterLimit(league.settings);
+  const limit = activeLimit(league.settings);
   const spent = new Map<number, number>();
   const size = new Map<number, number>();
   // What each player went for, so a losing claim can be told whether it lost on
@@ -540,7 +545,7 @@ async function resolveBatch(
     const claim = toClaim(row);
     const team = claim.fantasyTeamId;
     if (!spent.has(team)) spent.set(team, await spentBy(q, team));
-    if (!size.has(team)) size.set(team, (await rosterOn(q, team, on)).length);
+    if (!size.has(team)) size.set(team, (await rosterOn(q, team, on)).filter((p) => !p.reserve).length);
 
     const settle = async (status: "won" | "lost" | "invalid", reason: string | null) => {
       await q.query(
@@ -595,7 +600,7 @@ async function resolveBatch(
     try {
       await claimPlayer(q, {
         fantasyTeamId: team, playerId: claim.playerId, on, via: "waiver",
-        settings: league.settings,
+        settings: league.settings, at: runsAt,
       });
     } catch (error) {
       // The unique index is the last word on ownership, here as everywhere.
@@ -701,7 +706,7 @@ export async function addFreeAgent(
     }
     await claimPlayer(client, {
       fantasyTeamId, playerId, on, via: "free_agent", settings: league.settings,
-      byUserId,
+      byUserId, at: now,
     });
     await client.query("COMMIT");
   } catch (error) {
@@ -759,7 +764,7 @@ async function release(
     settings: LeagueSettings;
   },
 ): Promise<Date> {
-  await releasePlayer(q, { fantasyTeamId, playerId, on });
+  await releasePlayer(q, { fantasyTeamId, playerId, on, at });
   await clearFutureLineups(q, { fantasyTeamId, playerId, on, at });
 
   const clears = clearsAt(at, settings);

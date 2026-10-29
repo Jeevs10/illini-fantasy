@@ -93,7 +93,7 @@ export default async function Settings() {
         </div>
       </div>
 
-      <StrengthToggle state={strength} />
+      {strength.applies ? <StrengthToggle state={strength} /> : null}
 
       <SettingsForm
         settings={settings}

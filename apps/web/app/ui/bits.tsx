@@ -74,7 +74,8 @@ const ROLE_TABLE: { torvik: string; archetype: string; role: string }[] = [
   { torvik: "PF/C", archetype: "big", role: "F · B" },
   { torvik: "C", archetype: "big", role: "B" },
 ];
-const ROLE_TAG = new Map(ROLE_TABLE.map((r) => [r.torvik, r.role]));
+// The forward model's own G / F / C, beside Torvik's eight. "C" is in both.
+const ROLE_TAG = new Map([...ROLE_TABLE.map((r) => [r.torvik, r.role] as const), ["G", "G"], ["F", "F"]]);
 
 /**
  * The lineup role — G, F, B, or both of a pair for a Wing G or a PF/C.

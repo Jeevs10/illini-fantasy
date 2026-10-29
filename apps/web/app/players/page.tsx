@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  availabilityFor, draftFor, playerPool, rosterLimit, rosterOn, seasonSchedule, settleWaivers,
+  activeLimit, availabilityFor, draftFor, playerPool, rosterOn, seasonSchedule, settleWaivers,
   waiverWire, type PoolSort, type PoolWindow, type PositionRole,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const VIEWS = [{ href: "/players", label: "Players" }, { href: "/leaders", label: "Leaders" }];
 const PAGE = 50;
 const ROLES: PositionRole[] = ["G", "F", "B"];
-const SORTS: PoolSort[] = ["total", "avg", "games", "weekProj", "weekPts"];
+const SORTS: PoolSort[] = ["total", "avg", "games", "weekProj", "weekPts", "proj"];
 
 const SPAN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const span = (from: string, to: string) =>
@@ -58,7 +58,12 @@ export default async function PlayersPage({
   // makes the picker useful for scouting a free agent's last month as well as
   // for planning next week.
   const historic = picked !== null && picked.endsOn < today;
-  const defaultSort: PoolSort = picked === null ? "total" : historic ? "weekPts" : "weekProj";
+  // A forward-model league ranks the season on the model's projected Player
+  // Score, which the morning refresh moves with every game played: it is the
+  // draft order before the season and the best read of the rest of it after.
+  const everyone = settings.lineupMode === "everyone";
+  const defaultSort: PoolSort = picked === null ? (everyone ? "proj" : "total")
+    : historic ? "weekPts" : "weekProj";
   const asked = SORTS.includes(sort as PoolSort) ? (sort as PoolSort) : null;
   const sortBy: PoolSort = asked ?? defaultSort;
 
@@ -89,7 +94,9 @@ export default async function PlayersPage({
     return s ? `/players?${s}` : "/players";
   };
 
-  const full = roster.length >= rosterLimit(settings);
+  // IR is a seat of its own in an `everyone` league, so it is the twelve that fill up.
+  const active = roster.filter((p) => !p.reserve).length;
+  const full = active >= activeLimit(settings);
 
   return (
     <>
@@ -99,21 +106,23 @@ export default async function PlayersPage({
           <p className="meta">
             <span>
               {picked === null
-                ? "Ranked by season Player-Score under this league\u2019s config"
+                ? everyone
+                  ? "Ranked by the forward model\u2019s projected Player Score · a game is worth its valAdj"
+                  : "Ranked by season Player-Score under this league\u2019s config"
                 : historic
                 ? `Week ${picked.week} · ${span(picked.startsOn, picked.endsOn)} · what they actually scored`
                 : `Week ${picked.week} · ${span(picked.startsOn, picked.endsOn)} · projected from form and the slate`}
             </span>
             {wire.length > 0 ? <span>{wire.length} on waivers</span> : null}
             {fantasyTeamId !== null
-              ? <span>{roster.length} of {rosterLimit(settings)} rostered</span>
+              ? <span>{active} of {activeLimit(settings)} rostered</span>
               : null}
           </p>
         </div>
         <SubTabs tabs={VIEWS} active="/players" />
       </div>
 
-      <RoleGlossary />
+      {everyone ? null : <RoleGlossary />}
 
       {/* The controls stay put while fifty rows scroll under them: a filter you
           have to scroll back up to change is a filter nobody changes. */}
@@ -181,8 +190,10 @@ export default async function PlayersPage({
           canAct={fantasyTeamId !== null && draftComplete}
           week={picked === null ? null : { week: picked.week, historic }}
           sort={sortBy}
+          projection={everyone}
           sortHrefs={{
-            total: query({ sort: undefined, page: undefined }),
+            proj: query({ sort: everyone ? undefined : "proj", page: undefined }),
+            total: query({ sort: everyone ? "total" : undefined, page: undefined }),
             avg: query({ sort: "avg", page: undefined }),
             games: query({ sort: "games", page: undefined }),
             weekProj: query({ sort: "weekProj", page: undefined }),

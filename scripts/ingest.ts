@@ -9,6 +9,9 @@
  *   npm run ingest -- ranks 2026             rebuild the season rank rollup
  *   npm run ingest -- injuries 2026          crosswalk RotoWire's injury report
  *   npm run ingest -- identity 2026          crosswalk ESPN's team colours
+ *   npm run ingest -- forward 2027 <feed.json>   the Data repo's forward-model feed
+ *                                            (rosters, projections, valAdj lines);
+ *                                            the same thing POST /api/ingest/forward does
  *
  * `link` runs after at least one night, because Torvik is the identity spine:
  * players exist once they have a stat line, and other sources attach to them.
@@ -18,11 +21,13 @@
  * regardless of what has been ingested — but take one to keep every command's
  * argv shape the same.
  */
+import { readFile } from "node:fs/promises";
 import { connect, migrate } from "@illini/db";
+import { settleDue } from "@illini/league";
 import { CbbdClient, EspnClient, RotoWireClient, TorvikClient } from "@illini/sources";
 import {
   ingestNight, opponentsOn, syncSchedule, syncTeams, syncRatings, syncTeamIdentity,
-  linkCbbdRosters, rebuildPlayerRanks, ingestInjuries,
+  linkCbbdRosters, rebuildPlayerRanks, ingestInjuries, ingestForwardFeed, assertFeed,
 } from "@illini/ingest";
 import { loadEnv } from "./env.ts";
 
@@ -31,7 +36,7 @@ loadEnv();
 const [command, seasonArg, a, b] = process.argv.slice(2);
 const season = Number(seasonArg);
 if (!command || !Number.isFinite(season)) {
-  console.error("usage: ingest <setup|schedule|night|range|link|ranks|injuries|identity> <season> [date] [endDate]");
+  console.error("usage: ingest <setup|schedule|night|range|link|ranks|injuries|identity|forward> <season> [date] [endDate]");
   process.exit(1);
 }
 
@@ -79,6 +84,20 @@ try {
       `rotowire linked ${result.linked}, queued for review ${result.queued}, ` +
       `availability written ${result.written} (${result.cleared} cleared)`,
     );
+  } else if (command === "forward") {
+    const feed: unknown = JSON.parse(await readFile(a!, "utf8"));
+    assertFeed(feed);
+    if (feed.season !== season) throw new Error(`feed is for ${feed.season}, not ${season}`);
+    const r = await ingestForwardFeed(db, feed);
+    console.log(
+      `forward ${feed.asof}: players ${r.players} (${r.created} new), projections ${r.projections}, ` +
+      `lines ${r.lines} -> ${r.written} new scores, unmatched ${r.unmatched}, not in schedule ${r.unscheduled}, ` +
+      `injury rows ${r.injuries}`,
+    );
+    for (const l of await settleDue(db, { season, through: feed.asof })) {
+      console.log(`  league ${l.leagueId}: waiver runs ${l.waiverRuns}, trades ${l.trades}, ` +
+        `weeks settled [${l.weeks.join(", ")}], playoff results ${l.playoffs}`);
+    }
   } else if (command === "identity") {
     const matched = await syncTeamIdentity(db, espn);
     console.log(`espn identity matched ${matched} teams`);

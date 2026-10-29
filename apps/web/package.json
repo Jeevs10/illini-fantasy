@@ -9,7 +9,9 @@
     "start": "next start"
   },
   "dependencies": {
+    "@illini/crosswalk": "*",
     "@illini/db": "*",
+    "@illini/ingest": "*",
     "@illini/league": "*",
     "@illini/scoring": "*",
     "next": "^16.3.4",

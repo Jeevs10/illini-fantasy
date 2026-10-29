@@ -133,6 +133,49 @@ the local part of the address, numbered on collision (`commish`, `manager.two`,
 so `npm run typecheck` covers the packages and `npx tsc --noEmit` inside
 `apps/web` covers the app.
 
+## The 2026-27 league — forward model, everyone plays (2026-10-29)
+
+Twelve players a team, all of them scoring, Sunday-to-Saturday weeks, every
+roster move landing at the next Sunday 09:00 UTC (4am ET) lock. Scored on the
+Data repo's forward model: a game is worth its `valAdj` (the number the Daily
+Update ranks performances by), and the draft is ordered by the projected
+Player Score.
+
+- **Migration 015** — `forward` source, `player_projection`, roster tenure
+  timestamps + `reserve`, and the `fielded` view: who a team fielded on a night.
+  Manual leagues read their `lineup_entry` rows through it unchanged; an
+  `everyone` league's answer is every tenure open at the period's lock. Every
+  reader that used `lineup_entry` (settlement, outlook, the matchup screens)
+  reads `fielded`.
+- **Settings** — `lineupMode: "everyone"` and `waiverWeekday: 0`
+  (`EVERYONE_SETTINGS`: 12 FLEX, no bench, 1 IR, weekly waivers, 17 regular
+  weeks, a 4-team bracket over weeks 18-19). Lineup writes refuse with
+  `NoLineupError`; IR is `moveToReserve` / `activateFromReserve` (listed out only).
+- **Feed** — `Data/Scripts/forward_model/export_fantasy.py`, written by the
+  Data repo's morning refresh and POSTed (gzip, bearer token) to
+  `/api/ingest/forward`, which runs `ingestForwardFeed` then `settleDue`
+  (draft clock, waivers, trades, every finished week, the bracket). The same
+  thing from a file: `npm run ingest -- forward 2027 feed_2027.json`. A game's
+  score is written once and never replaced. Use the feed's injury list, not
+  `ingest injuries` — RotoWire's name matching would see two of every returner.
+- **Tests** — `packages/league/src/everyone.test.ts` plays the format end to end.
+
+Go-live, in order (production is Neon `floral-shape-81709658`, currently at 014):
+
+```sh
+npm run migrate                                   # 015 (and anything before it)
+npm run merge-teams -- --apply                    # stale St./State team rows split the 2027 schedule
+npm run ingest -- setup 2027                      # needs the merge first: it failed on team_cbbd_id_key
+npm run ingest -- schedule 2027 20261101 20270315
+npm run ingest -- forward 2027 <Data>/Model-Outputs/forward_model/fantasy/feed_2027.json
+npm run league -- create 2027 "Illini Fantasy" <teams> <commissioner email> --everyone
+npm run league -- draft new <league> 12 <clock seconds>
+```
+
+Then set `FANTASY_INGEST_TOKEN` on the Vercel project, and
+`FANTASY_INGEST_URL` (`https://<app>/api/ingest/forward`) plus the same token
+as secrets on the Data repo, where `daily-refresh.yml` passes them to the push.
+
 ## The full season lives on a Neon branch
 
 Production still holds five ingested days, Feb 10–14 2026, because that is all

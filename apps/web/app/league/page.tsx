@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type {
-  CountedGame, LeagueSettings, MatchupView, PendingGame, PlayerAvailability, PlayerWeek, TeamOutlook,
+  CountedGame, LeagueSettings, MatchupView, PendingGame, PlayerAvailability, PlayerWeek, Slot, TeamOutlook,
 } from "@illini/league";
 import { availabilityFor, seasonWeeks, weekMatchups } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -200,7 +200,14 @@ function RosterPanel({
     pending.set(p.playerId, [...(pending.get(p.playerId) ?? []), p]);
   }
 
-  const rows = buildSlots(side.players, settings);
+  // With no lineup there are no slots to line the panels up by: every player
+  // the side held at the lock is listed, best week first, and nobody is an
+  // "empty FLEX" for having no game.
+  const everyone = settings.lineupMode === "everyone";
+  const rows = everyone
+    ? [...side.players].sort((a, b) => (b.projected ?? b.total) - (a.projected ?? a.total))
+        .map((p) => ({ key: `p-${p.playerId}`, slot: p.slot as Slot, player: p }))
+    : buildSlots(side.players, settings);
   const seated = new Set(rows.map((r) => r.player?.playerId).filter(Boolean));
   // Legacy weeks set a night at a time can hold more starters than the league
   // has slots. They scored, so they are listed rather than dropped — after the
@@ -237,15 +244,21 @@ function RosterPanel({
       </div>
 
       <div className="subhead">
-        <h3>The week, by starter</h3>
+        <h3>{everyone ? "The week, by player" : "The week, by starter"}</h3>
         <span className="pill ghost">{projecting ? "Week total · projected" : "Week total"}</span>
       </div>
 
       {side.players.length === 0 ? (
-        <Empty title="No lineup for this week" glyph="clock">
-          Nobody is set to start, so there is nothing to project. Lineups are
-          set on the team page.
-        </Empty>
+        everyone ? (
+          <Empty title="Nobody plays this week" glyph="clock">
+            No player this side held at Sunday&rsquo;s lock has a game in the week.
+          </Empty>
+        ) : (
+          <Empty title="No lineup for this week" glyph="clock">
+            Nobody is set to start, so there is nothing to project. Lineups are
+            set on the team page.
+          </Empty>
+        )
       ) : (
         <>
           {rows.map((row) => (

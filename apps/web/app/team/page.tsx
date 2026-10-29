@@ -1,11 +1,12 @@
 import Link from "next/link";
 import {
-  availabilityFor, carryForwardLineup, eligibleSlots, periodContaining, periodForWeek,
-  rosterLimit, rosterOn, seasonWeeks, slateByDay, startableInPeriod, type Slot,
+  activeLimit, availabilityFor, carryForwardLineup, eligibleSlots, lockOf, periodContaining, periodForWeek,
+  rosterLimit, rosterOn, seasonWeeks, slateByDay, startableInPeriod, weekRoster, type Slot,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Lineup, type LineupPlayer, type OffNightPlayer } from "./lineup.tsx";
+import { EveryoneWeek } from "./everyone.tsx";
 import { DayStrip, window7 } from "./daystrip.tsx";
 import { NextLock } from "./nextlock.tsx";
 import { Avatar } from "../ui/identity.tsx";
@@ -16,13 +17,16 @@ export const dynamic = "force-dynamic";
 const SPAN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const span = (from: string, to: string) =>
   `${SPAN.format(new Date(`${from}T00:00:00Z`))} – ${SPAN.format(new Date(`${to}T00:00:00Z`))}`;
+const LOCK = new Intl.DateTimeFormat("en-US", {
+  weekday: "short", month: "short", day: "numeric", hour: "numeric", timeZone: "America/New_York",
+});
 
 export default async function TeamPage({
   searchParams,
 }: { searchParams: Promise<{ date?: string; week?: string }> }) {
   const { date, week } = await searchParams;
   const viewer = await requireViewer();
-  const { leagueId, fantasyTeamId, fantasyTeamName, settings, configId, leagueName } = viewer.membership;
+  const { leagueId, fantasyTeamId, fantasyTeamName, settings, configId, leagueName, season: leagueSeason } = viewer.membership;
   const day = viewDate(date);
   const today = viewDate();
   const now = viewNow();
@@ -59,6 +63,76 @@ export default async function TeamPage({
   }
 
   const { from, to } = window7(today);
+
+  if (settings.lineupMode === "everyone") {
+    const nextPeriodStart = new Date(`${period.endsOn}T00:00:00Z`);
+    nextPeriodStart.setUTCDate(nextPeriodStart.getUTCDate() + 1);
+    const nextLock = LOCK.format(lockOf(nextPeriodStart.toISOString().slice(0, 10), settings));
+    const [week, slate] = await Promise.all([
+      weekRoster(db, {
+        fantasyTeamId, from: period.startsOn, to: period.endsOn, configId, season: leagueSeason,
+        settings, now, today,
+      }),
+      slateByDay(db, { fantasyTeamId, from, to }),
+    ]);
+    const availability = await availabilityFor(db, week.map((p) => p.playerId));
+    const counting = week.filter((p) => p.counting);
+    const held = week.filter((p) => p.held && !p.reserve).length;
+    const scored = counting.reduce((a, p) => a + p.scored, 0);
+    return (
+      <>
+        <div className="pagehead">
+          <div className="row" style={{ gap: "var(--s-4)", flexWrap: "nowrap", minWidth: 0 }}>
+            <Avatar name={fantasyTeamName ?? "Team"} seed={fantasyTeamId} size="xl" mine />
+            <div style={{ minWidth: 0 }}>
+              <h1>{fantasyTeamName}</h1>
+              <p className="meta">
+                <span>{leagueName}</span>
+                <span>{held} of {activeLimit(settings)} rostered</span>
+                <span>Everyone plays</span>
+              </p>
+            </div>
+          </div>
+          <nav className="controls" aria-label="Week navigation">
+            {period.week > (season?.first ?? 1) ? (
+              <Link className="button" href={`/team?week=${period.week - 1}`}>← Week {period.week - 1}</Link>
+            ) : null}
+            {season !== null && period.week < season.last ? (
+              <Link className="button" href={`/team?week=${period.week + 1}`}>Week {period.week + 1} →</Link>
+            ) : null}
+            <Link className="button" href="/waivers">Add or drop</Link>
+            <Link className="button" href="/league">Matchup</Link>
+          </nav>
+        </div>
+
+        <DayStrip day={day} today={today} slate={slate} />
+
+        <div className="panel">
+          <div className="panel-head">
+            <div>
+              <div className="eyebrow">Week {period.week} · {span(period.startsOn, period.endsOn)}</div>
+              <div className="row" style={{ gap: "var(--s-2)", marginTop: 2 }}>
+                <Score value={scored} size="md" />
+                <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
+                  {counting.length} counting
+                </span>
+              </div>
+            </div>
+          </div>
+          <p className="sethelp" style={{ padding: "0 var(--s-4) var(--s-3)" }}>
+            No lineup to set: everyone you held at Sunday&rsquo;s lock scores every game
+            they play through Saturday. Adds, drops, trades and IR moves made now
+            count from the next lock, {nextLock}.
+          </p>
+          <EveryoneWeek
+            nextLock={nextLock}
+            rows={week.map((p) => ({ ...p, availability: availability.get(p.playerId) }))}
+          />
+        </div>
+      </>
+    );
+  }
+
   let [starters, roster, slate] = await Promise.all([
     startableInPeriod(db, {
       fantasyTeamId, from: period.startsOn, to: period.endsOn, configId, now,

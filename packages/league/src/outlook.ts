@@ -143,7 +143,7 @@ async function currentStarters(
 
   const { rows: decidedToday } = await db.query<{ player_id: string; name: string; slot: string }>(
     `SELECT l.player_id, p.name, l.slot
-       FROM lineup_entry l JOIN player p ON p.id = l.player_id
+       FROM fielded l JOIN player p ON p.id = l.player_id
       WHERE l.fantasy_team_id = $1 AND l.played_on = $2 AND l.slot NOT IN ('BENCH', 'IR')`,
     [fantasyTeamId, today],
   );
@@ -227,7 +227,7 @@ async function pendingForCurrentStarters(
           -- the answer to reads as nothing to play for.
           AND (s.score IS NULL OR g.played_on > $6)
           AND NOT EXISTS (
-            SELECT 1 FROM lineup_entry le
+            SELECT 1 FROM fielded le
              WHERE le.fantasy_team_id = $1 AND le.played_on = g.played_on
           )
         ORDER BY p.id, g.played_on, g.tipoff NULLS LAST
@@ -265,7 +265,7 @@ export async function periodOutlook(
   }>(
     `SELECT l.player_id, p.name, to_char(l.played_on, 'YYYY-MM-DD') AS played_on, l.slot,
             sched.tipoff, opp.name AS opponent, form.projected
-       FROM lineup_entry l
+       FROM fielded l
        JOIN player p ON p.id = l.player_id
        LEFT JOIN player_game_score s
          ON s.player_id = l.player_id AND s.played_on = l.played_on AND s.config_id = $2

@@ -4,7 +4,7 @@ import {
   DEFAULT_SETTINGS, autoFill, isEligible, validateLineup,
   type LeagueSettings, type LineupSlot, type Slot,
 } from "./slots.ts";
-import { InvalidLineupError, LineupLockedError, NotOnRosterError } from "./lineups.ts";
+import { InvalidLineupError, LineupLockedError, NotOnRosterError, hasLineup, requireLineup } from "./lineups.ts";
 import { nightState, type GameState } from "./outlook.ts";
 
 /**
@@ -171,7 +171,7 @@ export async function startableInPeriod(
        LEFT JOIN player_game_score filed
          ON filed.player_id = roster.player_id AND filed.played_on = slate.played_on
         AND filed.config_id = $5
-       LEFT JOIN lineup_entry l
+       LEFT JOIN fielded l
          ON l.fantasy_team_id = $1 AND l.player_id = roster.player_id
         AND l.played_on = slate.played_on
        LEFT JOIN LATERAL (
@@ -295,6 +295,7 @@ export async function setPeriodLineup(
     configId: number; config?: ScoringConfig; settings?: LeagueSettings; now?: Date;
   },
 ): Promise<PeriodLineupResult> {
+  await requireLineup(db, fantasyTeamId);
   const startable = await startableInPeriod(db, { fantasyTeamId, from, to, configId, config, now });
   const byId = new Map(startable.map((s) => [s.playerId, s]));
 
@@ -414,6 +415,8 @@ export async function carryForwardLineup(
   },
 ): Promise<number> {
   if (startable.length === 0) return 0;
+  // An `everyone` league fields its whole roster; there is nothing to carry.
+  if (!(await hasLineup(db, fantasyTeamId))) return 0;
   // Somebody has already decided this week. Nothing to carry into.
   if (startable.some((s) => s.slot !== "BENCH" && s.slot !== "IR")) return 0;
 
@@ -481,6 +484,7 @@ export async function autoFillPeriod(
     config?: ScoringConfig; settings?: LeagueSettings; now?: Date;
   },
 ): Promise<PeriodLineupResult> {
+  await requireLineup(db, fantasyTeamId);
   const startable = await startableInPeriod(db, { fantasyTeamId, from, to, configId, config, now });
   if (startable.length === 0) return { from, to, entries: [], locked: [] };
 

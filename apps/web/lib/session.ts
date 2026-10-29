@@ -73,8 +73,16 @@ export function viewDate(searchParam?: string): string {
   return today();
 }
 
+/**
+ * Today as a basketball date: the UTC day nine hours back, the same boundary
+ * `basketballDate` files every game under (4am Eastern, 1am Pacific). The
+ * plain UTC date turns over at 7pm Eastern, so a night's games would be read
+ * as "yesterday" from tip-off on, and the home screen would move to a slate
+ * nobody has played while tonight's is still going.
+ */
 function today(): string {
-  return process.env.ILLINI_TODAY ?? new Date().toISOString().slice(0, 10);
+  if (process.env.ILLINI_TODAY) return process.env.ILLINI_TODAY;
+  return new Date(Date.now() - 9 * 3_600_000).toISOString().slice(0, 10);
 }
 
 /**

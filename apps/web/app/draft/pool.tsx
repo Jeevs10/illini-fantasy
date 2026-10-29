@@ -36,6 +36,9 @@ export function Pool({
   // player is worse than one saying the latest.
   const latest = (enqueued.at ?? 0) > (picked.at ?? 0) ? enqueued : picked;
   const message = latest.error ?? latest.ok;
+  // A season with projections drafts on them; a finished demo season on what
+  // each player averaged.
+  const projected = players.some((p) => p.projected !== null);
 
   return (
     <div className="panel">
@@ -74,17 +77,20 @@ export function Pool({
         <Empty title="Nobody left to show" glyph="search">
           {search
             ? `No undrafted player matches “${search}”.`
-            : "Every scored player in the pool has been drafted."}
+            : "Every player in the pool has been drafted."}
         </Empty>
       ) : (
         <div className="scroll draftpool">
           <table>
-            <caption className="sr-only">Undrafted players, best season Player-Score first</caption>
+            <caption className="sr-only">
+              {projected ? "Undrafted players, best projected Player Score first"
+                : "Undrafted players, best season Player-Score first"}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">Player</th>
                 <th scope="col" className="draft-school">School</th>
-                <th scope="col" className="r">Avg</th>
+                <th scope="col" className="r">{projected ? "Proj" : "Avg"}</th>
                 <th scope="col">Take</th>
               </tr>
             </thead>
@@ -105,7 +111,11 @@ export function Pool({
                     {player.teamName ?? "—"}
                     {player.conference ? <span className="sub">{player.conference}</span> : null}
                   </td>
-                  <td className="r num">{player.averageScore.toFixed(1)}</td>
+                  <td className="r num">
+                    {projected
+                      ? player.projected === null ? "—" : player.projected.toFixed(1)
+                      : player.averageScore.toFixed(1)}
+                  </td>
                   <td>
                     <div className="rowactions">
                       <form action={submitPick}>

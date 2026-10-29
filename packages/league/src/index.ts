@@ -17,3 +17,6 @@ export * from "./playoffs.ts";
 export * from "./leaders.ts";
 export * from "./availability.ts";
 export * from "./winprob.ts";
+export * from "./reserve.ts";
+export * from "./maintenance.ts";
+export * from "./weekroster.ts";

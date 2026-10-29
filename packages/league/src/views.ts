@@ -126,7 +126,7 @@ async function weekContaining(
       WHERE m.league_id = $1
       ORDER BY (m.starts_on <= $2::date AND m.ends_on >= $2::date) DESC,
                EXISTS (
-                 SELECT 1 FROM lineup_entry l
+                 SELECT 1 FROM fielded l
                    JOIN fantasy_team ft ON ft.id = l.fantasy_team_id
                   WHERE ft.league_id = m.league_id
                     AND l.played_on BETWEEN m.starts_on AND m.ends_on

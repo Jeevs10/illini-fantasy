@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { claimsFor, rosterLimit, rosterOn, settleWaivers, waiverState } from "@illini/league";
+import { activeLimit, claimsFor, rosterOn, settleWaivers, waiverState } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Wire, type WireRow } from "./wire.tsx";
@@ -48,6 +48,8 @@ export default async function WaiversPage() {
           <p className="meta">
             <span>{leagueName}</span>
             <span>Bids open {WHEN.format(new Date(state.nextRunAt))}</span>
+            {viewer.membership.settings.lineupMode === "everyone"
+              ? <span>Once a week, at the lock — a player won plays that week</span> : null}
           </p>
         </div>
         {mine ? (
@@ -82,7 +84,7 @@ export default async function WaiversPage() {
         players={wire}
         roster={roster.map((p) => ({ playerId: p.playerId, name: p.name }))}
         remaining={mine?.remaining ?? 0}
-        full={roster.length >= rosterLimit(viewer.membership.settings)}
+        full={roster.filter((p) => !p.reserve).length >= activeLimit(viewer.membership.settings)}
         canAct={fantasyTeamId !== null}
       />
 
@@ -141,7 +143,9 @@ export default async function WaiversPage() {
 
       <div className="controls">
         <Link className="button" href="/players?free=1">Free agents</Link>
-        <Link className="button" href="/team">Your lineup</Link>
+        <Link className="button" href="/team">
+          {viewer.membership.settings.lineupMode === "everyone" ? "Your team" : "Your lineup"}
+        </Link>
       </div>
     </>
   );

@@ -80,6 +80,29 @@ export interface LeagueSettings {
   reseed: boolean;
   /** How a tied playoff score is broken, since a bracket cannot advance a tie. */
   playoffTiebreak: "seed" | "pointsFor";
+  /**
+   * Who scores for a team.
+   *
+   * `manual` is a lineup: the starters a manager sets for the period, out of a
+   * roster with a bench. `everyone` has no lineup to set — every player a team
+   * holds at the period's lock scores everything he plays in it, and an IR
+   * tenure scores nothing. A roster move made after the lock counts from the
+   * next period, so a player dropped on Wednesday still scores for the team
+   * that held him at the lock through the end of the week, and the team that
+   * picked him up starts with him the period after. Read by the `fielded` view
+   * (migration 015), which is where the rule actually lives.
+   */
+  lineupMode: "manual" | "everyone";
+  /**
+   * The weekday bids are opened, 0 = Sunday, or null for every day.
+   *
+   * A league whose moves only take effect at the weekly lock has no use for a
+   * nightly auction: a claim won on Tuesday sits idle until Sunday anyway, and
+   * the manager who happened to bid first in the week would beat the one who
+   * waited for the weekend's injury news. One run a week, at the lock, means
+   * every bid is for the same thing.
+   */
+  waiverWeekday: number | null;
 }
 
 export const DEFAULT_SETTINGS: LeagueSettings = {
@@ -117,6 +140,33 @@ export const DEFAULT_SETTINGS: LeagueSettings = {
   consolation: false,
   reseed: false,
   playoffTiebreak: "seed",
+  lineupMode: "manual",
+  waiverWeekday: null,
+};
+
+/**
+ * The 2026-27 league: twelve players, all of them scoring, and every roster
+ * move landing at the next Sunday lock.
+ *
+ * Twelve FLEX seats rather than a new slot type, because FLEX already takes
+ * anyone and every screen already knows how to draw one. Zero bench, one IR.
+ * Waivers run Sundays at 09:00 UTC (4am Eastern), the same instant the
+ * week locks, so a claim won in that run plays that week. Nineteen Sunday-to-
+ * Saturday weeks from November 1 cover the regular season through March 13;
+ * the regular season is the first seventeen (through February 27) and a
+ * four-team bracket the last two, a round a week.
+ */
+export const EVERYONE_SETTINGS: LeagueSettings = {
+  ...DEFAULT_SETTINGS,
+  starters: [{ slot: "FLEX", count: 12 }],
+  bench: 0,
+  ir: 1,
+  lineupMode: "everyone",
+  waiverWeekday: 0,
+  waiverDays: 0,
+  playoffTeams: 4,
+  playoffStartWeek: 18,
+  playoffRoundWeeks: 1,
 };
 
 /**
@@ -148,6 +198,10 @@ const ROLE_MAP: Record<string, PositionRole[]> = {
   "Stretch 4": ["F"],
   "PF/C": ["F", "B"],
   "C": ["B"],
+  // The forward model's own three positions (the Data repo's G / F / C). "C"
+  // already means the same thing in both vocabularies.
+  "G": ["G"],
+  "F": ["F"],
 };
 
 export function rolesFor(role: string | null): PositionRole[] {

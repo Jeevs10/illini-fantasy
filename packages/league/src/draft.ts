@@ -620,7 +620,16 @@ export async function autoDraft(
 
 interface Candidate { playerId: number; role: string | null; total: number }
 
-/** Undrafted players, best season Player-Score first. */
+/**
+ * Undrafted players, best first.
+ *
+ * "Best" is the forward model's projected Player Score when the season has
+ * projections — a draft held before the first game has nothing else to go
+ * on, and a draft is a bet on the season ahead rather than a reward for the
+ * part already played. A season without projections (the demo leagues,
+ * drafted in hindsight over a finished season) ranks by season total, as it
+ * always has.
+ */
 async function availableRanked(q: Queryable, draft: Draft): Promise<Candidate[]> {
   const { rows } = await q.query<{ player_id: string; role: string | null; total: number }>(
     `WITH totals AS (
@@ -630,16 +639,25 @@ async function availableRanked(q: Queryable, draft: Draft): Promise<Candidate[]>
            ON st.player_id = s.player_id AND st.played_on = s.played_on
         WHERE s.config_id = $2 AND st.season = $3
         GROUP BY s.player_id
-     )
-     SELECT t.player_id, t.total,
-            (SELECT st.role FROM player_game_stat st
-              WHERE st.player_id = t.player_id AND st.role IS NOT NULL
-              ORDER BY st.played_on DESC LIMIT 1) AS role
-       FROM totals t
+     ),
+     proj AS (
+       SELECT DISTINCT ON (player_id) player_id, score
+         FROM player_projection WHERE season = $3
+        ORDER BY player_id, as_of DESC
+     ),
+     pool AS (SELECT player_id FROM totals UNION SELECT player_id FROM proj)
+     SELECT pool.player_id, coalesce(proj.score, totals.total, 0) AS total,
+            coalesce((SELECT st.role FROM player_game_stat st
+                       WHERE st.player_id = pool.player_id AND st.role IS NOT NULL
+                       ORDER BY st.played_on DESC LIMIT 1), p.position) AS role
+       FROM pool
+       JOIN player p ON p.id = pool.player_id
+       LEFT JOIN totals ON totals.player_id = pool.player_id
+       LEFT JOIN proj ON proj.player_id = pool.player_id
       WHERE NOT EXISTS (
         SELECT 1 FROM roster_slot r
-         WHERE r.league_id = $1 AND r.player_id = t.player_id AND r.released_on IS NULL)
-      ORDER BY t.total DESC
+         WHERE r.league_id = $1 AND r.player_id = pool.player_id AND r.released_on IS NULL)
+      ORDER BY proj.score DESC NULLS LAST, totals.total DESC NULLS LAST
       LIMIT $4`,
     [draft.leagueId, draft.configId, draft.season, CANDIDATE_DEPTH],
   );
@@ -694,10 +712,11 @@ async function chooseAutoPick(
   }
 
   const { rows: held } = await q.query<{ role: string | null }>(
-    `SELECT (SELECT st.role FROM player_game_stat st
-              WHERE st.player_id = dp.player_id AND st.role IS NOT NULL
-              ORDER BY st.played_on DESC LIMIT 1) AS role
+    `SELECT coalesce((SELECT st.role FROM player_game_stat st
+                       WHERE st.player_id = dp.player_id AND st.role IS NOT NULL
+                       ORDER BY st.played_on DESC LIMIT 1), p.position) AS role
        FROM draft_pick dp
+       JOIN player p ON p.id = dp.player_id
       WHERE dp.draft_id = $1 AND dp.fantasy_team_id = $2 AND dp.player_id IS NOT NULL`,
     [draft.id, fantasyTeamId],
   );
@@ -725,6 +744,8 @@ export interface QueuedPlayer {
   teamName: string | null;
   role: string | null;
   averageScore: number;
+  /** The forward model's projected Player Score, or null in a season without one. */
+  projected: number | null;
   rank: number;
   /** False once somebody else has taken him — the queue keeps him until then. */
   available: boolean;
@@ -735,12 +756,15 @@ export async function draftQueue(
 ): Promise<QueuedPlayer[]> {
   const { rows } = await db.query<{
     player_id: string; name: string; team_name: string | null; role: string | null;
-    average: number | null; rank: number; owner: string | null;
+    average: number | null; projected: number | null; rank: number; owner: string | null;
   }>(
     `SELECT q.player_id, p.name, t.name AS team_name, q.rank, s.average,
-            (SELECT st.role FROM player_game_stat st
-              WHERE st.player_id = q.player_id AND st.role IS NOT NULL
-              ORDER BY st.played_on DESC LIMIT 1) AS role,
+            (SELECT pp.score FROM player_projection pp
+              WHERE pp.player_id = q.player_id AND pp.season = l.season
+              ORDER BY pp.as_of DESC LIMIT 1) AS projected,
+            coalesce((SELECT st.role FROM player_game_stat st
+                       WHERE st.player_id = q.player_id AND st.role IS NOT NULL
+                       ORDER BY st.played_on DESC LIMIT 1), p.position) AS role,
             (SELECT ft.name FROM roster_slot r JOIN fantasy_team ft ON ft.id = r.fantasy_team_id
               WHERE r.league_id = $1 AND r.player_id = q.player_id AND r.released_on IS NULL
               LIMIT 1) AS owner
@@ -764,6 +788,7 @@ export async function draftQueue(
     teamName: r.team_name,
     role: r.role,
     averageScore: r.average === null ? 0 : Number(r.average),
+    projected: r.projected === null ? null : Number(r.projected),
     rank: r.rank,
     available: r.owner === null,
   }));
@@ -898,9 +923,9 @@ export async function draftRoom(
   }>(
     `SELECT dp.overall, dp.round, dp.in_round, dp.fantasy_team_id, ft.name AS team_name,
             dp.player_id, p.name AS player_name, t.name AS school, dp.auto, dp.made_at,
-            (SELECT st.role FROM player_game_stat st
-              WHERE st.player_id = dp.player_id AND st.role IS NOT NULL
-              ORDER BY st.played_on DESC LIMIT 1) AS role
+            coalesce((SELECT st.role FROM player_game_stat st
+                       WHERE st.player_id = dp.player_id AND st.role IS NOT NULL
+                       ORDER BY st.played_on DESC LIMIT 1), p.position) AS role
        FROM draft_pick dp
        JOIN fantasy_team ft ON ft.id = dp.fantasy_team_id
        LEFT JOIN player p ON p.id = dp.player_id

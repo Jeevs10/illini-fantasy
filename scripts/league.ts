@@ -2,6 +2,9 @@
  * League operations.
  *
  *   npm run league -- create 2026 "Illini Fantasy" 10 you@example.com
+ *   npm run league -- create 2027 "Illini Fantasy" 10 you@example.com --everyone
+ *       the forward-model league: 12 players all scoring, Sunday-to-Saturday weeks
+ *       from the first Sunday of November, moves landing at the Sunday lock
  *   npm run league -- invite 1 manager@example.com [teamId]
  *   npm run league -- accept <token> manager@example.com "Manager Name"
  *   npm run league -- members 1
@@ -39,8 +42,9 @@
  */
 import { connect, insertMany, upsertScoringConfig } from "@illini/db";
 import { GAME_CONFIG } from "@illini/scoring";
+import { forwardConfigId } from "@illini/ingest";
 import {
-  BracketExistsError, BracketRefusedError, DEFAULT_SETTINGS, SETTING_FIELDS, STARTER_SLOTS,
+  BracketExistsError, BracketRefusedError, DEFAULT_SETTINGS, EVERYONE_SETTINGS, SETTING_FIELDS, STARTER_SLOTS,
   SettingsRefusedError, acceptInvite, accountByUsername, addFreeAgent, advanceExpired, autoDraft,
   autoFillLeague, bracketView, cancelTrade, claimsFor, createBracket, createDraft, dequeue,
   draftQueue, draftRoom, dropPlayer, enqueue, generateSchedule, inviteToLeague, leagueSettings,
@@ -67,12 +71,23 @@ const today = () => new Date().toISOString().slice(0, 10);
  */
 const clock = () => (process.env.ILLINI_NOW ? new Date(process.env.ILLINI_NOW) : new Date());
 
+/** The first Sunday on or after a date. */
+const firstSundayOnOrAfter = (day: string): string => {
+  const d = new Date(`${day}T00:00:00Z`);
+  while (d.getUTCDay() !== 0) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
 try {
   if (command === "create") {
-    const [seasonArg, name, teamsArg, emailArg] = args;
+    const everyone = args.includes("--everyone");
+    const [seasonArg, name, teamsArg, emailArg] = args.filter((a) => a !== "--everyone");
     const season = Number(seasonArg);
     const teamCount = Number(teamsArg ?? 10);
-    const { id: configId } = await upsertScoringConfig(db, "game", GAME_CONFIG);
+    const configId = everyone
+      ? await forwardConfigId(db)
+      : (await upsertScoringConfig(db, "game", GAME_CONFIG)).id;
+    const settings = everyone ? EVERYONE_SETTINGS : DEFAULT_SETTINGS;
 
     // The commissioner exists as a row before they have a password: `passwd`
     // is what turns the seat into an account somebody can sign in to.
@@ -81,7 +96,7 @@ try {
     const { rows: [league] } = await db.query<{ id: string }>(
       `INSERT INTO league (name, season, config_id, settings, commissioner_id)
        VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [name, season, configId, JSON.stringify(DEFAULT_SETTINGS), owner.id]);
+      [name, season, configId, JSON.stringify(settings), owner.id]);
     await db.query(
       `INSERT INTO league_member (league_id, user_id, role) VALUES ($1,$2,'commissioner')
        ON CONFLICT (league_id, user_id) DO UPDATE SET role = 'commissioner'`,
@@ -95,7 +110,11 @@ try {
       rows: Array.from({ length: teamCount }, (_, i) => [league!.id, `Team ${i + 1}`]),
       conflict: "(league_id, name) DO NOTHING",
     });
-    const weeks = await generateSchedule(db, Number(league!.id), `${season - 1}-11-02`, 17);
+    // The forward-model league's weeks run Sunday to Saturday from the first
+    // Sunday in November, and stop where its bracket starts.
+    const start = everyone ? firstSundayOnOrAfter(`${season - 1}-11-01`) : `${season - 1}-11-02`;
+    const weekCount = everyone ? settings.playoffStartWeek - 1 : 17;
+    const weeks = await generateSchedule(db, Number(league!.id), start, weekCount);
     console.log(`league ${league!.id} | ${teamCount} teams | ${weeks} matchups scheduled`);
 
   } else if (command === "invite") {

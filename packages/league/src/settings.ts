@@ -271,6 +271,18 @@ export function settingsProblems(settings: LeagueSettings): string[] {
     }
   }
 
+  // A league where everybody plays has no lineup to seat a guard in: its
+  // roster is FLEX only, and a bench would be players who are rostered and
+  // still never score — the one thing that format exists not to have.
+  if (settings.lineupMode === "everyone") {
+    if (settings.starters.some((s) => s.slot !== "FLEX" && s.count > 0)) {
+      problems.push("Everybody plays in this league, so every seat is FLEX — G, F and B slots do not apply.");
+    }
+    if (settings.bench > 0) {
+      problems.push("Everybody plays in this league, so there is no bench. Add FLEX seats instead.");
+    }
+  }
+
   const starters = settings.starters;
   const seen = new Set<string>();
   for (const { slot, count } of starters) {
