@@ -107,7 +107,7 @@ export default async function PlayersPage({
             <span>
               {picked === null
                 ? everyone
-                  ? "Season = fantasy points so far plus the model\u2019s projection for every game left · Score = projected Player Score"
+                  ? "Season: points scored plus projected for games left · Score: projected Player Score"
                   : "Ranked by season Player-Score under this league\u2019s config"
                 : historic
                 ? `Week ${picked.week} · ${span(picked.startsOn, picked.endsOn)} · what they actually scored`

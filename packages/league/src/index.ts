@@ -21,3 +21,4 @@ export * from "./reserve.ts";
 export * from "./maintenance.ts";
 export * from "./weekroster.ts";
 export * from "./teamname.ts";
+export * from "./scouting.ts";

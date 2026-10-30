@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { DraftRoom } from "@illini/league";
 import { RoleTag } from "../ui/bits.tsx";
+import { playerPath } from "../../lib/links.ts";
 
 /**
  * The board: rounds down, teams across, snake order left to right.
@@ -61,7 +62,7 @@ export function Board({ room, yourTeamId }: { room: DraftRoom; yourTeamId: numbe
                       {cell?.playerId !== null && cell !== undefined ? (
                         <>
                           <span className="row" style={{ gap: "var(--s-1)", flexWrap: "nowrap" }}>
-                            <Link href={`/players/${cell.playerId}`} className="player-link">
+                            <Link href={playerPath(cell.playerId, cell.playerName)} className="player-link">
                               {cell.playerName}
                             </Link>
                             <RoleTag role={cell.role} />

@@ -67,9 +67,9 @@
 
   --focus: var(--accent-ink);
 
-  --f-ui:    "Archivo", ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --f-prose: "Source Serif 4", Georgia, "Times New Roman", serif;
-  --f-mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --f-ui:    var(--font-archivo), "Archivo", ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --f-prose: var(--font-serif), "Source Serif 4", Georgia, "Times New Roman", serif;
+  --f-mono:  var(--font-mono), "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* A 1.2 ratio, fixed. Product UI is read at consistent DPI; a heading that
      shrinks inside a panel looks broken rather than responsive. */
@@ -1139,12 +1139,12 @@ button:hover:not(:disabled), .button:hover {
   background: var(--surface-2); color: var(--ink); border-color: var(--line-hard);
 }
 button:active:not(:disabled), .button:active { transform: translateY(1px); }
-button.primary {
+button.primary, .button.primary {
   background: var(--accent-ink); border-color: var(--accent-ink); color: #fff;
   box-shadow: 0 2px 10px -4px color-mix(in srgb, var(--accent) 70%, transparent);
 }
-button.primary:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fff; }
-@media (prefers-color-scheme: dark) { button.primary { color: #24100A; } }
+button.primary:hover:not(:disabled), .button.primary:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { button.primary, .button.primary { color: #24100A; } }
 button.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
 button.ghost:hover:not(:disabled) { background: var(--sunken); color: var(--ink); }
 button.sm, .button.sm { min-height: 32px; padding-inline: var(--s-3); font-size: var(--t-xs); border-radius: var(--r-sm); }
@@ -1945,3 +1945,64 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 @media (max-width: 640px) {
   .tiles > .tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
+
+/* ---- the projection: range strip and the slate ahead ------------------- */
+
+/* A ruler from zero to the best projection in the pool. The band is the
+   model's range, the tick is the projection; nothing animates, because a
+   forecast that sweeps in reads as something that just happened. */
+.rangestrip {
+  position: relative; display: block; height: 14px;
+  background: var(--sunken); border-radius: var(--r-pill);
+}
+.rangestrip-band {
+  position: absolute; top: 3px; bottom: 3px;
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: var(--r-pill);
+}
+.rangestrip-tick {
+  position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px;
+  background: var(--accent); border-radius: 2px;
+}
+
+.slate { list-style: none; margin: var(--s-2) 0 0; padding: 0; display: grid; }
+.slate > li {
+  display: grid; align-items: center; gap: var(--s-3);
+  grid-template-columns: 8.5rem minmax(0, 1fr) minmax(4rem, 9rem) 3.25rem;
+  padding: var(--s-2) 0; border-top: 1px solid var(--line-soft); font-size: var(--t-sm);
+}
+.slate > li:first-child { border-top: 0; }
+.slate-when { display: grid; line-height: 1.25; font-weight: 600; }
+.slate-when .faint { font-weight: 400; font-size: var(--t-xs); }
+.slate-opp { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slate-opp a, .hero-id .meta a, .schoolgame a { color: inherit; text-decoration-color: var(--line-hard); text-underline-offset: 3px; }
+.slate-opp a:hover, .hero-id .meta a:hover, .schoolgame a:hover { text-decoration-color: currentColor; }
+.slate-val { text-align: right; font-weight: 700; }
+.slate > li[data-out] .slate-val { color: var(--crit); font-weight: 600; }
+@media (max-width: 560px) {
+  .slate > li { grid-template-columns: 5.5rem minmax(0, 1fr) 3rem; }
+  .slate > li > .bar { display: none; }
+}
+
+/* ---- a school -------------------------------------------------------------- */
+
+.schoolmark {
+  width: 56px; height: 56px; border-radius: var(--r-lg); display: grid; place-items: center; flex: none;
+  background: color-mix(in srgb, var(--school, var(--deep-2)) 22%, var(--surface));
+  border: 2px solid var(--school, var(--line-hard)); color: var(--ink);
+}
+/* One row, scrolled sideways when it does not fit: a schedule reads left to
+   right, and a wrapped one strands its last game alone on a second line. */
+.schoolgames {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(168px, 1fr);
+  gap: 1px; background: var(--line-soft); overflow-x: auto; scroll-snap-type: x proximity;
+}
+.schoolgame { scroll-snap-align: start; }
+.schoolgame { background: var(--surface); padding: var(--s-3) var(--s-4); display: grid; gap: 2px; font-size: var(--t-sm); }
+.schoolgame .when { font-size: var(--t-xs); color: var(--ink-3); font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+.schoolgame .opp { font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schoolgame .proj { font-size: var(--t-xs); color: var(--ink-2); }
+.plr-school { color: inherit; text-decoration: none; }
+.plr-school:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.panel-note { padding: var(--s-3) var(--s-5); border-bottom: 1px solid var(--line-soft); max-width: none; }
+@media (max-width: 640px) { .panel-note { padding: var(--s-3) var(--s-4); } }

@@ -249,6 +249,8 @@ export interface PoolPlayer {
   playerId: number;
   name: string;
   teamName: string | null;
+  /** The school's crosswalk key, for a link to its page. */
+  teamKey: string | null;
   primaryColor: string | null;
   secondaryColor: string | null;
   conference: string | null;
@@ -408,7 +410,7 @@ export async function playerPool(
        LEFT JOIN form ON form.player_id = p.id`;
 
   const { rows } = await db.query<{
-    player_id: string; name: string; team_name: string | null;
+    player_id: string; name: string; team_name: string | null; team_key: string | null;
     primary_color: string | null; secondary_color: string | null; conference: string | null;
     role: string | null; archetype: Archetype | null; games: string; total: number;
     projected: number | null; season_points: number | null; owned_by: string | null;
@@ -444,7 +446,7 @@ export async function playerPool(
      pool AS (
        SELECT player_id FROM totals UNION SELECT player_id FROM proj
      )${weekCte}
-     SELECT p.id AS player_id, p.name, t.name AS team_name,
+     SELECT p.id AS player_id, p.name, t.name AS team_name, t.normalised AS team_key,
             t.primary_color, t.secondary_color, t.conference,
             coalesce(totals.role, p.position) AS role, totals.archetype,
             coalesce(totals.games, 0) AS games, coalesce(totals.total, 0) AS total,
@@ -470,7 +472,7 @@ export async function playerPool(
   return rows.map((r) => ({
     playerId: Number(r.player_id),
     name: r.name,
-    teamName: r.team_name,
+    teamName: r.team_name, teamKey: r.team_key,
     primaryColor: r.primary_color,
     secondaryColor: r.secondary_color,
     conference: r.conference,

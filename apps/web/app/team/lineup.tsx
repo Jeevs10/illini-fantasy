@@ -9,6 +9,7 @@ import type {
 import { autoFill, moveToSlot, type LineupState } from "./actions.ts";
 import { buildSlots } from "./slots.ts";
 import { AvailabilityTag, RoleTag, Score } from "../ui/bits.tsx";
+import { playerPath } from "../../lib/links.ts";
 
 /**
  * Tip-off, always in Eastern.
@@ -243,7 +244,7 @@ function Row({
 
       <span className="plr-id">
         <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
-          <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
+          <Link href={playerPath(player.playerId, player.name)} className="plr-name">{player.name}</Link>
           <RoleTag role={player.role} />
           <AvailabilityTag status={player.availability?.status} injury={player.availability?.injury} compact />
         </span>
@@ -337,7 +338,7 @@ function OffNightRow({ player }: { player: OffNightPlayer }) {
 
       <span className="plr-id">
         <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
-          <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
+          <Link href={playerPath(player.playerId, player.name)} className="plr-name">{player.name}</Link>
           <RoleTag role={player.role} />
           <AvailabilityTag status={player.availability?.status} injury={player.availability?.injury} compact />
         </span>

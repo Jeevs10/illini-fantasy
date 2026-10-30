@@ -128,10 +128,9 @@ export default async function TeamPage({
               </div>
             </div>
           </div>
-          <p className="sethelp" style={{ padding: "0 var(--s-4) var(--s-3)" }}>
-            No lineup to set: everyone you held at Sunday&rsquo;s lock scores every game
-            they play through Saturday. Adds, drops, trades and IR moves made now
-            count from the next lock, {nextLock}.
+          <p className="sethelp panel-note">
+            No lineup to set. Everyone on the roster at Sunday&rsquo;s lock scores every
+            game through Saturday; moves made now count from {nextLock}.
           </p>
           <EveryoneWeek
             nextLock={nextLock}

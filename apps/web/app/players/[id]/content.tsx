@@ -1,11 +1,13 @@
 import Link from "next/link";
 import {
-  STAT_GROUPS, type GameLogEntry, type PlayerAvailability, type PlayerCard, type RankPoint,
+  STAT_GROUPS, type GameLogEntry, type PlayerAvailability, type PlayerCard, type PlayerOutlook, type RankPoint,
   type StatAverages, type StatKey, type StatPercentile, type WeekProjection,
 } from "@illini/league";
 import { GAME_CONFIG, type BlockName } from "@illini/scoring";
 import { Avatar } from "../../ui/identity.tsx";
-import { AvailabilityTag, Bar, Empty, Score, StatTile } from "../../ui/bits.tsx";
+import { AvailabilityTag, Bar, Empty, ET, Score, StatTile } from "../../ui/bits.tsx";
+import { Glyph } from "../../ui/glyphs.tsx";
+import { dataPlayerUrl, schoolPath } from "../../../lib/links.ts";
 
 /** "83rd", "1st" — English ordinals, for a percentile read as a rank rather
     than a fraction. */
@@ -13,7 +15,7 @@ function ordinal(n: number): string {
   const suffix = ["th", "st", "nd", "rd"][(n % 100 - (n % 10)) !== 10 ? n % 10 : 0] ?? "th";
   return `${n}${suffix}`;
 }
-import { RankTrendChart } from "../../ui/charts.tsx";
+import { ProjectionTrendChart, RangeStrip, RankTrendChart } from "../../ui/charts.tsx";
 import type { PlayerCardData } from "./data.ts";
 
 /**
@@ -49,15 +51,18 @@ function formatStat(stat: StatKey, value: number): string {
   }
 }
 
-/** The identity strip — avatar, name, school, ownership. */
-export function Hero({ card, linkAway }: { card: PlayerCard; linkAway?: string }) {
+/** The identity strip — avatar, name, school, ownership, and the way out to the model's own page. */
+export function Hero({ card, outlook, linkAway }: { card: PlayerCard; outlook?: PlayerOutlook; linkAway?: string }) {
+  const school = outlook?.school ?? null;
   return (
     <section className="hero">
       <Avatar name={card.name} seed={card.playerId} size="xl" ring={card.primaryColor} />
       <div className="hero-id">
         <h1>{card.name}</h1>
         <p className="meta">
-          <span>{card.teamName ?? "Unaffiliated"}</span>
+          <span>
+            {school ? <Link href={schoolPath(school.slug)}>{school.name}</Link> : card.teamName ?? "Unaffiliated"}
+          </span>
           {card.conference ? <span>{card.conference}</span> : null}
           {card.role ? <span>{card.role}</span> : null}
           {card.classYear ? <span>{card.classYear}</span> : null}
@@ -69,6 +74,11 @@ export function Hero({ card, linkAway }: { card: PlayerCard; linkAway?: string }
         {card.ownedBy
           ? <span className="pill">Rostered by {card.ownedBy}</span>
           : <span className="pill free">Free agent</span>}
+        {outlook?.forwardKey ? (
+          <a className="button sm" href={dataPlayerUrl(outlook.forwardKey)} target="_blank" rel="noopener">
+            Prospect Analyzer <Glyph name="external" size={13} />
+          </a>
+        ) : null}
         {linkAway ? <Link className="button sm" href={linkAway}>← All players</Link> : null}
       </div>
     </section>
@@ -97,8 +107,10 @@ export function Availability({ availability }: { availability: PlayerAvailabilit
 }
 
 /** Totals, the rank trend and the per-night spark — the "how's he doing" block. */
-export function Overview({ card, rankTrend, projection }: {
+export function Overview({ card, rankTrend, projection, projected = false }: {
   card: PlayerCard; rankTrend: RankPoint[]; projection: WeekProjection;
+  /** The projection panel is showing, and carries the week ahead itself. */
+  projected?: boolean;
 }) {
   const scores = card.log.map((g) => g.score);
   const best = scores.length === 0 ? 0 : Math.max(...scores);
@@ -106,17 +118,25 @@ export function Overview({ card, rankTrend, projection }: {
   const trend = [...card.log].reverse();
   const latestRank = rankTrend[rankTrend.length - 1] ?? null;
 
+  // Before his first game a row of zeros and dashes says nothing the empty
+  // game log below does not; the week ahead is the only number worth a tile.
+  const played = card.games > 0;
+  const week = !projected && projection.gamesScheduled > 0;
+  if (!played && !latestRank && !week) return null;
+
   return (
     <div className="panel">
-      <div className="tiles">
-        <StatTile label="Games" value={String(card.games)} />
-        <StatTile label="Total" value={card.totalScore.toFixed(1)} />
-        <StatTile label="Average" value={card.averageScore.toFixed(1)} tone="accent" />
-        <StatTile label="Best" value={card.games === 0 ? "—" : best.toFixed(1)} />
-        <StatTile label="Floor" value={card.games === 0 ? "—" : worst.toFixed(1)} />
-      </div>
-      {latestRank || projection.gamesScheduled > 0 ? (
-        <div className="tiles" style={{ borderTop: "1px solid var(--line-soft)" }}>
+      {played ? (
+        <div className="tiles">
+          <StatTile label="Games" value={String(card.games)} />
+          <StatTile label="Total" value={card.totalScore.toFixed(1)} />
+          <StatTile label="Average" value={card.averageScore.toFixed(1)} tone="accent" />
+          <StatTile label="Best" value={best.toFixed(1)} />
+          <StatTile label="Floor" value={worst.toFixed(1)} />
+        </div>
+      ) : null}
+      {latestRank || week ? (
+        <div className="tiles" style={played ? { borderTop: "1px solid var(--line-soft)" } : undefined}>
           {latestRank ? (
             <>
               <StatTile label="Rank" value={`#${latestRank.rankOverall}`} note="overall" />
@@ -125,11 +145,13 @@ export function Overview({ card, rankTrend, projection }: {
               ) : null}
             </>
           ) : null}
-          <StatTile
-            label="Next 7 days"
-            value={projection.projectedTotal.toFixed(1)}
-            note={`${projection.gamesScheduled} games × ${projection.average.toFixed(1)} avg`}
-          />
+          {week ? (
+            <StatTile
+              label="Next 7 days"
+              value={projection.projectedTotal.toFixed(1)}
+              note={`${projection.gamesScheduled} games × ${projection.average.toFixed(1)} avg`}
+            />
+          ) : null}
         </div>
       ) : null}
       {rankTrend.length >= 3 ? (
@@ -162,6 +184,102 @@ export function Overview({ card, rankTrend, projection }: {
               />
             ))}
           </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const DAY = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const day = (iso: string) => DAY.format(new Date(`${iso}T00:00:00Z`));
+
+/**
+ * The forward model's read on him: the Player Score the draft is ordered by,
+ * how wide its range is, where it ranks, what the rest of his season is worth
+ * in fantasy points, and game by game what each night ahead is projected for.
+ * Nothing on the card says more about whether to roster him.
+ */
+export function ProjectionSection({ outlook, week }: { outlook: PlayerOutlook; week: WeekProjection }) {
+  const { latest, history, upcoming } = outlook;
+  if (!latest && upcoming.length === 0) return null;
+  const peak = Math.max(1, ...upcoming.map((g) => g.projected));
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>Projection</h2>
+          <p>{latest ? <>Forward model, morning of {day(latest.asOf)}.</> : "Forward model."}</p>
+        </div>
+        {latest ? <span className="pill">#{latest.rank} of {latest.of.toLocaleString("en-US")}</span> : null}
+      </div>
+
+      {latest ? (
+        <>
+          <div className="tiles">
+            <StatTile label="Player Score" value={latest.score.toFixed(1)} tone="accent"
+                      note={latest.lo !== null && latest.hi !== null
+                        ? `range ${latest.lo.toFixed(1)}–${latest.hi.toFixed(1)}` : undefined} />
+            {week.gamesScheduled > 0 ? (
+              <StatTile label="Next 7 days" value={week.projectedTotal.toFixed(1)}
+                        note={`pts over ${week.gamesScheduled} game${week.gamesScheduled === 1 ? "" : "s"}`} />
+            ) : null}
+            {latest.restPoints !== null ? (
+              <StatTile label="Rest of season" value={latest.restPoints.toFixed(0)}
+                        note={latest.restGames ? `pts over ${latest.restGames} games` : "pts"} />
+            ) : null}
+            {latest.mpg !== null ? (
+              <StatTile label="Minutes" value={latest.mpg.toFixed(1)} note="projected per game" />
+            ) : null}
+          </div>
+          <div className="panel-body" style={{ borderTop: "1px solid var(--line-soft)", display: "grid", gap: "var(--s-2)" }}>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <span className="eyebrow">Against the best projection in the pool</span>
+              <span className="faint tnum" style={{ fontSize: "var(--t-xs)" }}>0 – {latest.top.toFixed(1)}</span>
+            </div>
+            <RangeStrip
+              value={latest.score} lo={latest.lo} hi={latest.hi} top={latest.top}
+              label={`Projected ${latest.score.toFixed(1)}${latest.lo !== null && latest.hi !== null
+                ? `, range ${latest.lo.toFixed(1)} to ${latest.hi.toFixed(1)}` : ""}; the best in the pool is ${latest.top.toFixed(1)}`}
+            />
+          </div>
+        </>
+      ) : null}
+
+      {history.length >= 2 ? (
+        <div className="panel-body" style={{ borderTop: "1px solid var(--line-soft)" }}>
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: "var(--s-2)" }}>
+            <span className="eyebrow">Player Score, morning by morning</span>
+            <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
+              {day(history[0]!.asOf)} → {day(history[history.length - 1]!.asOf)}
+            </span>
+          </div>
+          <ProjectionTrendChart points={history} />
+        </div>
+      ) : null}
+
+      {upcoming.length > 0 ? (
+        <div className="panel-body" style={{ borderTop: "1px solid var(--line-soft)" }}>
+          <span className="eyebrow">Next {upcoming.length === 1 ? "game" : `${upcoming.length} games`}</span>
+          <ol className="slate">
+            {upcoming.map((g) => (
+              <li key={`${g.playedOn}-${g.opponent}`} data-out={g.listedOut || undefined}>
+                <span className="slate-when">
+                  <span>{day(g.playedOn)}</span>
+                  {g.tipoff ? <span className="faint"><ET iso={g.tipoff} /> ET</span> : null}
+                </span>
+                <span className="slate-opp">
+                  <span className="faint">{g.site === "home" ? "vs" : g.site === "away" ? "at" : "vs"}</span>{" "}
+                  {g.opponentSlug && g.opponent
+                    ? <Link href={schoolPath(g.opponentSlug)}>{g.opponent}</Link>
+                    : g.opponent ?? "TBD"}
+                  {g.site === "neutral" ? <span className="faint"> · neutral</span> : null}
+                </span>
+                <Bar percent={(g.projected / peak) * 100} tone={g.listedOut ? "quiet" : undefined}
+                     label={`${g.projected.toFixed(1)} projected`} />
+                <span className="slate-val tnum">{g.listedOut ? "Out" : g.projected.toFixed(1)}</span>
+              </li>
+            ))}
+          </ol>
         </div>
       ) : null}
     </div>
@@ -275,8 +393,8 @@ export function GameLogSection({ card }: { card: PlayerCard }) {
               ? <>Each night&rsquo;s six blocks, the opponent multiplier applied to
                   them, and the minutes ramp — so a score can be read rather than
                   taken on faith.</>
-              : <>Each night scored the way the Player Score rates a player: the box line through its
-                  box weights, the defence it came against, and the level of his program and team.</>}
+              : <>Each game&rsquo;s box line through the Player Score&rsquo;s weights, plus credit for the
+                  defense he faced.</>}
           </p>
         </div>
         <span className="pill">{card.games} scored</span>
@@ -352,7 +470,7 @@ function Game({ game, best }: { game: GameLogEntry; best: number }) {
 
 /**
  * One night on the forward model: the box line through the Player Score's box
- * weights, plus the credit for the defence it came against — the two parts of
+ * weights, plus the credit for the defense it came against — the two parts of
  * `valAdj`, the number the Daily Update ranks performances by.
  */
 function ForwardGame({ game, best }: { game: GameLogEntry; best: number }) {
@@ -375,7 +493,7 @@ function ForwardGame({ game, best }: { game: GameLogEntry; best: number }) {
         </p>
         <p className="game-math">
           {(parts.box ?? game.raw).toFixed(1)} box value
-          {" + "}{(parts.opponent ?? 0).toFixed(1)} for the defence faced
+          {" + "}{(parts.opponent ?? 0).toFixed(1)} for the defense faced
           {program !== 0 ? <>{program > 0 ? " + " : " − "}{Math.abs(program).toFixed(1)} for his program and team</> : null}
           {" = "}{game.score.toFixed(1)}
         </p>
@@ -386,14 +504,15 @@ function ForwardGame({ game, best }: { game: GameLogEntry; best: number }) {
 
 /** Everything, stacked — the full-page arrangement. */
 export function PlayerCardContent({ data, linkAway }: { data: PlayerCardData; linkAway?: string }) {
-  const { card, rankTrend, averages, projection, availability, percentileOf } = data;
+  const { card, rankTrend, averages, projection, availability, percentileOf, outlook } = data;
   return (
     <>
-      <Hero card={card} linkAway={linkAway} />
+      <Hero card={card} outlook={outlook} linkAway={linkAway} />
       {availability && availability.status !== "available" ? (
         <Availability availability={availability} />
       ) : null}
-      <Overview card={card} rankTrend={rankTrend} projection={projection} />
+      <ProjectionSection outlook={outlook} week={projection} />
+      <Overview card={card} rankTrend={rankTrend} projection={projection} projected={outlook.latest !== null} />
       {averages ? (
         <SeasonAveragesSection averages={averages} percentileOf={percentileOf} />
       ) : null}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Avatar } from "./identity.tsx";
+import { playerPath } from "../../lib/links.ts";
 
 /**
  * The player row.
@@ -44,7 +45,7 @@ export function PlayerRow({
           const link = playerId === undefined ? (
             <span className="plr-name" style={badge ? { minWidth: 0, flex: "1 1 auto" } : undefined}>{name}</span>
           ) : (
-            <Link href={`/players/${playerId}`} className="plr-name"
+            <Link href={playerPath(playerId, name)} className="plr-name"
                   style={badge ? { minWidth: 0, flex: "1 1 auto" } : undefined}>{name}</Link>
           );
           return badge ? (

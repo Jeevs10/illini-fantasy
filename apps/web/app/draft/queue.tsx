@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { QueuedPlayer } from "@illini/league";
 import { moveQueued, unqueuePlayer, type DraftState } from "./actions.ts";
 import { RoleTag } from "../ui/bits.tsx";
+import { playerPath } from "../../lib/links.ts";
 
 /**
  * The list the clock reads when you are not here.
@@ -43,7 +44,7 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
                 <span className="queue-rank num">{i + 1}</span>
                 <span className="queue-who">
                   <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
-                    <Link href={`/players/${player.playerId}`} className="player-link">
+                    <Link href={playerPath(player.playerId, player.name)} className="player-link">
                       {player.name}
                     </Link>
                     <RoleTag role={player.role} />

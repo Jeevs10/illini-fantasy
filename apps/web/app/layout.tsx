@@ -1,9 +1,20 @@
 import type { Metadata, Viewport } from "next";
+import { Archivo, IBM_Plex_Mono, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 import { Nav } from "./nav.tsx";
 import { LeagueSwitch } from "./leagueswitch.tsx";
 import { ProfileMenu } from "./profile-menu.tsx";
 import { who } from "../lib/session.ts";
+
+// Archivo on its width axis: condensed for labels that have to fit, normal
+// for interface, expanded for the scores. One family doing three jobs beats
+// three families doing one each. Self-hosted by next/font, so the first paint
+// does not wait on a third-party stylesheet.
+const archivo = Archivo({ subsets: ["latin"], axes: ["wdth"], variable: "--font-archivo", display: "swap" });
+const serif = Source_Serif_4({
+  subsets: ["latin"], axes: ["opsz"], weight: "variable", style: ["normal"], variable: "--font-serif", display: "swap",
+});
+const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Illini Fantasy Hoops",
@@ -32,18 +43,7 @@ export default async function RootLayout({
       }
     : { name: viewer.name || viewer.email, commissioner: false, leagues: [], current: 0 };
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/* Archivo on its width axis: condensed for labels that have to fit,
-            normal for interface, expanded for the scores. One family doing
-            three jobs beats three families doing one each. */}
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap"
-        />
-      </head>
+    <html lang="en" className={`${archivo.variable} ${serif.variable} ${mono.variable}`}>
       <body>
         {signedIn ? (
           <Nav commissioner={signedIn.commissioner}>

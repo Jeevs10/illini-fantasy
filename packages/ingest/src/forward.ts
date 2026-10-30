@@ -230,6 +230,21 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
     });
   }
 
+  // ---- each school's slug on the Data repo's site, for linking out (018)
+  const slugOf = new Map<number, string>();
+  for (const p of feed.players) {
+    const teamId = p.cbbdTeamId === null ? undefined : teamOf.get(p.cbbdTeamId);
+    if (teamId !== undefined && p.slug) slugOf.set(teamId, p.slug);
+  }
+  if (slugOf.size > 0) {
+    await db.query(
+      `UPDATE team t SET forward_slug = u.slug
+         FROM UNNEST($1::bigint[], $2::text[]) AS u(id, slug)
+        WHERE t.id = u.id AND t.forward_slug IS DISTINCT FROM u.slug`,
+      [[...slugOf.keys()], [...slugOf.values()]],
+    );
+  }
+
   // ---- players: create the ones we have not seen, then bring every one up to date
   const known = async () => new Map(
     (await db.query<{ source_id: string; player_id: string }>(

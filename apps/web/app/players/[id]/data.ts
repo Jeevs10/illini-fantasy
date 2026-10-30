@@ -1,6 +1,6 @@
 import {
-  availabilityOf, playerCard, playerRankTrend, playerWeekProjection, seasonAverages,
-  statPercentiles, type PlayerAvailability, type PlayerCard, type RankPoint,
+  availabilityOf, playerCard, playerOutlook, playerRankTrend, playerWeekProjection, seasonAverages,
+  statPercentiles, type PlayerAvailability, type PlayerCard, type PlayerOutlook, type RankPoint,
   type StatAverages, type StatKey, type StatPercentile, type WeekProjection,
 } from "@illini/league";
 import { db } from "../../../lib/db.ts";
@@ -13,6 +13,7 @@ export interface PlayerCardData {
   projection: WeekProjection;
   availability: PlayerAvailability | null;
   percentileOf: Map<StatKey, StatPercentile>;
+  outlook: PlayerOutlook;
 }
 
 function shiftDate(iso: string, byDays: number): string {
@@ -35,18 +36,19 @@ export async function loadPlayerCard(
   if (!card) return null;
 
   const seasonStart = `${season - 1}-11-01`;
-  const [rankTrend, averages, projection, availability] = await Promise.all([
+  const [rankTrend, averages, projection, availability, outlook] = await Promise.all([
     playerRankTrend(db, { playerId, configId, from: seasonStart, to: today }),
     seasonAverages(db, { playerId, season, asOf: today }),
     playerWeekProjection(db, { playerId, configId, from: today, to: shiftDate(today, 6) }),
     availabilityOf(db, playerId),
+    playerOutlook(db, { playerId, season, from: today }),
   ]);
   const percentiles = card.role
     ? await statPercentiles(db, { playerId, season, role: card.role, asOf: today })
     : [];
 
   return {
-    card, rankTrend, averages, projection, availability,
+    card, rankTrend, averages, projection, availability, outlook,
     percentileOf: new Map(percentiles.map((p) => [p.stat, p])),
   };
 }

@@ -44,8 +44,8 @@ export default async function StandingsPage() {
         {played === 0 ? (
           <Empty title="Nothing settled yet" glyph="league"
                  action={<Link className="button" href="/league">Watch the week</Link>}>
-            Standings fill in as weeks are settled. A week in progress counts for
-            nobody — its totals can still move when Torvik revises a box score.
+            The table fills in once Week 1 settles. Until then, follow the week
+            as it&rsquo;s played.
           </Empty>
         ) : (
           <>

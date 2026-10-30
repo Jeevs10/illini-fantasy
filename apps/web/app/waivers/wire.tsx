@@ -7,6 +7,7 @@ import { bid, type WaiverActionState } from "./actions.ts";
 import { Avatar } from "../ui/identity.tsx";
 import { Empty } from "../ui/bits.tsx";
 import { Dot } from "../ui/playerrow.tsx";
+import { playerPath } from "../../lib/links.ts";
 
 export interface Droppable { playerId: number; name: string }
 
@@ -68,7 +69,7 @@ export function Wire({
             <span className="plr-lead" style={{ minWidth: 0 }}>
               <Avatar name={player.name} seed={player.playerId} size="sm" />
               <span className="plr-id">
-                <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
+                <Link href={playerPath(player.playerId, player.name)} className="plr-name">{player.name}</Link>
                 <span className="plr-sub">
                   <span>{player.teamName ?? "—"}</span>
                   <Dot />

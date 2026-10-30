@@ -65,7 +65,6 @@ export function MatchupCarousel({
         <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
           <span className="tnum">{index + 1} of {count}</span>
           {labels?.[index] ? <> · {labels[index]}</> : null}
-          {count > 1 ? " — use ← →" : null}
         </span>
         <button
           type="button" className="button sm" aria-label="Next matchup"

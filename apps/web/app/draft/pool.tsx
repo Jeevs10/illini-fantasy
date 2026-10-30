@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { PoolPlayer, PositionRole } from "@illini/league";
 import { pick, queuePlayer, type DraftState } from "./actions.ts";
 import { Empty, RoleTag } from "../ui/bits.tsx";
+import { playerPath } from "../../lib/links.ts";
 
 const ROLES: PositionRole[] = ["G", "F", "B"];
 
@@ -99,7 +100,7 @@ export function Pool({
               {players.map((player) => (
                 <tr key={player.playerId}>
                   <td>
-                    <Link href={`/players/${player.playerId}`} className="player-link">
+                    <Link href={playerPath(player.playerId, player.name)} className="player-link">
                       {player.name}
                     </Link>
                     <span style={{ marginLeft: "var(--s-2)" }}><RoleTag role={player.role} /></span>

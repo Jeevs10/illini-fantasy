@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Trade, TradeSide, TradeStatus } from "@illini/league";
 import { Avatar } from "../ui/identity.tsx";
+import { playerPath } from "../../lib/links.ts";
 
 /** How a settled trade should read. Live ones say their own thing. */
 const TONE: Record<TradeStatus, string> = {
@@ -31,7 +32,7 @@ function Side({ side, heading }: { side: TradeSide; heading: string }) {
         <ul className="deal-players">
           {side.gives.map((player) => (
             <li key={player.playerId}>
-              <Link href={`/players/${player.playerId}`} className="player-link">
+              <Link href={playerPath(player.playerId, player.name)} className="player-link">
                 {player.name}
               </Link>
               <span className="sub">{player.teamName ?? "—"}</span>

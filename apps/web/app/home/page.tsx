@@ -113,7 +113,7 @@ export default async function HomePage() {
           </SectionHead>
           <div className="panel">
             <Tonight players={tonight} scores={tonightScores} now={now} settings={settings} availability={availability}
-                     everyone={everyone} />
+                     everyone={everyone} rostered={roster.length} />
           </div>
 
           <SectionHead title="Around the league" action="All matchups" href="/league" />
@@ -240,7 +240,7 @@ const ordinal = (n: number) =>
  * that has not been made yet, and hiding him is how points get left behind.
  */
 function Tonight({
-  players, scores, now, settings, availability, everyone = false,
+  players, scores, now, settings, availability, everyone = false, rostered,
 }: {
   players: Startable[];
   scores: Map<number, number>;
@@ -249,14 +249,22 @@ function Tonight({
   availability: Map<number, PlayerAvailability>;
   /** No slots to show: everyone held at the lock counts, and anyone else joins on Sunday. */
   everyone?: boolean;
+  /** Who is on the roster at all: an empty one has nothing to schedule. */
+  rostered: number;
 }) {
+  if (rostered === 0) {
+    return (
+      <Empty title="Your roster is empty" glyph="team"
+             action={<Link className="button primary" href="/players?free=1">Browse free agents</Link>}>
+        Nobody scores until somebody&rsquo;s on it.
+      </Empty>
+    );
+  }
   if (players.length === 0) {
     return (
       <Empty title="Nobody plays tonight" glyph="clock"
-             action={<Link className="button" href="/team">Look at another night</Link>}>
-        College schedules are uneven — most of a week&rsquo;s slate lands on
-        Saturday, and a Thursday can be nearly empty for a roster of
-        major-conference players.
+             action={<Link className="button" href="/team">See the week</Link>}>
+        None of your players has a game today.
       </Empty>
     );
   }

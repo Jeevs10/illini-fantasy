@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Activity } from "@illini/league";
 import { Avatar } from "./identity.tsx";
 import { Empty } from "./bits.tsx";
+import { playerPath } from "../../lib/links.ts";
 
 /**
  * The league, out loud.
@@ -59,7 +60,7 @@ export function ActivityFeed({ events, mineId }: { events: Activity[]; mineId: n
                   <>
                     {" "}
                     {event.playerId === null ? event.playerName : (
-                      <Link href={`/players/${event.playerId}`}>{event.playerName}</Link>
+                      <Link href={playerPath(event.playerId, event.playerName)}>{event.playerName}</Link>
                     )}
                   </>
                 ) : null}

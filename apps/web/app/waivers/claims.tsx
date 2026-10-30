@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Claim } from "@illini/league";
 import { reorder, withdraw, type WaiverActionState } from "./actions.ts";
 import { Empty } from "../ui/bits.tsx";
+import { playerPath } from "../../lib/links.ts";
 
 export type ClaimRow = Claim & { runsLabel: string };
 
@@ -47,7 +48,7 @@ export function Claims({ pending, settled }: { pending: ClaimRow[]; settled: Cla
             <li key={claim.id}>
               <span className="queue-rank num">{i + 1}</span>
               <span className="queue-who">
-                <Link href={`/players/${claim.playerId}`} className="player-link">
+                <Link href={playerPath(claim.playerId, claim.playerName)} className="player-link">
                   {claim.playerName}
                 </Link>
                 <span className="sub">
@@ -108,7 +109,7 @@ export function Claims({ pending, settled }: { pending: ClaimRow[]; settled: Cla
                 {settled.map((claim) => (
                   <tr key={claim.id}>
                     <td>
-                      <Link href={`/players/${claim.playerId}`} className="player-link">
+                      <Link href={playerPath(claim.playerId, claim.playerName)} className="player-link">
                         {claim.playerName}
                       </Link>
                       <span className="sub">{claim.runsLabel}</span>

@@ -7,6 +7,7 @@ import { Avatar } from "../ui/identity.tsx";
 import { AvailabilityTag, RoleTag, Score } from "../ui/bits.tsx";
 import Link from "next/link";
 import { Dot } from "../ui/playerrow.tsx";
+import { playerPath, schoolPathFor } from "../../lib/links.ts";
 
 export type PoolRow = PoolPlayer & { onWaivers: boolean; availability?: PlayerAvailability };
 
@@ -123,11 +124,13 @@ export function Pool({
             <Avatar name={player.name} seed={player.playerId} size="sm" ring={player.primaryColor} />
             <span className="plr-id">
               <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap", minWidth: 0 }}>
-                <Link href={`/players/${player.playerId}`} className="plr-name">{player.name}</Link>
+                <Link href={playerPath(player.playerId, player.name)} className="plr-name">{player.name}</Link>
                 <AvailabilityTag status={player.availability?.status} injury={player.availability?.injury} compact />
               </span>
               <span className="plr-sub">
-                <span>{player.teamName ?? "—"}</span>
+                {player.teamKey && player.teamName
+                  ? <Link href={schoolPathFor(player.teamKey)} className="plr-school">{player.teamName}</Link>
+                  : <span>{player.teamName ?? "—"}</span>}
                 {player.conference ? (
                   <span className="pool-conf"><Dot /><span>{player.conference}</span></span>
                 ) : null}
