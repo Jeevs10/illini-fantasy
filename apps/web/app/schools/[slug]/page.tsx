@@ -45,8 +45,11 @@ export default async function SchoolPage({ params }: { params: Promise<{ slug: s
     <>
       <div className="pagehead">
         <div className="row" style={{ gap: "var(--s-4)", flexWrap: "nowrap", minWidth: 0 }}>
-          <span className="schoolmark" style={school.primaryColor ? { ["--school" as string]: school.primaryColor } : undefined}>
-            <Glyph name="school" size={26} />
+          {/* The school's own banner: its colour as the felt, its initials in
+              the varsity block. */}
+          <span className="schoolmark" aria-hidden="true"
+                style={school.primaryColor ? { ["--school" as string]: school.primaryColor } : undefined}>
+            {initials(school.name)}
           </span>
           <div style={{ minWidth: 0 }}>
             <h1>{school.name}</h1>
@@ -164,3 +167,7 @@ export default async function SchoolPage({ params }: { params: Promise<{ slug: s
     </>
   );
 }
+
+/** "Ohio State" is OS, "Illinois" is I: initials, never more than three. */
+const initials = (name: string) =>
+  name.split(/[\s-]+/).filter((w) => /^[A-Z]/.test(w)).map((w) => w[0]).join("").slice(0, 3) || name[0]!;

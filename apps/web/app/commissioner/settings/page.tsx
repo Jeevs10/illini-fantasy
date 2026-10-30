@@ -7,6 +7,7 @@ import { db } from "../../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../../lib/session.ts";
 import { SettingsForm } from "./form.tsx";
 import { StrengthToggle } from "./strength.tsx";
+import { Gate } from "../../ui/gate.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -27,16 +28,15 @@ export default async function Settings() {
   // telling a manager where they are rather than about keeping anyone out.
   if (role !== "commissioner") {
     return (
-      <div className="narrow">
-        <div className="panel"><div className="panel-body">
-          <h1>Commissioner only</h1>
+      <Gate title="Commissioner only">
+        <div className="panel-body stack">
           <p className="muted">
             The numbers {leagueName} runs on belong to whoever runs it. You play
             by them, which is everything except this page.
           </p>
           <Link className="button" href="/team">Back to my team</Link>
-        </div></div>
-      </div>
+        </div>
+      </Gate>
     );
   }
 

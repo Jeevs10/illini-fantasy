@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Gate } from "../../ui/gate.tsx";
 import {
   PASSWORD_MIN, USERNAME_MAX, USERNAME_RULE, accountByEmail, inviteByToken,
 } from "@illini/league";
@@ -145,11 +146,8 @@ function Dead() {
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="narrow">
-      <div className="panel"><div className="panel-body">
-        <h1>{title}</h1>
-        {children}
-      </div></div>
-    </div>
+    <Gate title={title}>
+      <div className="panel-body stack">{children}</div>
+    </Gate>
   );
 }

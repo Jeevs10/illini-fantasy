@@ -1557,7 +1557,6 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 
 /* The playoff cut line — drawn under the last team still in, not the first
    team out, so the row that matters is the one with the rule beneath it. */
-.row[data-cut="true"] { padding-bottom: var(--s-3); border-bottom: 1px solid var(--line-hard); }
 
 .daystrip .games {
   font-size: 10px; font-weight: 700; letter-spacing: .04em;
@@ -1728,8 +1727,21 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 
 /* ---- sign in ------------------------------------------------------------ */
 
-.signin-brand { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-5); }
-.signin-brand h1 { font-size: var(--t-xl); }
+/* The way in: a single banner, hung from nothing, with the Block I on it. */
+.gate { text-align: center; }
+.gate .panel { text-align: left; margin-top: var(--s-5); }
+.gate h1 { font-size: var(--t-xl); }
+.gate-sub { margin: var(--s-1) 0 0; font-size: var(--t-sm); color: var(--ink-2); }
+.gate-banner {
+  position: relative; width: 76px; height: 104px; margin: 0 auto var(--s-4);
+  display: grid; justify-items: center; align-content: start; padding-top: 18px;
+  background: var(--raised);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 14px), 0 100%);
+}
+.gate-banner::before {
+  content: ""; position: absolute; inset: 5px 5px 19px;
+  border: var(--stitch-actual) color-mix(in srgb, var(--ink) 45%, transparent); pointer-events: none;
+}
 
 
 /* ---- the draft room, contained ------------------------------------------ */
@@ -1836,9 +1848,16 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 /* ---- a school -------------------------------------------------------------- */
 
 .schoolmark {
-  width: 56px; height: 56px; border-radius: var(--r-lg); display: grid; place-items: center; flex: none;
-  background: color-mix(in srgb, var(--school, var(--deep-2)) 22%, var(--surface));
-  border: 2px solid var(--school, var(--line-hard)); color: var(--ink);
+  position: relative; flex: none;
+  width: 64px; height: 84px; padding-top: 14px;
+  display: grid; justify-items: center; align-content: start;
+  background: color-mix(in srgb, var(--school, var(--deep-2)) 70%, var(--surface));
+  color: var(--ink); font-family: var(--f-varsity); font-size: 1.5rem; line-height: 1;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 12px), 0 100%);
+}
+.schoolmark::before {
+  content: ""; position: absolute; inset: 4px 4px 16px;
+  border: 2px solid color-mix(in srgb, var(--ink) 45%, transparent); pointer-events: none;
 }
 /* One row, scrolled sideways when it does not fit: a schedule reads left to
    right, and a wrapped one strands its last game alone on a second line. */
@@ -2083,3 +2102,10 @@ table.budgets tr[data-mine] .budgets-left { color: var(--accent); }
 .bracket-match[data-stitch="final"] { border: 3px double var(--line-hard); }
 table.picture tr[data-cut] > * { border-bottom: 2px solid var(--line-hard); }
 table.picture tr[data-out] { color: var(--ink-3); }
+
+/* The commissioner's seats: the on-deck banners, solid when held. */
+.seatstrip { border-top: 0; padding-top: 0; margin-bottom: var(--s-5); }
+.seatstrip li { width: 76px; }
+.seatstrip li:not([data-open])::before { border-style: solid; }
+.seatstrip li[data-open] .ondeck-name { color: var(--ink-3); }
+.seatstrip li[data-mine]::before { border: 2px solid var(--accent); }

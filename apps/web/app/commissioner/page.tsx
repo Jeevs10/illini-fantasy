@@ -3,6 +3,8 @@ import { members, openInvites, teamsInLeague } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer } from "../../lib/session.ts";
 import { Invites } from "./invites.tsx";
+import { Gate } from "../ui/gate.tsx";
+import { SeatStrip } from "./seats.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +17,15 @@ export default async function Commissioner() {
   // manager where they are rather than about keeping anyone out.
   if (role !== "commissioner") {
     return (
-      <div className="narrow">
-        <div className="panel"><div className="panel-body">
-          <h1>Commissioner only</h1>
+      <Gate title="Commissioner only">
+        <div className="panel-body stack">
           <p className="muted">
             Managing invites and seats belongs to whoever runs {leagueName}. You
             are a manager in it, which is everything except this page.
           </p>
           <Link className="button" href="/team">Back to my team</Link>
-        </div></div>
-      </div>
+        </div>
+      </Gate>
     );
   }
 
@@ -56,6 +57,10 @@ export default async function Commissioner() {
           <Link className="button" href="/standings">Standings</Link>
         </div>
       </div>
+
+      <SeatStrip seats={teams.map((t) => ({
+        id: t.id, name: t.name, owner: t.ownerName, mine: t.ownerId === viewer.userId,
+      }))} />
 
       <Invites teams={teams} open={invites} />
 

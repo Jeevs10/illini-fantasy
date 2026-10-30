@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { safeNext, sessionUser } from "../../lib/auth.ts";
 import { SignInForm } from "./form.tsx";
-import { BlockI } from "../ui/blocki.tsx";
+import { Gate } from "../ui/gate.tsx";
 
 export default async function SignIn({
   searchParams,
@@ -14,27 +14,15 @@ export default async function SignIn({
   if (await sessionUser()) redirect(destination);
 
   return (
-    <div className="narrow">
-      <div className="signin-brand">
-        <BlockI size={44} />
-        <div>
-          <h1>Illini Fantasy Hoops</h1>
-          <p className="faint" style={{ fontSize: "var(--t-sm)", marginTop: 2 }}>
-            College basketball, scored on the CBB Player-Score model
-          </p>
-        </div>
+    <Gate title="Illini Fantasy Hoops" sub="The staff league, scored on the forward model.">
+      <div className="panel-body">
+        <SignInForm next={destination} />
       </div>
-
-      <div className="panel">
-        <div className="panel-body">
-          <SignInForm next={destination} />
-        </div>
-        <p className="seatless">
-          No account yet? A league is invite-only — your commissioner sends a
-          link, and picking a username is the last step of redeeming it. Lost
-          your password? Your commissioner can set a new one.
-        </p>
-      </div>
-    </div>
+      <p className="seatless">
+        No account yet? A league is invite-only — your commissioner sends a
+        link, and picking a username is the last step of redeeming it. Lost
+        your password? Your commissioner can set a new one.
+      </p>
+    </Gate>
   );
 }
