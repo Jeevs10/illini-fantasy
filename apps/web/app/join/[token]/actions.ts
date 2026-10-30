@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
-  AccountTaken, acceptInvite, inviteByToken, registerAccount, usernameProblem, passwordProblem,
+  AccountTaken, acceptInvite, inviteByToken, registerAccount, suggestUsername, usernameProblem,
+  passwordProblem,
 } from "@illini/league";
 import { db } from "../../../lib/db.ts";
 import { endSession, sessionUser, startSession } from "../../../lib/auth.ts";
@@ -71,20 +72,33 @@ export async function registerAndJoin(
   _state: JoinState, formData: FormData,
 ): Promise<JoinState> {
   const token = String(formData.get("token") ?? "");
-  const username = String(formData.get("username") ?? "").trim();
+  let username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const displayName = String(formData.get("displayName") ?? "").trim();
-
-  const problem = usernameProblem(username) ?? passwordProblem(password);
-  if (problem) return { error: problem };
+  // Why a join was turned away, in the server log: the form shows the person
+  // the message, but nobody else ever sees it. Never the password.
+  const refuse = (reason: string, error: string): JoinState => {
+    console.warn("join refused", { reason, usernameLength: username.length, hasAt: username.includes("@") });
+    return { error };
+  };
 
   const invite = await inviteByToken(db, token);
-  if (!invite) return { error: "This link has already been used, or was revoked." };
-  if (invite.expired) return { error: "This invite has expired. Ask for a new link." };
+  if (!invite) return refuse("dead-link", "This link has already been used, or was revoked.");
+  if (invite.expired) return refuse("expired", "This invite has expired. Ask for a new link.");
 
   // A personal invite already names the address; a join link asks for it.
   const email = invite.email ?? String(formData.get("email") ?? "").trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "That does not look like an email address." };
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return refuse("bad-email", "That does not look like an email address.");
+  }
+
+  // iPhone Safari fills the username field with the email when it offers a
+  // strong password. Rather than refuse what the phone typed, make a username
+  // from it; sign-in accepts the email as well, so the saved login still works.
+  if (username.includes("@")) username = await suggestUsername(db, username);
+
+  const problem = usernameProblem(username) ?? passwordProblem(password);
+  if (problem) return refuse(usernameProblem(username) ? "bad-username" : "bad-password", problem);
 
   let account;
   try {
@@ -94,8 +108,8 @@ export async function registerAndJoin(
   } catch (error) {
     if (error instanceof AccountTaken) {
       return error.field === "username"
-        ? { error: `${username} is taken. Pick another.` }
-        : { error: `${email} already has an account. Sign in instead.` };
+        ? refuse("username-taken", `${username} is taken. Pick another.`)
+        : refuse("email-taken", `${email} already has an account. Sign in instead.`);
     }
     return { error: error instanceof Error ? error.message : "The account could not be created." };
   }

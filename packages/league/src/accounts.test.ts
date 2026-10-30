@@ -73,6 +73,10 @@ test("registering makes an account that can sign in", async () => {
   assert.equal(await authenticate(db, { username: "deron", password: "wrong" }), null);
   assert.equal(await authenticate(db, { username: "nobody", password: "orange and blue" }), null,
     "an unknown username is the same answer as a wrong password");
+
+  // A password manager saves the email as the login; it has to sign in too.
+  assert.deepEqual(await authenticate(db, { username: " Deron@Illini.test ", password: "orange and blue" }), account);
+  assert.equal(await authenticate(db, { username: "deron@illini.test", password: "wrong" }), null);
 });
 
 test("a seat the commissioner made is adopted, not duplicated", async () => {

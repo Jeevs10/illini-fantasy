@@ -131,9 +131,13 @@ const ABSENT = hashPassword(randomBytes(32).toString("hex"));
 export async function authenticate(
   db: Queryable, { username, password }: { username: string; password: string },
 ): Promise<Account | null> {
+  // A username never contains @, so an @ means the email. Password managers
+  // (iPhone Safari in particular) save the email as the login whenever a
+  // sign-up form had one, and the sign-in page has to accept what they fill.
+  const login = normaliseUsername(username);
   const { rows } = await db.query<AccountRow & { password_hash: string | null }>(
-    `SELECT ${COLUMNS}, password_hash FROM app_user WHERE username = $1`,
-    [normaliseUsername(username)],
+    `SELECT ${COLUMNS}, password_hash FROM app_user WHERE ${login.includes("@") ? "email" : "username"} = $1`,
+    [login],
   );
   const row = rows[0];
   if (!row?.password_hash) {

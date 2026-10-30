@@ -25,7 +25,7 @@ export function SignInForm({ next }: { next: string }) {
       <input type="hidden" name="next" value={next} />
 
       <label className="field">
-        <span>Username</span>
+        <span>Username or email</span>
         <input
           type="text"
           name="username"
