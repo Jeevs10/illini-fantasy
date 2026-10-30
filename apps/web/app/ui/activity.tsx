@@ -15,6 +15,7 @@ import { playerPath } from "../../lib/links.ts";
 
 const VERB: Record<string, string> = {
   join: "joined the league",
+  leave: "is open: its manager was removed",
   draft: "drafted",
   waiver: "won on waivers",
   free_agent: "added",

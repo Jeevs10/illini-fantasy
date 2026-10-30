@@ -212,10 +212,10 @@ export async function acceptInvite(
     await client.query("BEGIN");
 
     const { rows: invites } = await client.query<{
-      id: string; league_id: string; email: string; role: Role;
-      fantasy_team_id: string | null; expired: boolean;
+      id: string; league_id: string; email: string | null; role: Role;
+      fantasy_team_id: string | null; expired: boolean; shared: boolean;
     }>(
-      `SELECT id, league_id, email, role, fantasy_team_id, expires_at < now() AS expired
+      `SELECT id, league_id, email, role, fantasy_team_id, expires_at < now() AS expired, shared
          FROM league_invite
         WHERE token_hash = $1 AND accepted_at IS NULL AND revoked_at IS NULL
         FOR UPDATE`,
@@ -225,19 +225,35 @@ export async function acceptInvite(
     if (!invite) throw new Error("invite not found, already used, or revoked");
     if (invite.expired) throw new Error("invite has expired");
 
-    // The link is addressed to one person. Compared at fixed length so a
-    // mismatch cannot be narrowed down by timing.
-    const claimed = Buffer.from(hashToken(email.trim().toLowerCase()));
-    if (!timingSafeEqual(claimed, Buffer.from(hashToken(invite.email)))) {
-      throw new Error("invite was issued to a different email address");
+    // A personal link is addressed to one person. Compared at fixed length so
+    // a mismatch cannot be narrowed down by timing. A join link names nobody.
+    if (!invite.shared) {
+      const claimed = Buffer.from(hashToken(email.trim().toLowerCase()));
+      if (!timingSafeEqual(claimed, Buffer.from(hashToken(invite.email!)))) {
+        throw new Error("invite was issued to a different email address");
+      }
     }
 
     const leagueId = Number(invite.league_id);
     const user = await upsertUser(client, { email, displayName });
 
+    if (invite.shared) {
+      // A link anyone can use must not let one person take two seats.
+      const { rows: held } = await client.query<{ name: string }>(
+        "SELECT name FROM fantasy_team WHERE league_id = $1 AND owner_id = $2 LIMIT 1",
+        [leagueId, user.id],
+      );
+      if (held[0]) throw new Error(`already runs ${held[0].name} in this league`);
+    }
+
     await client.query(
-      `INSERT INTO league_member (league_id, user_id, role) VALUES ($1, $2, $3)
-       ON CONFLICT (league_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
+      // A join link only ever makes managers, so it must never demote a
+      // commissioner who happens to open it: an existing role stands.
+      invite.shared
+        ? `INSERT INTO league_member (league_id, user_id, role) VALUES ($1, $2, $3)
+           ON CONFLICT (league_id, user_id) DO NOTHING`
+        : `INSERT INTO league_member (league_id, user_id, role) VALUES ($1, $2, $3)
+           ON CONFLICT (league_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
       [leagueId, user.id, invite.role],
     );
 
@@ -254,14 +270,19 @@ export async function acceptInvite(
     if (!team) throw new Error(`league ${leagueId} has no unclaimed team left`);
 
     await client.query("UPDATE fantasy_team SET owner_id = $2 WHERE id = $1", [team.id, user.id]);
-    await client.query(
-      "UPDATE league_invite SET accepted_at = now(), accepted_by = $2 WHERE id = $1",
-      [invite.id, user.id],
-    );
+    // A join link stays open for the next person; a personal one is spent.
+    if (!invite.shared) {
+      await client.query(
+        "UPDATE league_invite SET accepted_at = now(), accepted_by = $2 WHERE id = $1",
+        [invite.id, user.id],
+      );
+    }
     await client.query(
       `INSERT INTO transaction (league_id, kind, payload, created_by)
        VALUES ($1, 'join', $2, $3)`,
-      [leagueId, JSON.stringify({ fantasyTeamId: Number(team.id), role: invite.role }), user.id],
+      [leagueId, JSON.stringify({
+        fantasyTeamId: Number(team.id), role: invite.role, ...(invite.shared ? { via: "link" } : {}),
+      }), user.id],
     );
 
     await client.query("COMMIT");
@@ -298,18 +319,18 @@ export async function revokeInvite(
 /** Open invites, without tokens — those are unrecoverable by design. */
 export async function openInvites(db: Db, leagueId: number): Promise<Invite[]> {
   const { rows } = await db.query<{
-    id: string; email: string; role: Role; fantasy_team_id: string | null; expires_at: Date;
+    id: string; email: string | null; role: Role; fantasy_team_id: string | null; expires_at: Date;
   }>(
     `SELECT id, email, role, fantasy_team_id, expires_at
        FROM league_invite
-      WHERE league_id = $1 AND accepted_at IS NULL AND revoked_at IS NULL
+      WHERE league_id = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND NOT shared
       ORDER BY created_at`,
     [leagueId],
   );
   return rows.map((r) => ({
     id: Number(r.id),
     leagueId,
-    email: r.email,
+    email: r.email!,
     role: r.role,
     fantasyTeamId: r.fantasy_team_id === null ? null : Number(r.fantasy_team_id),
     expiresAt: r.expires_at.toISOString(),
@@ -359,8 +380,10 @@ export interface InvitePreview {
   id: number;
   leagueId: number;
   leagueName: string;
-  /** The address the link was issued to. Only this address can redeem it. */
-  email: string;
+  /** The address the link was issued to; only it can redeem the link. Null on a join link. */
+  email: string | null;
+  /** A league join link: anyone may redeem it for the next unclaimed team. */
+  shared: boolean;
   role: Role;
   fantasyTeamName: string | null;
   expiresAt: string;
@@ -382,10 +405,10 @@ export async function inviteByToken(
   db: Queryable, token: string,
 ): Promise<InvitePreview | null> {
   const { rows } = await db.query<{
-    id: string; league_id: string; league_name: string; email: string; role: Role;
-    team_name: string | null; expires_at: Date; expired: boolean;
+    id: string; league_id: string; league_name: string; email: string | null; role: Role;
+    team_name: string | null; expires_at: Date; expired: boolean; shared: boolean;
   }>(
-    `SELECT i.id, i.league_id, l.name AS league_name, i.email, i.role,
+    `SELECT i.id, i.league_id, l.name AS league_name, i.email, i.role, i.shared,
             t.name AS team_name, i.expires_at, i.expires_at < now() AS expired
        FROM league_invite i
        JOIN league l ON l.id = i.league_id
@@ -400,9 +423,130 @@ export async function inviteByToken(
     leagueId: Number(row.league_id),
     leagueName: row.league_name,
     email: row.email,
+    shared: row.shared,
     role: row.role,
     fantasyTeamName: row.team_name,
     expiresAt: row.expires_at.toISOString(),
     expired: row.expired,
   };
+}
+
+/** The league's join link, as the commissioner sees it. */
+export interface JoinLink {
+  id: number;
+  token: string;
+  /** ISO 8601. */
+  expiresAt: string;
+  expired: boolean;
+}
+
+/**
+ * Makes the league's join link, replacing any live one.
+ *
+ * One link, any number of redemptions, each taking the next unclaimed team as
+ * a manager. It stops working on its own once every team has a manager (there
+ * is nothing left to claim) and when it expires; a new one kills the old, which
+ * is the answer to a link that went somewhere it should not have.
+ */
+export async function createJoinLink(
+  db: Db, { leagueId, byUserId, ttlDays = INVITE_TTL_DAYS }: { leagueId: number; byUserId: number; ttlDays?: number },
+): Promise<JoinLink> {
+  await requireCommissioner(db, leagueId, byUserId);
+  const token = randomBytes(24).toString("base64url");
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "UPDATE league_invite SET revoked_at = now() WHERE league_id = $1 AND shared AND revoked_at IS NULL",
+      [leagueId],
+    );
+    const { rows } = await client.query<{ id: string; expires_at: Date }>(
+      `INSERT INTO league_invite
+         (league_id, email, token_hash, role, invited_by, expires_at, shared, share_token)
+       VALUES ($1, NULL, $2, 'manager', $3, now() + make_interval(days => $4), true, $5)
+       RETURNING id, expires_at`,
+      [leagueId, hashToken(token), byUserId, ttlDays, token],
+    );
+    await client.query("COMMIT");
+    return { id: Number(rows[0]!.id), token, expiresAt: rows[0]!.expires_at.toISOString(), expired: false };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** The live join link, or null if the league has none. */
+export async function joinLink(db: Queryable, leagueId: number): Promise<JoinLink | null> {
+  const { rows } = await db.query<{ id: string; share_token: string; expires_at: Date; expired: boolean }>(
+    `SELECT id, share_token, expires_at, expires_at < now() AS expired
+       FROM league_invite WHERE league_id = $1 AND shared AND revoked_at IS NULL`,
+    [leagueId],
+  );
+  const r = rows[0];
+  return r ? { id: Number(r.id), token: r.share_token, expiresAt: r.expires_at.toISOString(), expired: r.expired } : null;
+}
+
+/** Turns the join link off. Anyone who already joined through it stays. */
+export async function revokeJoinLink(
+  db: Db, { leagueId, byUserId }: { leagueId: number; byUserId: number },
+): Promise<boolean> {
+  await requireCommissioner(db, leagueId, byUserId);
+  const { rowCount } = await db.query(
+    "UPDATE league_invite SET revoked_at = now() WHERE league_id = $1 AND shared AND revoked_at IS NULL",
+    [leagueId],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/**
+ * Takes a manager off a team, leaving the seat open for someone else.
+ *
+ * The team keeps its name, roster, record and history; only its owner goes,
+ * so whoever claims the seat next inherits the team as it stands. The person
+ * stays a member of the league if they are its commissioner, and leaves it
+ * otherwise. A commissioner cannot remove themselves this way: a league with
+ * nobody able to run it has no way back.
+ */
+export async function removeManager(
+  db: Db, { leagueId, fantasyTeamId, byUserId }: { leagueId: number; fantasyTeamId: number; byUserId: number },
+): Promise<{ teamName: string; removed: string }> {
+  await requireCommissioner(db, leagueId, byUserId);
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ name: string; owner_id: string | null; owner_name: string | null }>(
+      `SELECT t.name, t.owner_id, u.display_name AS owner_name
+         FROM fantasy_team t LEFT JOIN app_user u ON u.id = t.owner_id
+        WHERE t.id = $1 AND t.league_id = $2 FOR UPDATE OF t`,
+      [fantasyTeamId, leagueId],
+    );
+    const team = rows[0];
+    if (!team) throw new Error(`team ${fantasyTeamId} is not in league ${leagueId}`);
+    if (team.owner_id === null) throw new Error(`${team.name} has no manager to remove`);
+    const ownerId = Number(team.owner_id);
+    if (ownerId === byUserId) throw new Error("you cannot remove yourself from your own team");
+
+    await client.query("UPDATE fantasy_team SET owner_id = NULL WHERE id = $1", [fantasyTeamId]);
+    // Out of the league unless they still run another team or run the league.
+    await client.query(
+      `DELETE FROM league_member m
+        WHERE m.league_id = $1 AND m.user_id = $2 AND m.role <> 'commissioner'
+          AND NOT EXISTS (SELECT 1 FROM fantasy_team t WHERE t.league_id = $1 AND t.owner_id = $2)`,
+      [leagueId, ownerId],
+    );
+    await client.query(
+      `INSERT INTO transaction (league_id, kind, payload, created_by)
+       VALUES ($1, 'leave', $2, $3)`,
+      [leagueId, JSON.stringify({ fantasyTeamId, userId: ownerId }), byUserId],
+    );
+    await client.query("COMMIT");
+    return { teamName: team.name, removed: team.owner_name ?? "the manager" };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }

@@ -1,10 +1,14 @@
 import Link from "next/link";
-import { members, openInvites, teamsInLeague } from "@illini/league";
+import { joinLink, members, openInvites, teamsInLeague } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer } from "../../lib/session.ts";
 import { Invites } from "./invites.tsx";
 import { Gate } from "../ui/gate.tsx";
 import { SeatStrip } from "./seats.tsx";
+import { JoinLinkPanel, RemoveSeat } from "./joinlink.tsx";
+import { joinUrl } from "../../lib/join.ts";
+
+const DAY = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", timeZone: "America/New_York" });
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +33,11 @@ export default async function Commissioner() {
     );
   }
 
-  const [roster, teams, invites] = await Promise.all([
+  const [roster, teams, invites, link] = await Promise.all([
     members(db, leagueId),
     teamsInLeague(db, leagueId),
     openInvites(db, leagueId),
+    joinLink(db, leagueId),
   ]);
 
   const claimed = teams.filter((t) => t.ownerId !== null).length;
@@ -62,6 +67,13 @@ export default async function Commissioner() {
         id: t.id, name: t.name, owner: t.ownerName, mine: t.ownerId === viewer.userId,
       }))} />
 
+      <JoinLinkPanel
+        url={link ? joinUrl(link.token) : null}
+        expiresLabel={link ? DAY.format(new Date(link.expiresAt)) : null}
+        expired={link?.expired ?? false}
+        openSeats={teams.length - claimed}
+      />
+
       <Invites teams={teams} open={invites} />
 
       <div className="panel">
@@ -82,6 +94,7 @@ export default async function Commissioner() {
                 <th scope="col">Manager</th>
                 <th scope="col">Email</th>
                 <th scope="col" className="r">Role</th>
+                <th scope="col" className="r"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -98,6 +111,11 @@ export default async function Commissioner() {
                       {member
                         ? <span className="pill">{member.role}</span>
                         : <span className="pill free">open</span>}
+                    </td>
+                    <td className="r">
+                      {team.ownerId !== null && team.ownerId !== viewer.userId ? (
+                        <RemoveSeat teamId={team.id} teamName={team.name} owner={team.ownerName ?? "the manager"} />
+                      ) : null}
                     </td>
                   </tr>
                 );

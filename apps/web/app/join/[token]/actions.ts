@@ -17,6 +17,7 @@ function explain(error: unknown, email: string): string {
   const message = error instanceof Error ? error.message : "";
   if (/expired/.test(message)) return "This invite has expired. Ask for a new link.";
   if (/different email/.test(message)) return `This invite was not issued to ${email}.`;
+  if (/already runs/.test(message)) return `You ${message.replace(/^already runs/, "already run")}.`;
   if (/no unclaimed team/.test(message)) {
     return "Every team in this league has been claimed. Tell your commissioner.";
   }
@@ -81,28 +82,32 @@ export async function registerAndJoin(
   if (!invite) return { error: "This link has already been used, or was revoked." };
   if (invite.expired) return { error: "This invite has expired. Ask for a new link." };
 
+  // A personal invite already names the address; a join link asks for it.
+  const email = invite.email ?? String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "That does not look like an email address." };
+
   let account;
   try {
     account = await registerAccount(db, {
-      username, password, email: invite.email, displayName: displayName || undefined,
+      username, password, email, displayName: displayName || undefined,
     });
   } catch (error) {
     if (error instanceof AccountTaken) {
       return error.field === "username"
         ? { error: `${username} is taken. Pick another.` }
-        : { error: `${invite.email} already has an account. Sign in instead.` };
+        : { error: `${email} already has an account. Sign in instead.` };
     }
     return { error: error instanceof Error ? error.message : "The account could not be created." };
   }
 
   try {
-    await acceptInvite(db, { token, email: invite.email, displayName: displayName || undefined });
+    await acceptInvite(db, { token, email, displayName: displayName || undefined });
   } catch (error) {
     // The account survives a failed redemption on purpose: it is the thing the
     // manager just chose a password for, and telling them to sign in is a
     // better ending than silently discarding it.
     return {
-      error: `${explain(error, invite.email)} Your account was created — sign in as ${username}.`,
+      error: `${explain(error, email)} Your account was created — sign in as ${username}.`,
     };
   }
 

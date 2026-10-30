@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { inviteToLeague, revokeInvite, teamsInLeague } from "@illini/league";
+import {
+  createJoinLink, inviteToLeague, removeManager, revokeInvite, revokeJoinLink, teamsInLeague,
+} from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer } from "../../lib/session.ts";
+import { joinUrl } from "../../lib/join.ts";
 
 export interface InviteState {
   error?: string;
@@ -32,11 +35,6 @@ export interface InviteState {
   linkFor?: string;
 }
 
-/** Where a redemption link points. Same pin the magic link uses. */
-function joinUrl(token: string): string {
-  const base = process.env.AUTH_URL ?? "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}/join/${token}`;
-}
 
 export async function sendInvite(
   _state: InviteState, formData: FormData,
@@ -110,4 +108,50 @@ export async function revoke(
   return killed
     ? { ok: `The link for ${email} no longer works.`, revokedEmail: email, at: Date.now() }
     : { error: "That invite was already used or revoked.", at: Date.now() };
+}
+
+export interface LinkState { error?: string; ok?: string; at?: number }
+
+/** Makes the league's join link, or replaces the live one. */
+export async function makeJoinLink(_state: LinkState, formData: FormData): Promise<LinkState> {
+  const viewer = await requireViewer();
+  const { leagueId, role } = viewer.membership;
+  if (role !== "commissioner") return { error: "Only the commissioner can make a join link.", at: Date.now() };
+  const replacing = formData.get("replace") === "1";
+  try {
+    await createJoinLink(db, { leagueId, byUserId: viewer.userId });
+  } catch (error) {
+    return { error: (error as Error).message, at: Date.now() };
+  }
+  revalidatePath("/commissioner");
+  return {
+    ok: replacing ? "New link made. The old one no longer works." : "Join link made. Copy it and post it for the league.",
+    at: Date.now(),
+  };
+}
+
+/** Turns the join link off. */
+export async function stopJoinLink(_state: LinkState): Promise<LinkState> {
+  const viewer = await requireViewer();
+  const { leagueId, role } = viewer.membership;
+  if (role !== "commissioner") return { error: "Only the commissioner can turn the link off.", at: Date.now() };
+  await revokeJoinLink(db, { leagueId, byUserId: viewer.userId });
+  revalidatePath("/commissioner");
+  return { ok: "The join link is off. Anyone who already joined keeps their team.", at: Date.now() };
+}
+
+/** Frees a seat: the manager comes off, the team and its roster stay. */
+export async function removeFromSeat(_state: LinkState, formData: FormData): Promise<LinkState> {
+  const viewer = await requireViewer();
+  const { leagueId, role } = viewer.membership;
+  if (role !== "commissioner") return { error: "Only the commissioner can remove a manager.", at: Date.now() };
+  const fantasyTeamId = Number(formData.get("fantasyTeamId"));
+  try {
+    const { teamName, removed } = await removeManager(db, { leagueId, fantasyTeamId, byUserId: viewer.userId });
+    revalidatePath("/commissioner");
+    revalidatePath("/", "layout");
+    return { ok: `${removed} is off ${teamName}. The seat is open, roster intact.`, at: Date.now() };
+  } catch (error) {
+    return { error: (error as Error).message, at: Date.now() };
+  }
 }

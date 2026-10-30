@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { GAME_CONFIG } from "@illini/scoring";
 import { connect, migrate, upsertScoringConfig, type Db } from "@illini/db";
 import {
-  acceptInvite, inviteByToken, inviteToLeague, members, openInvites, revokeInvite, roleOf,
-  teamsInLeague, upsertUser,
+  acceptInvite, createJoinLink, inviteByToken, inviteToLeague, joinLink, members, openInvites,
+  removeManager, revokeInvite, revokeJoinLink, roleOf, teamsInLeague, upsertUser,
 } from "./membership.ts";
 import {
   AlreadyRosteredError, RosterFullError, claimPlayer, releasePlayer, rosterOn, playerPool,
@@ -255,4 +255,78 @@ test("a preview says an expired link is expired rather than hiding it", async ()
   const preview = (await inviteByToken(db, stale.token!))!;
   assert.equal(preview.expired, true);
   assert.equal(preview.email, "stale@illini.test");
+});
+
+/** A fresh league of its own, so seat counts do not depend on test order. */
+async function linkLeague(id: number, teams = 2): Promise<void> {
+  await db.query(
+    `INSERT INTO league (id, name, season, config_id, settings, commissioner_id)
+     VALUES ($1, $2, 2026, $3, $4, $5)`,
+    [id, `League ${id}`, configId, JSON.stringify(DEFAULT_SETTINGS), commish]);
+  await db.query("INSERT INTO league_member (league_id, user_id, role) VALUES ($1,$2,'commissioner')", [id, commish]);
+  for (let t = 1; t <= teams; t += 1) {
+    await db.query("INSERT INTO fantasy_team (id, league_id, name) VALUES ($1,$2,$3)", [id * 10 + t, id, `Team ${t}`]);
+  }
+}
+
+test("a join link seats anyone, once each, until the teams run out", async () => {
+  await linkLeague(5, 2);
+  const outsider = (await upsertUser(db, { email: "nobody@illini.test" })).id;
+  await assert.rejects(() => createJoinLink(db, { leagueId: 5, byUserId: outsider }), /not a commissioner/);
+
+  const link = await createJoinLink(db, { leagueId: 5, byUserId: commish });
+  assert.equal((await joinLink(db, 5))!.token, link.token, "the commissioner can read the link back");
+  const preview = (await inviteByToken(db, link.token))!;
+  assert.equal(preview.shared, true);
+  assert.equal(preview.email, null);
+  assert.deepEqual(await openInvites(db, 5), [], "a join link is not a personal invite");
+
+  const a = await acceptInvite(db, { token: link.token, email: "a@illini.test" });
+  const b = await acceptInvite(db, { token: link.token, email: "b@illini.test" });
+  assert.notEqual(a.fantasyTeamId, b.fantasyTeamId);
+  assert.equal(a.role, "manager");
+  assert.ok(await inviteByToken(db, link.token), "the link survives being used");
+
+  await assert.rejects(() => acceptInvite(db, { token: link.token, email: "a@illini.test" }), /already runs/);
+  await assert.rejects(() => acceptInvite(db, { token: link.token, email: "c@illini.test" }), /no unclaimed team/);
+});
+
+test("a join link never demotes a commissioner, and a new one kills the old", async () => {
+  await linkLeague(6, 2);
+  const first = await createJoinLink(db, { leagueId: 6, byUserId: commish });
+  const joined = await acceptInvite(db, { token: first.token, email: "commish@illini.test" });
+  assert.equal(await roleOf(db, 6, commish), "commissioner", "the existing role stands");
+  assert.ok(joined.fantasyTeamId);
+
+  const second = await createJoinLink(db, { leagueId: 6, byUserId: commish });
+  assert.equal(await inviteByToken(db, first.token), null, "the old link is dead");
+  assert.ok(await inviteByToken(db, second.token));
+  assert.equal(await revokeJoinLink(db, { leagueId: 6, byUserId: commish }), true);
+  assert.equal(await joinLink(db, 6), null);
+  assert.equal(await inviteByToken(db, second.token), null);
+});
+
+test("removing a manager opens the seat and keeps the team", async () => {
+  await linkLeague(7, 2);
+  const link = await createJoinLink(db, { leagueId: 7, byUserId: commish });
+  const gone = await acceptInvite(db, { token: link.token, email: "gone@illini.test" });
+
+  await assert.rejects(
+    () => removeManager(db, { leagueId: 7, fantasyTeamId: gone.fantasyTeamId, byUserId: gone.userId }),
+    /not a commissioner/);
+  const result = await removeManager(db, { leagueId: 7, fantasyTeamId: gone.fantasyTeamId, byUserId: commish });
+  assert.equal(result.teamName, "Team 1");
+
+  const seat = (await teamsInLeague(db, 7)).find((t) => t.id === gone.fantasyTeamId)!;
+  assert.equal(seat.ownerId, null, "the seat is open");
+  assert.equal(seat.name, "Team 1", "the team is unchanged");
+  assert.equal(await roleOf(db, 7, gone.userId), null, "a manager with no team leaves the league");
+
+  const back = await acceptInvite(db, { token: link.token, email: "next@illini.test" });
+  assert.equal(back.fantasyTeamId, gone.fantasyTeamId, "the next person takes the freed seat");
+
+  const mine = await acceptInvite(db, { token: link.token, email: "commish@illini.test" });
+  await assert.rejects(
+    () => removeManager(db, { leagueId: 7, fantasyTeamId: mine.fantasyTeamId, byUserId: commish }),
+    /cannot remove yourself/);
 });

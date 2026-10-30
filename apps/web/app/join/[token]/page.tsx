@@ -32,10 +32,12 @@ export default async function Join({ params }: { params: Promise<{ token: string
     return (
       <Shell title="This link has expired">
         <p className="muted">
-          The invite for <strong>{invite.email}</strong> ran out on{" "}
-          {DAY.format(new Date(invite.expiresAt))}. Invites last fourteen days.
-          Ask your commissioner to send a new one — creating it replaces this
-          link rather than adding to it.
+          {invite.shared
+            ? <>This join link for {invite.leagueName} ran out on</>
+            : <>The invite for <strong>{invite.email}</strong> ran out on</>}{" "}
+          {DAY.format(new Date(invite.expiresAt))}. Links last fourteen days.
+          Ask your commissioner for a new one — making it replaces this link
+          rather than adding to it.
         </p>
       </Shell>
     );
@@ -44,11 +46,53 @@ export default async function Join({ params }: { params: Promise<{ token: string
   const found = await who();
   const signInHere = `/signin?next=${encodeURIComponent(`/join/${token}`)}`;
 
+  // A join link: anyone may use it, so there is no address to match.
+  if (invite.shared) {
+    if (found.state === "member" && found.viewer.membership.leagueId === invite.leagueId
+        && found.viewer.membership.fantasyTeamName) {
+      return (
+        <Shell title="You are already in">
+          <p className="muted">
+            You run <strong>{found.viewer.membership.fantasyTeamName}</strong> in{" "}
+            {invite.leagueName}. A join link takes one team per person.
+          </p>
+          <Link className="button" href="/team">Go to my team</Link>
+        </Shell>
+      );
+    }
+    if (found.state === "anonymous") {
+      return (
+        <Shell title={`Join ${invite.leagueName}`}>
+          <p className="muted">
+            You are taking the next open team in {invite.leagueName} as a
+            manager. Pick a username and a password and it is yours.
+          </p>
+          <Register
+            token={token}
+            email={null}
+            suggestedName=""
+            rules={{ usernameMax: USERNAME_MAX, usernameRule: USERNAME_RULE, passwordMin: PASSWORD_MIN }}
+          />
+          <p className="fineprint">
+            Already have an account? <Link href={signInHere}>Sign in</Link> and this page will pick the link back up.
+          </p>
+        </Shell>
+      );
+    }
+    const name = found.state === "member" ? found.viewer.name : found.name;
+    return (
+      <Shell title={`Join ${invite.leagueName}`}>
+        <p className="muted">You are taking the next open team in {invite.leagueName} as a manager.</p>
+        <Confirm token={token} suggestedName={name} />
+      </Shell>
+    );
+  }
+
   if (found.state === "anonymous") {
     // An address the commissioner invited may already have an account — a
     // manager in a second league, or a seat reset. Offering them a fresh
     // username would only fail on the way in.
-    const existing = await accountByEmail(db, invite.email);
+    const existing = await accountByEmail(db, invite.email!);
 
     if (existing) {
       return (
@@ -74,8 +118,8 @@ export default async function Join({ params }: { params: Promise<{ token: string
         </p>
         <Register
           token={token}
-          email={invite.email}
-          suggestedName={invite.email.split("@")[0] ?? ""}
+          email={invite.email!}
+          suggestedName={invite.email!.split("@")[0] ?? ""}
           rules={{
             usernameMax: USERNAME_MAX,
             usernameRule: USERNAME_RULE,
@@ -88,7 +132,7 @@ export default async function Join({ params }: { params: Promise<{ token: string
 
   const signedInAs = found.state === "member" ? found.viewer.email : found.email;
 
-  if (signedInAs.toLowerCase() !== invite.email.toLowerCase()) {
+  if (signedInAs.toLowerCase() !== invite.email!.toLowerCase()) {
     return (
       <Shell title="Signed in as somebody else">
         <p className="muted">

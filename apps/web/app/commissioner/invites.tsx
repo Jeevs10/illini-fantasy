@@ -68,7 +68,7 @@ export function Invites({ teams, open }: { teams: LeagueTeam[]; open: Invite[] }
                 ))}
               </select>
             </label>
-            <button className="primary" type="submit" disabled={sending}>
+            <button type="submit" disabled={sending}>
               {sending ? "Creating…" : "Create invite"}
             </button>
           </form>

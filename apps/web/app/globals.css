@@ -2143,3 +2143,9 @@ table.picture tr[data-out] { color: var(--ink-3); }
 /* An empty record inside a panel: one sentence, then the way forward. */
 .panel-empty { display: grid; gap: var(--s-3); justify-items: start; color: var(--ink-2); font-size: var(--t-sm); max-width: 60ch; }
 .panel-empty p { margin: 0; }
+
+/* The join link: the address in full, and the one verb beside it. */
+.joinlink { display: flex; gap: var(--s-2); }
+.joinlink input { flex: 1; min-width: 0; font-family: var(--f-mono); font-size: var(--t-sm); color: var(--ink-2); }
+@media (max-width: 480px) { .joinlink { flex-direction: column; } }
+.seat-remove { display: inline-flex; justify-content: flex-end; }

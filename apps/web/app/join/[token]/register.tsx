@@ -31,15 +31,40 @@ export interface Rules {
  */
 export function Register({
   token, email, suggestedName, rules,
-}: { token: string; email: string; suggestedName: string; rules: Rules }) {
+}: {
+  token: string;
+  /** The invited address, or null on a join link, where the form asks for one. */
+  email: string | null;
+  suggestedName: string; rules: Rules;
+}) {
   const [state, submit, joining] = useActionState<JoinState, FormData>(registerAndJoin, {});
+  const [address, setAddress] = useState("");
   const [username, setUsername] = useState(
-    email.split("@")[0]?.replace(/[^a-zA-Z0-9._-]/g, "").toLowerCase() ?? "");
+    email?.split("@")[0]?.replace(/[^a-zA-Z0-9._-]/g, "").toLowerCase() ?? "");
   const [name, setName] = useState(suggestedName);
 
   return (
     <form action={submit}>
       <input type="hidden" name="token" value={token} />
+
+      {email === null ? (
+        <label className="field">
+          <span>Email</span>
+          <input
+            type="email" name="email" required autoComplete="email" autoCapitalize="none"
+            spellCheck={false} placeholder="you@illinois.edu" value={address}
+            onChange={(event) => {
+              const next = event.target.value;
+              // Suggest a username from the address until one is typed.
+              if (username === "" || username === address.split("@")[0]?.replace(/[^a-zA-Z0-9._-]/g, "").toLowerCase()) {
+                setUsername(next.split("@")[0]?.replace(/[^a-zA-Z0-9._-]/g, "").toLowerCase() ?? "");
+              }
+              setAddress(next);
+            }}
+          />
+          <small className="fineprint">So your commissioner can reach you. It is not shown to the league.</small>
+        </label>
+      ) : null}
 
       <label className="field">
         <span>Username</span>
