@@ -63,6 +63,8 @@ export interface ForwardLine {
   cbbdTeamId: number | null;
   valAdj: number;
   val: number;
+  /** The program terms (level discount and team credit) inside valAdj. Absent before 2026-10-30. */
+  valProgram?: number | null;
   gs: number;
   oppDef: number;
   min: number | null;
@@ -319,7 +321,11 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
     ]);
     scores.push([
       playerId, g.played_on, configId, "forward",
-      JSON.stringify({ box: l.val, opponent: Math.round((l.valAdj - l.val) * 10) / 10 }),
+      JSON.stringify({
+        box: l.val,
+        opponent: Math.round((l.valAdj - l.val - (l.valProgram ?? 0)) * 10) / 10,
+        program: l.valProgram ?? 0,
+      }),
       l.val, 1, 1, l.valAdj,
     ]);
   }

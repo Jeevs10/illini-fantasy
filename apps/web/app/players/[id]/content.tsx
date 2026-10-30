@@ -273,8 +273,8 @@ export function GameLogSection({ card }: { card: PlayerCard }) {
           <h2>Game log</h2>
           <p>
             {card.log.some((g) => (g.archetype as string) === "forward")
-              ? <>Each night&rsquo;s box line through the Player Score&rsquo;s box weights,
-                  plus the credit for the defence it came against.</>
+              ? <>Each night scored the way the Player Score rates a player: the box line through its
+                  box weights, the defence it came against, and the level of his program and team.</>
               : <>Each night&rsquo;s six blocks, the opponent multiplier applied to
                   them, and the minutes ramp — so a score can be read rather than
                   taken on faith.</>}
@@ -357,7 +357,8 @@ function Game({ game, best }: { game: GameLogEntry; best: number }) {
  * `valAdj`, the number the Daily Update ranks performances by.
  */
 function ForwardGame({ game, best }: { game: GameLogEntry; best: number }) {
-  const parts = game.blocks as unknown as { box?: number; opponent?: number };
+  const parts = game.blocks as unknown as { box?: number; opponent?: number; program?: number };
+  const program = parts.program ?? 0;
   return (
     <article className="game">
       <div>
@@ -376,6 +377,7 @@ function ForwardGame({ game, best }: { game: GameLogEntry; best: number }) {
         <p className="game-math">
           {(parts.box ?? game.raw).toFixed(1)} box value
           {" + "}{(parts.opponent ?? 0).toFixed(1)} for the defence faced
+          {program !== 0 ? <>{program > 0 ? " + " : " − "}{Math.abs(program).toFixed(1)} for his program and team</> : null}
           {" = "}{game.score.toFixed(1)}
         </p>
       </div>
