@@ -2133,3 +2133,13 @@ table.picture tr[data-out] { color: var(--ink-3); }
 .ondeck li.ondeck-turn::before {
   position: static; inset: auto; width: 4px; height: 34px; border: 0; border-radius: 2px; background: var(--line-hard);
 }
+
+/* A week's figure: the projection dashed until a game is scored. */
+.weekfig { display: inline-flex; align-items: baseline; gap: var(--s-2); }
+.weekfig[data-block] { display: inline-grid; justify-items: end; gap: 1px; }
+.weekfig-proj .score { text-decoration: underline dashed var(--line-hard); text-underline-offset: 5px; text-decoration-thickness: 2px; }
+.weekfig-note { font-size: var(--t-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* An empty record inside a panel: one sentence, then the way forward. */
+.panel-empty { display: grid; gap: var(--s-3); justify-items: start; color: var(--ink-2); font-size: var(--t-sm); max-width: 60ch; }
+.panel-empty p { margin: 0; }

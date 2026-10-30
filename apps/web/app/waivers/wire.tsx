@@ -5,7 +5,6 @@ import Link from "next/link";
 import type { WirePlayer } from "@illini/league";
 import { bid, type WaiverActionState } from "./actions.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { Empty } from "../ui/bits.tsx";
 import { Dot } from "../ui/playerrow.tsx";
 import { playerPath } from "../../lib/links.ts";
 
@@ -58,11 +57,14 @@ export function Wire({
       </div>
 
       {players.length === 0 ? (
-        <Empty title="Nobody is on waivers" glyph="waivers"
-               action={<Link className="button" href="/players?free=1">Browse free agents</Link>}>
-          A player lands here when somebody drops him, and stays until the next
-          run. Everyone else who is unowned can simply be added.
-        </Empty>
+        // An empty record is a sentence, not a box inside a box.
+        <div className="panel-body panel-empty">
+          <p>
+            Nobody is on waivers. A player lands here when somebody drops him,
+            and stays until the next run; everyone else unowned can simply be added.
+          </p>
+          <Link className="button" href="/players?free=1">Browse free agents</Link>
+        </div>
       ) : (
         players.map((player) => (
           <div className="wire-row" key={player.playerId}>

@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import type { PlayerAvailability } from "@illini/league";
 import { reserve, type LineupState } from "./actions.ts";
 import { PlayerRow, Dot } from "../ui/playerrow.tsx";
-import { AvailabilityTag, Empty, RoleTag, Score } from "../ui/bits.tsx";
+import { AvailabilityTag, Empty, RoleTag, Score, WeekFigure } from "../ui/bits.tsx";
 
 /** A `WeekPlayer` as the page hands it over, with his injury status. */
 export interface EveryoneRow {
@@ -110,12 +110,8 @@ export function EveryoneWeek({ rows, nextLock }: { rows: EveryoneRow[]; nextLock
             <span className="row" style={{ gap: "var(--s-2)" }}>
               {irButton(r)}
               <span style={{ textAlign: "right" }}>
-                <Score value={r.scored} size="sm" tone={r.games.some((g) => g.score !== null) ? "default" : "quiet"} />
-                {r.projectedWeek > r.scored + 0.05 ? (
-                  <span className="faint tnum" style={{ display: "block", fontSize: "var(--t-xs)" }}>
-                    proj {r.projectedWeek.toFixed(1)}
-                  </span>
-                ) : null}
+                <WeekFigure scored={r.scored} projected={r.projectedWeek} size="sm" block
+                            played={r.games.some((g) => g.score !== null)} />
               </span>
             </span>
           )))}

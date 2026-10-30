@@ -11,7 +11,7 @@ import { TeamNameHeading } from "./teamname.tsx";
 import { DayStrip, periodDays } from "./daystrip.tsx";
 import { NextLock } from "./nextlock.tsx";
 import { Avatar } from "../ui/identity.tsx";
-import { Empty, LiveTag, Score } from "../ui/bits.tsx";
+import { Empty, LiveTag, Score, WeekFigure } from "../ui/bits.tsx";
 import { Arrow } from "../ui/glyphs.tsx";
 
 export const dynamic = "force-dynamic";
@@ -111,12 +111,8 @@ export default async function TeamPage({
             <div>
               <h2>Week {period.week} <span className="faint" style={{ fontWeight: 500 }}>· {span(period.startsOn, period.endsOn)}</span></h2>
               <div className="row" style={{ gap: "var(--s-2)", marginTop: 2 }}>
-                <Score value={scored} size="md" />
-                {projectedWeek > scored + 0.05 ? (
-                  <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
-                    proj <strong className="tnum">{projectedWeek.toFixed(1)}</strong>
-                  </span>
-                ) : null}
+                <WeekFigure scored={scored} projected={projectedWeek} tone="accent"
+                            played={counting.some((p) => p.games.some((g) => g.score !== null))} />
                 <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
                   {counting.length} counting
                 </span>
@@ -248,9 +244,7 @@ export default async function TeamPage({
         <div className="panel-head">
           <div className="row" style={{ gap: "var(--s-5)" }}>
             <div>
-              <div className="eyebrow">
-                Week {period.week} · {span(period.startsOn, period.endsOn)}
-              </div>
+              <h2>Week {period.week} <span className="faint" style={{ fontWeight: 500 }}>· {span(period.startsOn, period.endsOn)}</span></h2>
               <div className="row" style={{ gap: "var(--s-2)", marginTop: 2 }}>
                 <Score value={scored} size="md" />
                 {projected > scored + 0.05 ? (

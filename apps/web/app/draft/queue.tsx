@@ -25,7 +25,7 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
     <div className="panel">
       <div className="panel-head">
         <h2>Your queue</h2>
-        <span className="pill">{live.length}</span>
+        {live.length > 0 ? <span className="pill">{live.length}</span> : null}
       </div>
 
       {players.length === 0 ? (

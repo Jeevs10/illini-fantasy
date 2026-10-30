@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { availabilityFor, rankedStandings, rosterOn, teamsInLeague } from "@illini/league";
+import { availabilityFor, draftFor, rankedStandings, rosterOn, teamsInLeague } from "@illini/league";
 import { db } from "../../../lib/db.ts";
 import { requireViewer, viewDate } from "../../../lib/session.ts";
 import { Pennant } from "../../ui/rafters.tsx";
@@ -38,7 +38,11 @@ export default async function TeamProfilePage({ params }: { params: Promise<{ id
   const team = teams.find((t) => t.id === teamId);
   if (!team) notFound();
 
-  const day = viewDate();
+  const today = viewDate();
+  // Drafted tenures begin on the draft's opening date; before then, show the
+  // roster that will be held on it rather than an empty one.
+  const draft = await draftFor(db, leagueId);
+  const day = draft && draft.opensOn > today ? draft.opensOn : today;
   const [roster, standings] = await Promise.all([
     rosterOn(db, teamId, day),
     rankedStandings(db, leagueId),

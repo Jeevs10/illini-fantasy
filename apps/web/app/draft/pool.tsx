@@ -129,7 +129,8 @@ export function Pool({
                         <input type="hidden" name="playerId" value={player.playerId} />
                         <button
                           type="submit"
-                          className={yourTurn ? "primary" : undefined}
+                          // One primary per view: the clock above already says
+                          // it is your turn, so sixty orange buttons say nothing more.
                           disabled={!canPick || !yourTurn || picking}
                           // Disabled controls say nothing to a screen reader
                           // about why, and "why" is the whole state of the page.

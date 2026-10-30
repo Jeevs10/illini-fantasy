@@ -4,7 +4,6 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { drop, type WaiverActionState } from "./actions.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { Empty } from "../ui/bits.tsx";
 import { Dot } from "../ui/playerrow.tsx";
 import { playerPath } from "../../lib/links.ts";
 
@@ -41,9 +40,9 @@ export function Roster({ team, players }: { team: string; players: RosterRow[] }
       </div>
 
       {players.length === 0 ? (
-        <Empty title="Nobody rostered" glyph="team">
-          Nothing to drop yet. Free agents can be added outright.
-        </Empty>
+        <p className="panel-body panel-empty">
+          Nobody rostered, so nothing to drop yet. Free agents can be added outright.
+        </p>
       ) : (
         players.map((player) => (
           <div className="plr" key={player.playerId}>

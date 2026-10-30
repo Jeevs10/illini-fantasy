@@ -29,13 +29,17 @@ export default async function HomePage() {
   const now = viewNow();
 
   const matchups = await weekMatchups(db, { leagueId, configId, on: day, settings, now });
+  // Drafted tenures begin on opening night, not draft night. Before the first
+  // week starts, the roster that counts is the one that will be held then;
+  // reading it as of today would call a freshly drafted team empty.
+  const rosterDay = matchups[0] && matchups[0].startsOn > day ? matchups[0].startsOn : day;
 
   const [tonight, standingsTable, trades, claims, roster, activity, draft, schedule] = await Promise.all([
     fantasyTeamId === null ? [] : startableOn(db, { fantasyTeamId, day, configId, now }),
     rankedStandings(db, leagueId),
     fantasyTeamId === null ? [] : listTrades(db, { leagueId, involving: fantasyTeamId, limit: 6 }),
     fantasyTeamId === null ? [] : claimsFor(db, { leagueId, fantasyTeamId }),
-    fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, day),
+    fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, rosterDay),
     leagueActivity(db, { leagueId, limit: 8 }),
     draftFor(db, leagueId),
     seasonSchedule(db, leagueId),

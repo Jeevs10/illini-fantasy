@@ -7,7 +7,7 @@ import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { buildSlots } from "../team/slots.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { AvailabilityTag, Empty, ET, LiveTag, Score } from "../ui/bits.tsx";
+import { AvailabilityTag, Empty, ET, LiveTag, Score, WeekFigure } from "../ui/bits.tsx";
 import { MatchupList } from "../ui/matchups.tsx";
 import { SeasonLine } from "../ui/seasonline.tsx";
 import { Arrow } from "../ui/glyphs.tsx";
@@ -207,18 +207,18 @@ function RosterPanel({
           * every scoreboard in the sport uses, and the one a manager reads
           * without being told which number is which. */}
         <span style={{ textAlign: "right", flex: "none" }}>
-          <div className="eyebrow">Score</div>
           {/* A side with nobody on it has no score to show, not a zero. */}
           {side.players.length === 0 && side.pending.length === 0 && side.total === 0
             ? <span className="score score-lg" style={{ color: "var(--ink-3)" }}>&mdash;</span>
-            : <Score value={side.total} size="lg" tone={mine ? "accent" : "default"} />}
-          {side.players.length === 0 && side.pending.length === 0 && side.total === 0 ? null : (
-            <div className="faint tnum" style={{ fontSize: "var(--t-xs)", marginTop: 1 }}>
-              {toPlay > 0 ? <>proj <strong>{side.projected.toFixed(1)}</strong></>
-                : side.gamesPlayed > 0 ? "final"
-                : /* A week nobody played is not final; it is empty. */ "\u2014"}
-            </div>
-          )}
+            : toPlay === 0 && side.gamesPlayed > 0 ? (
+              <span className="weekfig" data-block>
+                <Score value={side.total} size="lg" tone={mine ? "accent" : "default"} />
+                <span className="weekfig-note">final</span>
+              </span>
+            ) : (
+              <WeekFigure scored={side.total} projected={side.projected} size="lg" block
+                          played={side.gamesPlayed > 0} tone={mine ? "accent" : "default"} />
+            )}
         </span>
       </div>
 

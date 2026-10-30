@@ -4,7 +4,6 @@ import { useActionState } from "react";
 import Link from "next/link";
 import type { Claim } from "@illini/league";
 import { reorder, withdraw, type WaiverActionState } from "./actions.ts";
-import { Empty } from "../ui/bits.tsx";
 import { playerPath } from "../../lib/links.ts";
 import { Arrow, Glyph } from "../ui/glyphs.tsx";
 
@@ -38,11 +37,10 @@ export function Claims({ pending, settled }: { pending: ClaimRow[]; settled: Cla
       </div>
 
       {pending.length === 0 ? (
-        <Empty title="No bids in" glyph="waivers">
-          A claim is sealed until the run that opens it. Bid on anyone on the
-          wire and nobody &mdash; including whoever dropped him &mdash; sees
-          your number before then.
-        </Empty>
+        <p className="panel-body panel-empty">
+          No bids in. A claim is sealed until the run that opens it: nobody,
+          including whoever dropped him, sees your number before then.
+        </p>
       ) : (
         <ol className="queue">
           {pending.map((claim, i) => (

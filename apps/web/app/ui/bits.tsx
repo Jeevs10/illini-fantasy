@@ -30,6 +30,44 @@ export function Score({
   );
 }
 
+/**
+ * A week's number, by what kind of number it is. Before anything is scored
+ * the projection leads, stitched dashed and called projected, because "0.0"
+ * is not what a week that has not started is worth. Once points are banked
+ * the score leads and the projection sits under it while games remain.
+ */
+export function WeekFigure({
+  scored, projected, played, size = "md", tone = "default", block = false,
+}: {
+  scored: number;
+  projected: number;
+  /** Whether any game in the span has a score yet. */
+  played: boolean;
+  size?: "xs" | "sm" | "md" | "lg";
+  tone?: "default" | "accent";
+  /** Stack the note under the number instead of beside it. */
+  block?: boolean;
+}) {
+  if (!played) {
+    return (
+      <span className="weekfig" data-block={block || undefined}>
+        <span className="weekfig-proj" data-stitch="projected">
+          <Score value={projected} size={size} tone={tone === "accent" ? "accent" : "default"} />
+        </span>
+        <span className="weekfig-note">projected</span>
+      </span>
+    );
+  }
+  return (
+    <span className="weekfig" data-block={block || undefined}>
+      <Score value={scored} size={size} tone={tone} />
+      {projected > scored + 0.05 ? (
+        <span className="weekfig-note">proj <strong className="tnum">{projected.toFixed(1)}</strong></span>
+      ) : null}
+    </span>
+  );
+}
+
 /** LIVE, with a dot that breathes. Never colour alone — the word is there. */
 export function LiveTag({ label = "Live" }: { label?: string }) {
   return <span className="pill live"><span className="livedot" />{label}</span>;
