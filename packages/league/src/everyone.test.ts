@@ -273,3 +273,15 @@ test("a game ahead is projected from the model's number for it, a game played fr
   const week = await playerWeekProjection(db, { playerId: pid.get("2")!, configId, from: "2026-11-08", to: "2026-11-14" });
   assert.deepEqual([week.gamesScheduled, week.projectedTotal], [1, 1.25]);
 });
+
+test("a player's season in points is what he has scored plus his projection for the games left", async () => {
+  const f = feed("2026-11-12", []);
+  for (const p of f.players) { p.restPoints = p.key === "1" ? 40 : 10; p.restGames = 20; }
+  await ingestForwardFeed(db, f);
+  const pool = await playerPool(db, { leagueId: 1, season: 2027, configId, sort: "season" });
+  const ill = pool.find((p) => p.name === "Ill One")!;
+  // Ill One scored 5 + 3 + 1 (the resent 99 never replaced Monday's 5).
+  assert.equal(ill.totalScore, 9);
+  assert.equal(ill.seasonPoints, 49);
+  assert.equal(pool[0]!.name, "Ill One");
+});

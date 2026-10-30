@@ -263,12 +263,17 @@ export interface PoolPlayer {
    * forward-model league drafts by. Null in a season with no projections.
    */
   projected: number | null;
+  /**
+   * His season in fantasy points: what he has scored plus the model's
+   * projection for every game he has left. Null in a season with no feed.
+   */
+  seasonPoints: number | null;
   ownedBy: string | null;
   /** Present only when the pool was asked for one scoring period. */
   week?: PoolWeek;
 }
 
-export type PoolSort = "total" | "avg" | "games" | "weekProj" | "weekPts" | "proj";
+export type PoolSort = "total" | "avg" | "games" | "weekProj" | "weekPts" | "proj" | "season";
 
 // Every order ends on the projection, so a player with no games yet (the whole
 // pool, before the season) still lands where the model puts him.
@@ -283,6 +288,7 @@ const POOL_ORDER: Record<PoolSort, string> = {
   weekProj: "week_projected DESC, totals.total DESC NULLS LAST, proj.score DESC NULLS LAST",
   weekPts: "week_scored DESC, totals.total DESC NULLS LAST, proj.score DESC NULLS LAST",
   proj: "proj.score DESC NULLS LAST, totals.total DESC NULLS LAST",
+  season: "(coalesce(totals.total, 0) + proj.rest_points) DESC NULLS LAST, proj.score DESC NULLS LAST",
 };
 
 /** The scoring period a pool ranking can be asked about instead of the season. */
@@ -405,7 +411,7 @@ export async function playerPool(
     player_id: string; name: string; team_name: string | null;
     primary_color: string | null; secondary_color: string | null; conference: string | null;
     role: string | null; archetype: Archetype | null; games: string; total: number;
-    projected: number | null; owned_by: string | null;
+    projected: number | null; season_points: number | null; owned_by: string | null;
     week_games?: string; week_played?: string; week_scored?: number; week_projected?: number;
   }>(
     `WITH owned AS (
@@ -428,7 +434,7 @@ export async function playerPool(
      -- date: a projection is a forecast, and the freshest one is the best read
      -- of the season still ahead.
      proj AS (
-       SELECT DISTINCT ON (player_id) player_id, score
+       SELECT DISTINCT ON (player_id) player_id, score, rest_points
          FROM player_projection
         WHERE season = $2
         ORDER BY player_id, as_of DESC
@@ -443,6 +449,7 @@ export async function playerPool(
             coalesce(totals.role, p.position) AS role, totals.archetype,
             coalesce(totals.games, 0) AS games, coalesce(totals.total, 0) AS total,
             proj.score AS projected,
+            coalesce(totals.total, 0) + proj.rest_points AS season_points,
             owned.name AS owned_by${weekColumns}
        FROM pool
        JOIN player p ON p.id = pool.player_id
@@ -473,6 +480,7 @@ export async function playerPool(
     totalScore: Number(r.total),
     averageScore: Number(r.total) / Math.max(1, Number(r.games)),
     projected: r.projected === null ? null : Number(r.projected),
+    seasonPoints: r.season_points === null ? null : Number(r.season_points),
     ownedBy: r.owned_by,
     ...(window === undefined ? {} : {
       week: {

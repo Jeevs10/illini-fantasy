@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const VIEWS = [{ href: "/players", label: "Players" }, { href: "/leaders", label: "Leaders" }];
 const PAGE = 50;
 const ROLES: PositionRole[] = ["G", "F", "B"];
-const SORTS: PoolSort[] = ["total", "avg", "games", "weekProj", "weekPts", "proj"];
+const SORTS: PoolSort[] = ["total", "avg", "games", "weekProj", "weekPts", "proj", "season"];
 
 const SPAN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const span = (from: string, to: string) =>
@@ -62,7 +62,7 @@ export default async function PlayersPage({
   // Score, which the morning refresh moves with every game played: it is the
   // draft order before the season and the best read of the rest of it after.
   const everyone = settings.lineupMode === "everyone";
-  const defaultSort: PoolSort = picked === null ? (everyone ? "proj" : "total")
+  const defaultSort: PoolSort = picked === null ? (everyone ? "season" : "total")
     : historic ? "weekPts" : "weekProj";
   const asked = SORTS.includes(sort as PoolSort) ? (sort as PoolSort) : null;
   const sortBy: PoolSort = asked ?? defaultSort;
@@ -107,7 +107,7 @@ export default async function PlayersPage({
             <span>
               {picked === null
                 ? everyone
-                  ? "Ranked by the forward model\u2019s projected Player Score · a game is worth its valAdj"
+                  ? "Season = fantasy points so far plus the model\u2019s projection for every game left · Score = projected Player Score"
                   : "Ranked by season Player-Score under this league\u2019s config"
                 : historic
                 ? `Week ${picked.week} · ${span(picked.startsOn, picked.endsOn)} · what they actually scored`
@@ -192,7 +192,8 @@ export default async function PlayersPage({
           sort={sortBy}
           projection={everyone}
           sortHrefs={{
-            proj: query({ sort: everyone ? undefined : "proj", page: undefined }),
+            season: query({ sort: everyone ? undefined : "season", page: undefined }),
+            proj: query({ sort: "proj", page: undefined }),
             total: query({ sort: everyone ? "total" : undefined, page: undefined }),
             avg: query({ sort: "avg", page: undefined }),
             games: query({ sort: "games", page: undefined }),

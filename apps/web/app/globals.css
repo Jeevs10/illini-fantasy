@@ -1757,6 +1757,11 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 .pool-inline { display: none; }
 .pool-conf { display: contents; }
 .pool-head .r, .pool-row .r { text-align: right; justify-self: end; }
+/* A forward-model league's season view has one more number: season points
+   and the Player Score beside the average and the total. */
+[data-proj] .pool-head, [data-proj] .pool-row {
+  grid-template-columns: 2.5rem minmax(0, 1fr) 6.5rem 4rem 3.5rem 3.5rem 5rem 6.5rem;
+}
 .pool-sort {
   text-decoration: none;
   border-radius: var(--r-sm);
@@ -1902,6 +1907,7 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
    so the name gets the width it needs to be a name rather than an ellipsis. */
 @media (min-width: 760px) and (max-width: 1000px) {
   .pool-head, .pool-row { grid-template-columns: 2.2rem minmax(0, 1fr) 2.6rem 4rem 5.5rem 6rem; }
+  [data-proj] .pool-head, [data-proj] .pool-row { grid-template-columns: 2.2rem minmax(0, 1fr) 3.5rem 3.2rem 2.6rem 4rem 6rem; }
   .pool-role, .pool-conf { display: none; }
 }
 @media (max-width: 1000px) { .pool-conf { display: none; } }

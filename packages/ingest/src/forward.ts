@@ -49,6 +49,9 @@ export interface ForwardPlayer {
   mpg: number | null;
   valueRank: number | null;
   espn: string | null;
+  /** Projected fantasy points over every game left on his schedule, and how many. Absent before 2026-10-30. */
+  restPoints?: number | null;
+  restGames?: number | null;
 }
 
 export interface ForwardLine {
@@ -255,13 +258,15 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
   const projected = current.filter((p) => p.score !== null && Number.isFinite(p.score));
   await insertMany(db, {
     table: "player_projection",
-    columns: ["player_id", "season", "as_of", "score", "score_lo", "score_hi", "mpg", "value_rank", "status"],
+    columns: ["player_id", "season", "as_of", "score", "score_lo", "score_hi", "mpg", "value_rank", "status",
+              "rest_points", "rest_games"],
     rows: projected.map((p) => [ids.get(p.key)!, season, feed.asof, p.score, p.scoreLo, p.scoreHi,
-                                p.mpg, p.valueRank, p.status]),
+                                p.mpg, p.valueRank, p.status, p.restPoints ?? null, p.restGames ?? null]),
     dedupeOn: [0],
     conflict: `(player_id, season, as_of) DO UPDATE SET score = EXCLUDED.score,
       score_lo = EXCLUDED.score_lo, score_hi = EXCLUDED.score_hi, mpg = EXCLUDED.mpg,
-      value_rank = EXCLUDED.value_rank, status = EXCLUDED.status`,
+      value_rank = EXCLUDED.value_rank, status = EXCLUDED.status,
+      rest_points = EXCLUDED.rest_points, rest_games = EXCLUDED.rest_games`,
   });
 
   // ---- game lines: through the schedule, written once

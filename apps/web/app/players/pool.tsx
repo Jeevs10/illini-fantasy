@@ -48,9 +48,9 @@ export function Pool({
    */
   week?: PoolWeekView | null;
   /**
-   * A forward-model league: the season view leads with the projected Player
-   * Score — what the league drafted by and what the model now expects — in
-   * the column games played otherwise takes, and games played moves under
+   * A forward-model league: the season view leads with his season in
+   * fantasy points (scored so far plus the projection for every game left),
+   * then the Player Score as its own column, and games played moves under
    * the name.
    */
   projection?: boolean;
@@ -67,7 +67,7 @@ export function Pool({
     ((p.week?.played ?? 0) === 0 ? 0 : (p.week!.scored) / p.week!.played);
 
   return (
-    <div className="panel" data-density="compact">
+    <div className="panel" data-density="compact" data-proj={projection && week === null ? true : undefined}>
       <div role="status" aria-live="polite">
         {state.error ?? state.ok ? (
           <div style={{ padding: "var(--s-4) var(--s-4) 0" }}>
@@ -86,9 +86,12 @@ export function Pool({
             column becomes the forecast instead. */}
         {week === null ? (
           <>
-            {projection
-              ? <SortHead label="Proj" sortKey="proj" active={sort} href={sortHrefs.proj} />
-              : <SortHead label="GP" sortKey="games" active={sort} href={sortHrefs.games} />}
+            {projection ? (
+              <>
+                <SortHead label="Season" sortKey="season" active={sort} href={sortHrefs.season} />
+                <SortHead label="Score" sortKey="proj" active={sort} href={sortHrefs.proj} />
+              </>
+            ) : <SortHead label="GP" sortKey="games" active={sort} href={sortHrefs.games} />}
             <SortHead label="Avg" sortKey="avg" active={sort} href={sortHrefs.avg} />
             <SortHead label="Total" sortKey="total" active={sort} href={sortHrefs.total} />
           </>
@@ -134,8 +137,10 @@ export function Pool({
                 <span className="pool-inline">
                   {week === null ? (
                     <>
+                      {projection && player.seasonPoints !== null
+                        ? <><Dot /><span>{player.seasonPoints.toFixed(0)} pts season</span></> : null}
                       {projection && player.projected !== null
-                        ? <><Dot /><span>{player.projected.toFixed(1)} proj</span></> : null}
+                        ? <><Dot /><span>{player.projected.toFixed(1)} score</span></> : null}
                       <Dot /><span>{player.averageScore.toFixed(1)} avg</span>
                       <Dot /><span>{player.games} GP</span>
                     </>
@@ -159,9 +164,14 @@ export function Pool({
           <span className="pool-role"><RoleTag role={player.role} /></span>
           {week === null ? (
             <>
-              {projection
-                ? <span className="pool-num r tnum">{player.projected === null ? "—" : player.projected.toFixed(1)}</span>
-                : <span className="pool-num r faint tnum">{player.games}</span>}
+              {projection ? (
+                <>
+                  <span className="pool-num r tnum" style={{ fontWeight: 650 }}>
+                    {player.seasonPoints === null ? "—" : player.seasonPoints.toFixed(0)}
+                  </span>
+                  <span className="pool-num r faint tnum">{player.projected === null ? "—" : player.projected.toFixed(1)}</span>
+                </>
+              ) : <span className="pool-num r faint tnum">{player.games}</span>}
               <span className="pool-num r">
                 <Score value={player.averageScore} size="xs" />
               </span>

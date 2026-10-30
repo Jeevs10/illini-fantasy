@@ -90,7 +90,8 @@ export function Pool({
               <tr>
                 <th scope="col">Player</th>
                 <th scope="col" className="draft-school">School</th>
-                <th scope="col" className="r">{projected ? "Proj" : "Avg"}</th>
+                {projected ? <th scope="col" className="r" title="Projected fantasy points this season">Season</th> : null}
+                <th scope="col" className="r">{projected ? "Score" : "Avg"}</th>
                 <th scope="col">Take</th>
               </tr>
             </thead>
@@ -111,6 +112,11 @@ export function Pool({
                     {player.teamName ?? "—"}
                     {player.conference ? <span className="sub">{player.conference}</span> : null}
                   </td>
+                  {projected ? (
+                    <td className="r num" style={{ fontWeight: 650 }}>
+                      {player.seasonPoints === null ? "—" : player.seasonPoints.toFixed(0)}
+                    </td>
+                  ) : null}
                   <td className="r num">
                     {projected
                       ? player.projected === null ? "—" : player.projected.toFixed(1)
