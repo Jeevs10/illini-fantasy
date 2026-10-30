@@ -468,20 +468,20 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
     border-radius: 0;
     transition: color var(--d-1) var(--e-out);
   }
-  .bnav a[data-active="true"], .bnav button[aria-expanded="true"] { color: var(--on-deep); }
+  .bnav a[data-active="true"], .bnav button[data-active], .bnav button[aria-expanded="true"] { color: var(--on-deep); }
   .bnav .glyph {
     width: 22px; height: 22px;
     display: grid; place-items: center;
     transition: transform var(--d-2) var(--e-out);
   }
-  .bnav a[data-active="true"] .glyph { transform: translateY(-1px); }
-  .bnav a[data-active="true"]::before {
+  .bnav a[data-active="true"] .glyph, .bnav button[data-active] .glyph { transform: translateY(-1px); }
+  .bnav a[data-active="true"]::before, .bnav button[data-active]::before {
     content: "";
     position: absolute; top: 0; width: 26px; height: 2px;
     border-radius: 0 0 2px 2px;
     background: var(--on-deep);
   }
-  .bnav a { position: relative; }
+  .bnav a, .bnav button { position: relative; }
   .whoami-name { display: none; }
   .masthead-inner { min-height: 54px; }
 }
@@ -2109,3 +2109,11 @@ table.picture tr[data-out] { color: var(--ink-3); }
 .seatstrip li:not([data-open])::before { border-style: solid; }
 .seatstrip li[data-open] .ondeck-name { color: var(--ink-3); }
 .seatstrip li[data-mine]::before { border: 2px solid var(--accent); }
+
+/* A school's roster on a phone: position moves under the name and the range
+   strip goes, so the name, the Player Score and who owns him fit the width. */
+.sch-wide { display: none; }
+@media (max-width: 640px) {
+  .sch-narrow { display: none; }
+  .sch-wide { display: inline; }
+}

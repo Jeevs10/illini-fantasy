@@ -239,7 +239,7 @@ export default async function LeadersPage({
         {performances.length === 0 ? (
           <Empty title="No games in this window" glyph="trophy"
                  action={<Link className="button" href="/players">See the projected pool</Link>}>
-            {before ? `The season starts ${day(from)}.` : `Nothing has been scored in ${span(from, to)}.`}{" "}
+            {before ? `The season starts ${day(from)}.` : `Nothing has been scored ${from === to ? "on" : "between"} ${span(from, to).replace(" – ", " and ")}.`}{" "}
             Each game shows up here the morning after it is played.
           </Empty>
         ) : (

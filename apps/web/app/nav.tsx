@@ -104,8 +104,7 @@ export function Nav({
           </Link>
         ))}
         <button type="button" onClick={() => setSheet(true)} aria-expanded={sheet} aria-haspopup="dialog"
-                data-active={inSheet || undefined}
-                style={inSheet ? { color: "var(--accent-ink)" } : undefined}>
+                data-active={inSheet || undefined}>
           <span className="glyph"><Glyph name="more" size={21} /></span>
           More
         </button>

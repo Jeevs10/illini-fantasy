@@ -116,8 +116,8 @@ export default async function SchoolPage({ params }: { params: Promise<{ slug: s
               <thead>
                 <tr>
                   <th>Player</th>
-                  <th>Pos</th>
-                  <th style={{ minWidth: "9rem" }}>Projection</th>
+                  <th className="sch-narrow">Pos</th>
+                  <th className="sch-narrow" style={{ minWidth: "9rem" }}>Projection</th>
                   <th className="r">Score</th>
                   <th className="r">Season</th>
                   {banked ? <th className="r">Scored</th> : null}
@@ -133,14 +133,15 @@ export default async function SchoolPage({ params }: { params: Promise<{ slug: s
                         <span style={{ minWidth: 0 }}>
                           <Link href={playerPath(p.playerId, p.name)} className="player-link">{p.name}</Link>
                           <span className="sub">
+                            {p.position ? <span className="sch-wide">{p.position} · </span> : null}
                             {[p.classYear, p.height, p.mpg !== null ? `${p.mpg.toFixed(0)} mpg` : null]
                               .filter(Boolean).join(" · ")}
                           </span>
                         </span>
                       </span>
                     </td>
-                    <td><RoleTag role={p.position} /></td>
-                    <td>
+                    <td className="sch-narrow"><RoleTag role={p.position} /></td>
+                    <td className="sch-narrow">
                       {p.score !== null ? (
                         <RangeStrip value={p.score} lo={p.lo} hi={p.hi} top={top}
                                     label={`Projected ${p.score.toFixed(1)}`} />
