@@ -326,6 +326,18 @@ The one thing worth doing now: raised felt with solid orange-line stitching, the
 ### Empty State
 A quiet steel-soft inset with a heading, one line at 48ch, and the way forward. No icon tile, no dashed border.
 
+### Small Banners: On Deck and Seats
+The rafters' banner at a third of the size: 68px felt with the notched foot, a condensed pick number, a Graduate monogram and a condensed name. Under the draft clock they hang in pick order to show the snake (dashed, because those picks are still to come; yours in orange). On the commissioner page the same banners are the seats, solid when a manager holds one and dashed while it is open.
+
+### Pennant
+A single team's banner at the head of its page (92 × 132px, no wires), with rank only once a week has settled. A school's page hangs the same shape in the school's own colour with its initials. The way in (sign-in, invite links, commissioner-only notices) hangs one steel-stitched banner with the Block I over the heading.
+
+### Leader Bar
+A steel bar beside a leader's score whose length is that score over the top score on the board. Your players' bars are orange line. Hidden under 560px, where the number alone carries it.
+
+### Rail Layout
+Pages with one job and several records (trades, waivers, the draft room) use a 1.6 : 1 main column and rail. The job takes the main column; offers, budgets, the queue and history sit in the rail, sticky on a desk. An empty record is a sentence, not an empty panel, and a count pill is only drawn when the count is not zero.
+
 ### Arrow
 A drawn 14px stroke arrow (rotated for direction) for every icon-use arrow: section links, buttons. Typed arrows render in whatever weight the text happens to be.
 
