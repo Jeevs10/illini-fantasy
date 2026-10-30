@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Db } from "@illini/db";
 import { insertMany } from "@illini/db";
 import { canonicaliseName, normaliseTeam } from "@illini/crosswalk";
-import { basketballDate } from "./nightly.ts";
+import { basketballDate } from "./dates.ts";
 
 /**
  * The Data repo's forward model, as illini-fantasy reads it.
