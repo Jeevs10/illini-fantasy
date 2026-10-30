@@ -49,6 +49,14 @@ export function JoinLinkPanel({
               <input id="join-url" type="text" readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
               <button type="button" className="primary" onClick={copy}>{copied ? "Copied" : "Copy link"}</button>
             </div>
+            {/^https?:\/\/(localhost|127\.0\.0\.1)/.test(url) ? (
+              // Copied from a dev server, the link points at the copier's own
+              // computer and opens nothing for anyone else.
+              <p className="notice bad">
+                This address points at this computer, so it will not open for
+                anyone else. Copy the link from the live site instead.
+              </p>
+            ) : null}
             <p className="fineprint">
               Works until {expiresLabel}
               {openSeats === 0 ? ", but every team has a manager, so nobody can use it now" : ""}.
