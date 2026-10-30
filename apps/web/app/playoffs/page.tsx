@@ -12,7 +12,7 @@ const VIEWS = [{ href: "/standings", label: "Standings" }, { href: "/playoffs", 
 
 export default async function PlayoffsPage() {
   const viewer = await requireViewer();
-  const { leagueId, leagueName, role } = viewer.membership;
+  const { leagueId, leagueName, role, fantasyTeamId } = viewer.membership;
 
   // Settle-on-read, the same rule the wire and the negotiating table follow:
   // there is no worker, so opening this page is what advances a round.
@@ -29,7 +29,7 @@ export default async function PlayoffsPage() {
           </div>
           <SubTabs tabs={VIEWS} active="/playoffs" />
         </div>
-        <Picture picture={picture} />
+        <Picture picture={picture} mineId={fantasyTeamId} />
         {role === "commissioner" ? <DrawBracket /> : (
           <div className="panel">
             <Empty title="The bracket has not been drawn" glyph="trophy">

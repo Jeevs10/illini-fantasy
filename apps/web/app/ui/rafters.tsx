@@ -63,3 +63,18 @@ export function Rafters({ teams, label = "League standings" }: { teams: RafterTe
     </nav>
   );
 }
+
+/**
+ * One team's banner on its own, for the head of that team's page: the same
+ * felt, stitching and lettering as its place in the rafters, at a fixed drop.
+ */
+export function Pennant({ team, settled }: { team: RafterTeam; settled: boolean }) {
+  return (
+    <div className="banner banner-solo" data-mine={team.mine || undefined}
+         data-stitch={settled ? "actual" : "projected"} aria-hidden="true">
+      <span className="banner-rank">{settled ? ordinal(team.rank) : " "}</span>
+      <span className="banner-mark">{monogram(team.name)}</span>
+      <span className="banner-record">{record(team)}</span>
+    </div>
+  );
+}

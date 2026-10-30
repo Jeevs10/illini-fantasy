@@ -26,7 +26,7 @@ export function Claims({ pending, settled }: { pending: ClaimRow[]; settled: Cla
     <div className="panel">
       <div className="panel-head">
         <h2>Your claims</h2>
-        <span className="pill">{pending.length}</span>
+        {pending.length > 0 ? <span className="pill">{pending.length}</span> : null}
       </div>
 
       <div role="status" aria-live="polite">

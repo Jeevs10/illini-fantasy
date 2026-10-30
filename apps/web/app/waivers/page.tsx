@@ -47,28 +47,18 @@ export default async function WaiversPage() {
           <h1>Waivers</h1>
           <p className="meta">
             <span>{leagueName}</span>
+            {mine ? <span className="tnum">${mine.remaining} of ${state.budget} left to bid</span> : null}
             <span>Bids open {WHEN.format(new Date(state.nextRunAt))}</span>
             {viewer.membership.settings.lineupMode === "everyone"
               ? <span>Once a week, at the lock — a player won plays that week</span> : null}
           </p>
         </div>
-        {mine ? (
-          <div className="budget">
-            <div>
-              <div className="eyebrow">Budget left</div>
-              <div className="score score-md" style={{ color: "var(--accent)" }}>
-                ${mine.remaining}
-              </div>
-            </div>
-            <div style={{ minWidth: "9rem" }}>
-              <Bar percent={(mine.spent / state.budget) * 100}
-                   label={`$${mine.spent} of $${state.budget} spent`} thick />
-              <div className="faint" style={{ fontSize: "var(--t-xs)", marginTop: 4 }}>
-                ${mine.spent} spent of ${state.budget}
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <div className="controls">
+          <Link className="button" href="/players?free=1">Free agents</Link>
+          <Link className="button" href="/team">
+            {viewer.membership.settings.lineupMode === "everyone" ? "Your team" : "Your lineup"}
+          </Link>
+        </div>
       </div>
 
       {fantasyTeamId === null ? (
@@ -80,72 +70,76 @@ export default async function WaiversPage() {
         </div>
       ) : null}
 
-      <Wire
-        players={wire}
-        roster={roster.map((p) => ({ playerId: p.playerId, name: p.name }))}
-        remaining={mine?.remaining ?? 0}
-        full={roster.filter((p) => !p.reserve).length >= activeLimit(viewer.membership.settings)}
-        canAct={fantasyTeamId !== null}
-      />
-
-      {fantasyTeamId === null ? null : (
-        <>
-          <Claims
-            pending={rows.filter((c) => c.status === "pending")}
-            settled={rows.filter((c) => c.status !== "pending" && c.status !== "cancelled")}
+      <div className="tradegrid">
+        <div className="tradegrid-main">
+          <Wire
+            players={wire}
+            roster={roster.map((p) => ({ playerId: p.playerId, name: p.name }))}
+            remaining={mine?.remaining ?? 0}
+            full={roster.filter((p) => !p.reserve).length >= activeLimit(viewer.membership.settings)}
+            canAct={fantasyTeamId !== null}
           />
-          <Roster
-            team={fantasyTeamName ?? "Your team"}
-            players={roster.map((p) => ({
-              playerId: p.playerId, name: p.name, teamName: p.teamName,
-              acquiredVia: p.acquiredVia,
-            }))}
-          />
-        </>
-      )}
-
-      <div className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Budgets</h2>
-            <p>Priority is the tiebreak, not the rule.</p>
-          </div>
-          <span className="pill ghost">Priority order</span>
+          {fantasyTeamId === null ? null : (
+            <Claims
+              pending={rows.filter((c) => c.status === "pending")}
+              settled={rows.filter((c) => c.status !== "pending" && c.status !== "cancelled")}
+            />
+          )}
         </div>
-        {state.teams.map((team) => (
-          <div className="plr" key={team.fantasyTeamId} data-mine={team.fantasyTeamId === fantasyTeamId || undefined}>
-            <span className="plr-lead">
-              <span className="faint tnum" style={{ width: "1.5ch", textAlign: "right", fontSize: "var(--t-sm)" }}>
-                {team.priority}
-              </span>
-              <Avatar name={team.teamName} seed={team.fantasyTeamId} size="sm"
-                      mine={team.fantasyTeamId === fantasyTeamId} />
-            </span>
-            <span className="plr-id">
-              <span className="plr-name">{team.teamName}</span>
-              <span className="plr-sub" style={{ display: "grid", gap: 3, maxWidth: "14rem" }}>
-                <Bar percent={(team.spent / state.budget) * 100} thin
-                     label={`$${team.spent} of $${state.budget} spent`} />
-                <span>${team.spent} spent</span>
-              </span>
-            </span>
-            <span className="plr-right">
-              <span className="score score-xs">${team.remaining}</span>
-            </span>
-          </div>
-        ))}
-        <p className="seatless">
-          The higher bid wins, and priority only decides equal ones. A team that
-          wins a tie goes to the back of the line, so the same coin never lands
-          the same way all season.
-        </p>
-      </div>
 
-      <div className="controls">
-        <Link className="button" href="/players?free=1">Free agents</Link>
-        <Link className="button" href="/team">
-          {viewer.membership.settings.lineupMode === "everyone" ? "Your team" : "Your lineup"}
-        </Link>
+        <aside className="tradegrid-rail" aria-label="Budgets and your roster">
+          <div className="panel">
+            <div className="panel-head">
+              <div>
+                <h2>Budgets</h2>
+                <p>In priority order. Priority only breaks a tied bid.</p>
+              </div>
+            </div>
+            <table className="budgets">
+              <caption className="sr-only">Each team&rsquo;s waiver budget, in priority order</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="r">#</th>
+                  <th scope="col">Team</th>
+                  <th scope="col" className="r">Left</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.teams.map((team) => {
+                  const yours = team.fantasyTeamId === fantasyTeamId;
+                  return (
+                    <tr key={team.fantasyTeamId} data-mine={yours || undefined}>
+                      <td className="r tnum faint">{team.priority}</td>
+                      <th scope="row">
+                        <span className="budgets-team">
+                          <Avatar name={team.teamName} seed={team.fantasyTeamId} size="xs" mine={yours} />
+                          <span>{team.teamName}</span>
+                        </span>
+                        <Bar percent={(team.spent / state.budget) * 100} thin
+                             label={`$${team.spent} of $${state.budget} spent`} />
+                      </th>
+                      <td className="r tnum budgets-left">${team.remaining}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="seatless">
+              A team that wins a tie goes to the back of the line, so the same
+              coin never lands the same way all season.
+            </p>
+          </div>
+
+          {fantasyTeamId === null ? null : (
+            <Roster
+              team={fantasyTeamName ?? "Your team"}
+              players={roster.map((p) => ({
+                playerId: p.playerId, name: p.name, teamName: p.teamName,
+                acquiredVia: p.acquiredVia,
+              }))}
+            />
+          )}
+        </aside>
       </div>
     </>
   );

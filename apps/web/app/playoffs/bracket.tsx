@@ -11,10 +11,11 @@ const ROUND_TITLES: Record<string, string> = {
 /**
  * A bracket, drawn as columns of matchup cards.
  *
- * The dotted rule between columns carries "this round feeds that one" — the
- * same idea `.capline` already draws for the games cap — rather than
- * measuring pixels to draw an exact connector elbow for a shape that has
+ * The steel rule between columns carries "this round feeds that one" rather
+ * than measuring pixels to draw an exact connector elbow for a shape that has
  * byes, a third-place game and a consolation pool feeding the same layout.
+ * Each game wears the league's stitching: dashed until it is decided, doubled
+ * once it is final.
  */
 export function Bracket({
   view, title, bracket, rounds,
@@ -47,7 +48,7 @@ function Side({ side, winner }: { side: BracketMatchView["home"]; winner: boolea
       <Avatar name={side.name ?? "TBD"} seed={side.fantasyTeamId ?? side.name ?? "tbd"} size="xs" />
       <span className="bracket-name">
         {side.name !== null
-          ? <Link href="/standings">{side.name}</Link>
+          ? <Link href={side.fantasyTeamId === null ? "/standings" : `/teams/${side.fantasyTeamId}`}>{side.name}</Link>
           : <span className="faint">TBD</span>}
         {side.seed !== null ? <span className="bracket-seed">{side.seed}</span> : null}
       </span>
@@ -59,7 +60,7 @@ function Side({ side, winner }: { side: BracketMatchView["home"]; winner: boolea
 function MatchCard({ match }: { match: BracketMatchView }) {
   return (
     <div>
-      <div className="bracket-match">
+      <div className="bracket-match" data-stitch={match.winner ? "final" : "projected"}>
         <Side side={match.home} winner={match.winner === "home"} />
         <Side side={match.away} winner={match.winner === "away"} />
       </div>

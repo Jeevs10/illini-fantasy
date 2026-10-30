@@ -46,7 +46,7 @@ export function Wire({
           <h2>On the wire</h2>
           <p>Sealed bids. Nobody sees a number until the run opens them.</p>
         </div>
-        <span className="pill ghost">{players.length} claimable</span>
+        {players.length > 0 ? <span className="pill ghost">{players.length} claimable</span> : null}
       </div>
 
       <div role="status" aria-live="polite">

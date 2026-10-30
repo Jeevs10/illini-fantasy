@@ -4,6 +4,7 @@ import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate } from "../../lib/session.ts";
 import { PlayerRow, Dot } from "../ui/playerrow.tsx";
 import { Empty, Score, SubTabs } from "../ui/bits.tsx";
+import { Arrow } from "../ui/glyphs.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,26 @@ const METRICS: { value: Metric; label: string }[] = [
   { value: "best", label: "Best single game" },
   { value: "weekly", label: "Cumulative by week" },
 ];
+
+const DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const day = (iso: string) => DAY.format(new Date(`${iso}T12:00:00Z`));
+/** "Nov 1" or "Nov 1 – Nov 7": the window as a person would say it. */
+const span = (from: string, to: string) => (from === to ? day(from) : `${day(from)} – ${day(to)}`);
+
+/**
+ * A leader's score, with a steel bar whose length is that score against the
+ * top one on the board. The bar is exact, never decoration: half as long is
+ * half as many points.
+ */
+function Lead({ value, best }: { value: number; best: number }) {
+  const share = best > 0 ? Math.max(0, value / best) : 0;
+  return (
+    <span className="leadfig">
+      <span className="leadfig-bar" aria-hidden="true"><span style={{ width: `${(share * 100).toFixed(1)}%` }} /></span>
+      <Score value={value} size="sm" tone={value === best ? "accent" : "default"} />
+    </span>
+  );
+}
 
 function shiftDate(iso: string, byDays: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -47,7 +68,7 @@ export default async function LeadersPage({
 }: { searchParams: Promise<{ metric?: string; span?: string; role?: string; week?: string }> }) {
   const { metric: metricParam, span: spanParam, role, week: weekParam } = await searchParams;
   const viewer = await requireViewer();
-  const { leagueId, configId, season } = viewer.membership;
+  const { leagueId, configId, season, fantasyTeamName } = viewer.membership;
   const today = viewDate();
 
   const metric: Metric = METRICS.some((m) => m.value === metricParam) ? (metricParam as Metric) : "best";
@@ -111,7 +132,7 @@ export default async function LeadersPage({
             <h1>Leaders</h1>
             <p className="meta">
               <span>
-                {selected ? `Cumulative score, week ${selected.week} (${selected.startsOn} → ${selected.endsOn})`
+                {selected ? `Cumulative score, week ${selected.week}, ${span(selected.startsOn, selected.endsOn)}`
                   : "No weeks have been played yet"}
               </span>
             </p>
@@ -129,7 +150,7 @@ export default async function LeadersPage({
                 tabIndex={prevWeek ? undefined : -1}
                 style={prevWeek ? undefined : { pointerEvents: "none", opacity: 0.4 }}
               >
-                ‹ Week {prevWeek?.week ?? ""}
+                <Arrow dir="left" size={12} /> Week {prevWeek?.week ?? ""}
               </Link>
               <span data-active style={{ pointerEvents: "none" }}>Week {selected.week}</span>
               <Link
@@ -138,7 +159,7 @@ export default async function LeadersPage({
                 tabIndex={nextWeek ? undefined : -1}
                 style={nextWeek ? undefined : { pointerEvents: "none", opacity: 0.4 }}
               >
-                Week {nextWeek?.week ?? ""} ›
+                Week {nextWeek?.week ?? ""} <Arrow dir="right" size={12} />
               </Link>
             </nav>
           ) : null}
@@ -147,8 +168,10 @@ export default async function LeadersPage({
 
         <div className="panel">
           {leaders.length === 0 ? (
-            <Empty title="No weeks scored yet" glyph="trophy">
+            <Empty title="No weeks scored yet" glyph="trophy"
+                   action={<Link className="button" href="/players">See the projected pool</Link>}>
               Once a scoring week settles, its cumulative leaders show up here.
+              Until then the pool ranks everyone by the model&rsquo;s projection.
             </Empty>
           ) : (
             leaders.map((p, i) => (
@@ -164,7 +187,8 @@ export default async function LeadersPage({
                     {p.ownedBy ? (<><Dot /><span>{p.ownedBy}</span></>) : null}
                   </>
                 }
-                right={<Score value={p.totalScore} size="sm" tone={p.totalScore === best ? "accent" : "default"} />}
+                mine={!!fantasyTeamName && p.ownedBy === fantasyTeamName}
+                right={<Lead value={p.totalScore} best={best} />}
               />
             ))
           )}
@@ -173,8 +197,10 @@ export default async function LeadersPage({
     );
   }
 
-  const span: Span = SPANS.some((s) => s.value === spanParam) ? (spanParam as Span) : "day";
-  const { from, to } = rangeFor(span, today, season);
+  const chosen: Span = SPANS.some((s) => s.value === spanParam) ? (spanParam as Span) : "day";
+  const { from, to } = rangeFor(chosen, today, season);
+  // Before opening night the season window runs backwards; say when it starts.
+  const before = from > to;
 
   const performances = await topPerformances(db, {
     leagueId, configId, from, to, roles: roleFilter ? [roleFilter] : undefined, limit: 25,
@@ -187,7 +213,7 @@ export default async function LeadersPage({
         <div>
           <h1>Leaders</h1>
           <p className="meta">
-            <span>Best single-game scores, {from === to ? from : `${from} → ${to}`}</span>
+            <span>{before ? `Best single-game scores. The season starts ${day(from)}` : `Best single-game scores, ${span(from, to)}`}</span>
           </p>
         </div>
         <SubTabs tabs={VIEWS} active="/leaders" />
@@ -200,7 +226,7 @@ export default async function LeadersPage({
             <Link
               key={s.value}
               href={query({ span: s.value === "day" ? undefined : s.value })}
-              data-active={span === s.value}
+              data-active={chosen === s.value}
             >
               {s.label}
             </Link>
@@ -211,8 +237,10 @@ export default async function LeadersPage({
 
       <div className="panel">
         {performances.length === 0 ? (
-          <Empty title="No games in this window" glyph="trophy">
-            Nothing has been scored in this window yet.
+          <Empty title="No games in this window" glyph="trophy"
+                 action={<Link className="button" href="/players">See the projected pool</Link>}>
+            {before ? `The season starts ${day(from)}.` : `Nothing has been scored in ${span(from, to)}.`}{" "}
+            Each game shows up here the morning after it is played.
           </Empty>
         ) : (
           performances.map((p, i) => (
@@ -224,11 +252,12 @@ export default async function LeadersPage({
               meta={
                 <>
                   <span>{p.teamName ?? "Unaffiliated"}</span>
-                  <Dot /><span>{p.playedOn}</span>
+                  <Dot /><span>{day(p.playedOn)}</span>
                   {p.ownedBy ? (<><Dot /><span>{p.ownedBy}</span></>) : null}
                 </>
               }
-              right={<Score value={p.score} size="sm" tone={p.score === best ? "accent" : "default"} />}
+              mine={!!fantasyTeamName && p.ownedBy === fantasyTeamName}
+              right={<Lead value={p.score} best={best} />}
             />
           ))
         )}

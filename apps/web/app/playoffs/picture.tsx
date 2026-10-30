@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { PlayoffPicture } from "@illini/league";
 import { Avatar } from "../ui/identity.tsx";
 
@@ -5,7 +6,7 @@ const STATUS_LABEL: Record<PlayoffPicture["teams"][number]["status"], string> = 
   clinched: "Clinched", alive: "Alive", eliminated: "Eliminated",
 };
 const STATUS_PILL: Record<PlayoffPicture["teams"][number]["status"], string> = {
-  clinched: "pill mine", alive: "pill ghost", eliminated: "pill crit",
+  clinched: "pill", alive: "pill ghost", eliminated: "pill ghost",
 };
 
 /**
@@ -15,7 +16,7 @@ const STATUS_PILL: Record<PlayoffPicture["teams"][number]["status"], string> = {
  * see `playoffPicture` — so a bubble team reads as "alive" on both sides of
  * the cut line rather than a guess about strength of schedule.
  */
-export function Picture({ picture }: { picture: PlayoffPicture }) {
+export function Picture({ picture, mineId }: { picture: PlayoffPicture; mineId: number | null }) {
   return (
     <div className="panel">
       <div className="panel-head">
@@ -29,22 +30,36 @@ export function Picture({ picture }: { picture: PlayoffPicture }) {
           </p>
         </div>
       </div>
-      <div className="panel-body stack-sm">
-        {picture.teams.map((t) => (
-          <div className="row" key={t.fantasyTeamId} style={{ justifyContent: "space-between" }}
-               data-cut={t.rank === picture.cutLine || undefined}>
-            <span className="row" style={{ gap: "var(--s-2)" }}>
-              <span className="tnum faint" style={{ minWidth: "1.5ch" }}>{t.rank}</span>
-              <Avatar name={t.name} seed={t.fantasyTeamId} size="xs" />
-              <span style={{ fontWeight: 600 }}>{t.name}</span>
-              <span className="faint" style={{ fontSize: "var(--t-sm)" }}>
-                {t.wins}&ndash;{t.losses}{t.ties ? `–${t.ties}` : ""}
-              </span>
-            </span>
-            <span className={STATUS_PILL[t.status]}>{STATUS_LABEL[t.status]}</span>
-          </div>
-        ))}
-      </div>
+      <table className="budgets picture">
+        <caption className="sr-only">
+          Every team in standings order; the line under {picture.cutLine} is the playoff cut
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col" className="r">#</th>
+            <th scope="col">Team</th>
+            <th scope="col" className="r">Record</th>
+            <th scope="col" className="r">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {picture.teams.map((t) => (
+            <tr key={t.fantasyTeamId} data-cut={t.rank === picture.cutLine || undefined}
+                data-mine={t.fantasyTeamId === mineId || undefined}
+                data-out={t.status === "eliminated" || undefined}>
+              <td className="r tnum faint">{t.rank}</td>
+              <th scope="row">
+                <span className="budgets-team" style={{ marginBottom: 0 }}>
+                  <Avatar name={t.name} seed={t.fantasyTeamId} size="xs" mine={t.fantasyTeamId === mineId} />
+                  <Link href={`/teams/${t.fantasyTeamId}`} className="player-link">{t.name}</Link>
+                </span>
+              </th>
+              <td className="r tnum">{t.wins}&ndash;{t.losses}{t.ties ? `–${t.ties}` : ""}</td>
+              <td className="r"><span className={STATUS_PILL[t.status]}>{STATUS_LABEL[t.status]}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

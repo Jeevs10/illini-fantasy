@@ -2053,3 +2053,33 @@ li[data-mine] .mside:first-child .mside-score[data-stitch="projected"] { border-
   .stickybar .controls { gap: var(--s-2); }
 }
 .pool-mfig small { font-family: var(--f-cond); font-size: var(--t-xs); font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+
+/* ---- waiver budgets -------------------------------------------------------- */
+
+table.budgets { width: 100%; }
+table.budgets th, table.budgets td { padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+table.budgets tbody tr:last-child > * { border-bottom: 0; }
+table.budgets tbody th { text-align: left; font-weight: 600; font-size: var(--t-sm); }
+table.budgets .r { width: 1%; white-space: nowrap; text-align: right; }
+.budgets-team { display: flex; align-items: center; gap: var(--s-2); margin-bottom: 5px; min-width: 0; }
+.budgets-team span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.budgets-left { font-weight: 700; font-size: var(--t-md); }
+table.budgets tr[data-mine] { background: color-mix(in srgb, var(--accent-wash) 70%, transparent); }
+table.budgets tr[data-mine] .budgets-left { color: var(--accent); }
+
+/* A leader's score with its bar: steel, exact share of the top score. */
+.leadfig { display: flex; align-items: center; gap: var(--s-3); }
+.leadfig-bar { width: clamp(4rem, 14vw, 10rem); height: 6px; background: var(--sunken); border-radius: var(--r-pill); overflow: hidden; }
+.leadfig-bar > span { display: block; height: 100%; background: var(--steel); border-radius: inherit; }
+.plr[data-mine] .leadfig-bar > span { background: var(--accent-line); }
+@media (max-width: 560px) { .leadfig-bar { display: none; } }
+
+/* A team's own banner at the head of its page: a fixed drop, no wires. */
+.banner-solo { width: 92px; height: 132px; flex: none; padding-top: var(--s-3); }
+.banner-solo .banner-mark { font-size: 2rem; }
+@media (max-width: 560px) { .banner-solo { width: 72px; height: 108px; } .banner-solo .banner-mark { font-size: 1.5rem; } }
+
+.bracket-match[data-stitch="projected"] { border: 1px dashed var(--line-hard); }
+.bracket-match[data-stitch="final"] { border: 3px double var(--line-hard); }
+table.picture tr[data-cut] > * { border-bottom: 2px solid var(--line-hard); }
+table.picture tr[data-out] { color: var(--ink-3); }
