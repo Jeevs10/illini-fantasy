@@ -113,13 +113,14 @@ export interface ForwardGame {
 
 export interface ForwardProjection {
   gameId: number;
-  date: string;
   key: string;
-  cbbdTeamId: number | null;
   proj: number;
   mpg: number | null;
-  poss: number;
-  oppDef: number;
+  /** Sent before 2026-10-30, when only the next two weeks were projected; unread. */
+  date?: string;
+  cbbdTeamId?: number | null;
+  poss?: number;
+  oppDef?: number;
   /** Listed out on the morning's injury report, so projected at zero. */
   out?: boolean;
 }
