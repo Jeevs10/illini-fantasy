@@ -2,7 +2,7 @@
  * Loading, shaped like what is arriving.
  *
  * A generic spinner tells a manager the app is busy. A skeleton in the shape
- * of a scorebug tells them the scorebug is coming, which is the difference
+ * of the banners tells them the banners are coming, which is the difference
  * between waiting and wondering whether you clicked the right thing.
  */
 
@@ -45,26 +45,30 @@ export function SkelSegmented({ count = 4 }: { count?: number }) {
   );
 }
 
-export function SkelBug() {
+/** The banner strip, waiting: twelve short banners on the steel rule. */
+export function SkelRafters({ count = 12 }: { count?: number }) {
   return (
-    <div className="scorebug" style={{ marginBottom: "var(--s-5)" }}>
-      <div className="scorebug-top">
-        <div className="skel" style={{ width: "22ch", height: ".7rem" }} />
-      </div>
-      <div className="scorebug-body">
-        <div className="scorebug-side">
-          <div className="skel" style={{ width: "14ch", height: "1rem" }} />
-          <div className="skel" style={{ width: "7ch", height: "3rem", borderRadius: 8 }} />
-        </div>
-        <div className="scorebug-mid"><div className="skel" style={{ width: "2ch", height: ".7rem" }} /></div>
-        <div className="scorebug-side them">
-          <div className="skel" style={{ width: "14ch", height: "1rem" }} />
-          <div className="skel" style={{ width: "7ch", height: "3rem", borderRadius: 8 }} />
-        </div>
-      </div>
-      <div className="scorebug-foot">
-        <div className="skel" style={{ height: 8, borderRadius: 999 }} />
-      </div>
+    <div className="rafters" aria-hidden="true">
+      <ol>
+        {Array.from({ length: count }, (_, i) => (
+          <li key={i}><div className="banner skel" style={{ height: 148 }} /></li>
+        ))}
+      </ol>
     </div>
+  );
+}
+
+/** A week's matchups, waiting: one list row per game. */
+export function SkelMatchups({ count = 6 }: { count?: number }) {
+  return (
+    <ol className="mlist" aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => (
+        <li key={i}><div className="mrow">
+          <div className="skel" style={{ width: "60%", height: ".85rem" }} />
+          <div className="skel" style={{ width: "4ch", height: ".6rem", justifySelf: "center" }} />
+          <div className="skel" style={{ width: "60%", height: ".85rem", justifySelf: "end" }} />
+        </div></li>
+      ))}
+    </ol>
   );
 }

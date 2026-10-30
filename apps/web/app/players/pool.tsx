@@ -8,6 +8,7 @@ import { AvailabilityTag, RoleTag, Score } from "../ui/bits.tsx";
 import Link from "next/link";
 import { Dot } from "../ui/playerrow.tsx";
 import { playerPath, schoolPathFor } from "../../lib/links.ts";
+import { Arrow } from "../ui/glyphs.tsx";
 
 export type PoolRow = PoolPlayer & { onWaivers: boolean; availability?: PlayerAvailability };
 
@@ -67,8 +68,14 @@ export function Pool({
   const perGame = (p: PoolRow) =>
     ((p.week?.played ?? 0) === 0 ? 0 : (p.week!.scored) / p.week!.played);
 
+  // Before anyone has played, every average and total is 0.0: two columns of
+  // zeros ranked above the projection the list is actually sorted by. They
+  // return the morning the first box scores land.
+  const preseason = projection && week === null && players.every((p) => p.games === 0);
+
   return (
-    <div className="panel" data-density="compact" data-proj={projection && week === null ? true : undefined}>
+    <div className="panel" data-density="compact" data-proj={projection && week === null ? true : undefined}
+         data-pre={preseason || undefined}>
       <div role="status" aria-live="polite">
         {state.error ?? state.ok ? (
           <div style={{ padding: "var(--s-4) var(--s-4) 0" }}>
@@ -89,12 +96,16 @@ export function Pool({
           <>
             {projection ? (
               <>
-                <SortHead label="Season" sortKey="season" active={sort} href={sortHrefs.season} />
-                <SortHead label="Score" sortKey="proj" active={sort} href={sortHrefs.proj} />
+                <SortHead label="Season pts" sortKey="season" active={sort} href={sortHrefs.season} />
+                <SortHead label="Player Score" sortKey="proj" active={sort} href={sortHrefs.proj} />
               </>
             ) : <SortHead label="GP" sortKey="games" active={sort} href={sortHrefs.games} />}
-            <SortHead label="Avg" sortKey="avg" active={sort} href={sortHrefs.avg} />
-            <SortHead label="Total" sortKey="total" active={sort} href={sortHrefs.total} />
+            {preseason ? null : (
+              <>
+                <SortHead label="Avg" sortKey="avg" active={sort} href={sortHrefs.avg} />
+                <SortHead label="Total" sortKey="total" active={sort} href={sortHrefs.total} />
+              </>
+            )}
           </>
         ) : week.historic ? (
           <>
@@ -138,14 +149,13 @@ export function Pool({
                     number has to travel with the name or the list is sorted by
                     something the reader cannot see. */}
                 <span className="pool-inline">
+                  {player.role ? <><Dot /><span>{player.role}</span></> : null}
                   {week === null ? (
                     <>
-                      {projection && player.seasonPoints !== null
-                        ? <><Dot /><span>{player.seasonPoints.toFixed(0)} pts season</span></> : null}
-                      {projection && player.projected !== null
-                        ? <><Dot /><span>{player.projected.toFixed(1)} score</span></> : null}
-                      <Dot /><span>{player.averageScore.toFixed(1)} avg</span>
-                      <Dot /><span>{player.games} GP</span>
+                      {preseason ? null : (
+                        <><Dot /><span>{player.averageScore.toFixed(1)} avg</span>
+                          <Dot /><span>{player.games} GP</span></>
+                      )}
                     </>
                   ) : (
                     <>
@@ -164,21 +174,39 @@ export function Pool({
             </span>
           </span>
 
+          {/* On a phone the ranked numbers keep a column of their own, right-
+              aligned, rather than wrapping into the line under the name. */}
+          {projection && week === null ? (
+            <span className="pool-mfig tnum">
+              <strong aria-label={`${player.seasonPoints?.toFixed(0) ?? "no"} season points`}>
+                {player.seasonPoints === null ? "—" : player.seasonPoints.toFixed(0)}<small> pts</small>
+              </strong>
+              <span aria-label={`Player Score ${player.projected?.toFixed(1) ?? "none"}`}>
+                <small>score </small>{player.projected === null ? "—" : player.projected.toFixed(1)}
+              </span>
+            </span>
+          ) : null}
           <span className="pool-role"><RoleTag role={player.role} /></span>
           {week === null ? (
             <>
               {projection ? (
                 <>
-                  <span className="pool-num r tnum" style={{ fontWeight: 650 }}>
+                  <span className="pool-num r tnum pool-lead" data-stitch={preseason ? "projected" : undefined}>
                     {player.seasonPoints === null ? "—" : player.seasonPoints.toFixed(0)}
                   </span>
-                  <span className="pool-num r faint tnum">{player.projected === null ? "—" : player.projected.toFixed(1)}</span>
+                  <span className="pool-num r tnum" style={{ fontWeight: 600 }}>
+                    {player.projected === null ? "—" : player.projected.toFixed(1)}
+                  </span>
                 </>
               ) : <span className="pool-num r faint tnum">{player.games}</span>}
-              <span className="pool-num r">
-                <Score value={player.averageScore} size="xs" />
-              </span>
-              <span className="pool-total tnum">{player.totalScore.toFixed(1)}</span>
+              {preseason ? null : (
+                <>
+                  <span className="pool-num r">
+                    <Score value={player.averageScore} size="xs" />
+                  </span>
+                  <span className="pool-total tnum">{player.totalScore.toFixed(1)}</span>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -247,7 +275,7 @@ function SortHead({
   return (
     <Link href={href} className="r pool-sort" data-active={isActive || undefined}
           aria-current={isActive ? "true" : undefined}>
-      {label}{isActive ? <span aria-hidden="true"> ↓</span> : null}
+      {label}{isActive ? <Arrow dir="down" size={12} /> : null}
     </Link>
   );
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { AvailabilityStatus, GameState } from "@illini/league";
-import { Glyph, type GlyphName } from "./glyphs.tsx";
+import { Arrow, Glyph, type GlyphName } from "./glyphs.tsx";
 
 /* Small shared parts. Everything here is presentational and takes only what
    the caller already has, so nothing in this file can decide to show a number
@@ -211,7 +211,7 @@ export function SectionHead({
     <div className="sectionhead">
       <h2>{title}</h2>
       {children}
-      {action && href ? <Link href={href}>{action} →</Link> : null}
+      {action && href ? <Link href={href} className="arrowlink">{action} <Arrow /></Link> : null}
     </div>
   );
 }
@@ -220,8 +220,7 @@ export function Empty({
   glyph = "empty", title, children, action,
 }: { glyph?: GlyphName; title: string; children?: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="empty">
-      <span className="glyph"><Glyph name={glyph} size={22} /></span>
+    <div className="empty" data-glyph={glyph}>
       <h3>{title}</h3>
       {children ? <p>{children}</p> : null}
       {action ? <div className="controls">{action}</div> : null}

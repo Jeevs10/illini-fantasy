@@ -71,3 +71,18 @@ export function Glyph({ name, size = 20 }: { name: GlyphName; size?: number }) {
       return <svg {...p}><circle cx="12" cy="12" r="3" /><path d="M12 4v2.4M12 17.6V20M4 12h2.4M17.6 12H20M6.3 6.3l1.7 1.7M16 16l1.7 1.7M17.7 6.3 16 8M8 16l-1.7 1.7" /></svg>;
   }
 }
+
+/**
+ * A drawn arrow in the icon set's stroke, for links and buttons that point
+ * somewhere — never a typed "→", which renders in whatever weight the text
+ * face gives it and matches nothing beside it.
+ */
+export function Arrow({ dir = "right", size = 14 }: { dir?: "right" | "left" | "up" | "down"; size?: number }) {
+  const turn = { right: 0, down: 90, left: 180, up: 270 }[dir];
+  return (
+    <svg {...base} width={size} height={size} aria-hidden="true" className="arrow"
+         style={turn ? { transform: `rotate(${turn}deg)` } : undefined}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}

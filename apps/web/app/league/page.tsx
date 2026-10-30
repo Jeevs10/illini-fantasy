@@ -2,32 +2,34 @@ import Link from "next/link";
 import type {
   CountedGame, LeagueSettings, MatchupView, PendingGame, PlayerAvailability, PlayerWeek, Slot, TeamOutlook,
 } from "@illini/league";
-import { availabilityFor, seasonWeeks, weekMatchups } from "@illini/league";
+import { availabilityFor, seasonSchedule, seasonWeeks, weekMatchups } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { buildSlots } from "../team/slots.ts";
 import { Avatar } from "../ui/identity.tsx";
 import { AvailabilityTag, Empty, ET, LiveTag, Score } from "../ui/bits.tsx";
-import { MatchupCarousel } from "../ui/matchup-carousel.tsx";
-import { ScoreBug, type BugSide } from "../ui/scorebug.tsx";
+import { MatchupList } from "../ui/matchups.tsx";
+import { SeasonLine } from "../ui/seasonline.tsx";
+import { Arrow } from "../ui/glyphs.tsx";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeaguePage({
   searchParams,
-}: { searchParams: Promise<{ date?: string; week?: string }> }) {
-  const { date, week } = await searchParams;
+}: { searchParams: Promise<{ date?: string; week?: string; m?: string }> }) {
+  const { date, week, m: picked } = await searchParams;
   const viewer = await requireViewer();
   const { leagueId, configId, settings, fantasyTeamId } = viewer.membership;
   const now = viewNow();
   const today = viewDate();
 
-  const [matchups, season] = await Promise.all([
+  const [matchups, season, schedule] = await Promise.all([
     weekMatchups(db, {
       leagueId, configId, on: viewDate(date), settings, now,
       week: week ? Number(week) : undefined,
     }),
     seasonWeeks(db, leagueId),
+    seasonSchedule(db, leagueId),
   ]);
 
   if (matchups.length === 0) {
@@ -41,18 +43,15 @@ export default async function LeaguePage({
     );
   }
 
-  // The viewer's own matchup is where the carousel opens rather than a second
-  // copy pinned above it: one matchup on the screen at a time, and the
-  // schedule's order kept around it so stepping left and right is stable.
-  const mineIndex = matchups.findIndex(
-    (m) => m.home.fantasyTeamId === fantasyTeamId || m.away.fantasyTeamId === fantasyTeamId);
+  const mine = matchups.find(
+    (m) => m.home.fantasyTeamId === fantasyTeamId || m.away.fantasyTeamId === fantasyTeamId) ?? null;
+  // The matchup open below the list: the one asked for, else yours, else the first.
+  const open = matchups.find((m) => m.matchupId === Number(picked)) ?? mine ?? matchups[0]!;
   const { week: weekNumber, startsOn, endsOn } = matchups[0]!;
 
-  // Every starter on every side, so the carousel's rosters carry the same
-  // injury notes the viewer's own does. One lookup rather than one per
-  // matchup: the carousel renders all of them on the server anyway.
-  const everyone = matchups
-    .flatMap((m) => [m.home, m.away])
+  // Every player on both sides of the open matchup, so its rosters carry the
+  // same injury notes the viewer's own team page does.
+  const everyone = [open.home, open.away]
     .flatMap((o) => [...o.pending.map((p) => p.playerId), ...o.players.map((p) => p.playerId)]);
   const availability = await availabilityFor(db, [...new Set(everyone)]);
 
@@ -62,48 +61,47 @@ export default async function LeaguePage({
         <div>
           <h1>Week {weekNumber}</h1>
           <p className="meta">
-            <span>{startsOn} &ndash; {endsOn}</span>
+            <span>{span(startsOn, endsOn)}</span>
+            <span>{matchups.length} matchups</span>
           </p>
         </div>
         <nav className="controls" aria-label="Week navigation">
           {weekNumber > (season?.first ?? 1) ? (
-            <Link className="button" href={`/league?week=${weekNumber - 1}`}>← Week {weekNumber - 1}</Link>
+            <Link className="button" href={`/league?week=${weekNumber - 1}`}><Arrow dir="left" /> Week {weekNumber - 1}</Link>
           ) : null}
           {/* A schedule of seventeen weeks should not offer an eighteenth. */}
           {season !== null && weekNumber < season.last ? (
-            <Link className="button" href={`/league?week=${weekNumber + 1}`}>Week {weekNumber + 1} →</Link>
+            <Link className="button" href={`/league?week=${weekNumber + 1}`}>Week {weekNumber + 1} <Arrow /></Link>
           ) : (
             <span className="pill ghost">Last week of the season</span>
           )}
         </nav>
       </div>
 
-      <div className="rise">
-        <MatchupCarousel
-          initialIndex={mineIndex < 0 ? 0 : mineIndex}
-          labels={matchups.map((m, i) => (i === mineIndex
-            ? "Your matchup"
-            : `${m.home.name} v ${m.away.name}`))}
-          items={matchups.map((m, i) => ({
-            id: m.matchupId,
-            node: (
-              <Matchup
-                view={m} today={today} now={now} settings={settings}
-                availability={availability}
-                // Only the viewer's own matchup names a side as theirs. On
-                // everyone else's, neither team is "yours" and the home side
-                // simply goes on the left.
-                fantasyTeamId={i === mineIndex ? fantasyTeamId : null}
-              />
-            ),
-          }))}
-        />
+      <div className="card" style={{ marginBottom: "var(--s-5)" }}>
+        <div className="card-body"><SeasonLine weeks={schedule} today={today} /></div>
       </div>
+
+      <MatchupList
+        matchups={matchups} mineId={fantasyTeamId} today={today} selectedId={open.matchupId}
+        linkTo={(m) => `/league?week=${m.week}&m=${m.matchupId}`}
+      />
+
+      <section aria-label={`${open.home.name} against ${open.away.name}, player by player`}
+               style={{ marginTop: "var(--s-6)" }}>
+        <h2 style={{ marginBottom: "var(--s-3)" }}>{open.home.name} v {open.away.name}, player by player</h2>
+        <Matchup view={open} today={today} now={now} settings={settings} availability={availability}
+                 fantasyTeamId={open === mine ? fantasyTeamId : null} />
+      </section>
     </>
   );
 }
 
-/** One matchup in full: the bug, then both rosters under it. */
+const SPAN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const span = (from: string, to: string) =>
+  `${SPAN.format(new Date(`${from}T00:00:00Z`))} – ${SPAN.format(new Date(`${to}T00:00:00Z`))}`;
+
+/** One matchup in full: both rosters, side by side. */
 function Matchup({
   view, fantasyTeamId, today, now, settings, availability,
 }: {
@@ -129,13 +127,7 @@ function Matchup({
 
   return (
     <>
-      <ScoreBug
-        week={view.week} startsOn={view.startsOn} endsOn={view.endsOn}
-        settled={view.settled} today={today}
-        home={bug(view.home, fantasyTeamId)}
-        away={bug(view.away, fantasyTeamId)}
-      />
-      <div className="rosters" style={{ marginTop: "var(--s-4)" }}>
+      <div className="rosters">
         <RosterPanel side={left} mine={left.fantasyTeamId === fantasyTeamId} projecting={projecting}
                      now={now} settings={settings} availability={availability} />
         <RosterPanel side={right} mine={right.fantasyTeamId === fantasyTeamId} projecting={projecting}
@@ -143,24 +135,6 @@ function Matchup({
       </div>
     </>
   );
-}
-
-function bug(o: MatchupView["home"], mineId: number | null): BugSide {
-  return {
-    fantasyTeamId: o.fantasyTeamId, name: o.name,
-    total: o.total, projected: o.projected,
-    gamesPlayed: o.gamesPlayed,
-    live: o.live, upcoming: o.upcoming,
-    pendingSlots: bySlot(o.pending),
-    mine: o.fantasyTeamId === mineId,
-  };
-}
-
-/** Still-to-play games, grouped by slot for the "N to play" breakdown. */
-function bySlot(pending: TeamOutlook["pending"]): { slot: string; count: number }[] {
-  const counts = new Map<string, number>();
-  for (const p of pending) counts.set(p.slot, (counts.get(p.slot) ?? 0) + 1);
-  return [...counts.entries()].map(([slot, count]) => ({ slot, count }));
 }
 
 /**
@@ -234,12 +208,17 @@ function RosterPanel({
           * without being told which number is which. */}
         <span style={{ textAlign: "right", flex: "none" }}>
           <div className="eyebrow">Score</div>
-          <Score value={side.total} size="lg" tone={mine ? "accent" : "default"} />
-          <div className="faint tnum" style={{ fontSize: "var(--t-xs)", marginTop: 1 }}>
-            {toPlay > 0 ? <>proj <strong>{side.projected.toFixed(1)}</strong></>
-              : side.gamesPlayed > 0 ? "final"
-              : /* A week nobody played is not final; it is empty. */ "\u2014"}
-          </div>
+          {/* A side with nobody on it has no score to show, not a zero. */}
+          {side.players.length === 0 && side.pending.length === 0 && side.total === 0
+            ? <span className="score score-lg" style={{ color: "var(--ink-3)" }}>&mdash;</span>
+            : <Score value={side.total} size="lg" tone={mine ? "accent" : "default"} />}
+          {side.players.length === 0 && side.pending.length === 0 && side.total === 0 ? null : (
+            <div className="faint tnum" style={{ fontSize: "var(--t-xs)", marginTop: 1 }}>
+              {toPlay > 0 ? <>proj <strong>{side.projected.toFixed(1)}</strong></>
+                : side.gamesPlayed > 0 ? "final"
+                : /* A week nobody played is not final; it is empty. */ "\u2014"}
+            </div>
+          )}
         </span>
       </div>
 

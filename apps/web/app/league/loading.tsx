@@ -1,11 +1,11 @@
-import { SkelHead, SkelBug, SkelRows } from "../ui/skeleton.tsx";
+import { SkelHead, SkelMatchups, SkelRows } from "../ui/skeleton.tsx";
 
 export default function Loading() {
   return (
     <>
       <SkelHead />
-      <SkelBug />
-      <div className="panel"><SkelRows count={8} /></div>
+      <SkelMatchups />
+      <div className="panel" style={{ marginTop: "var(--s-6)" }}><SkelRows count={8} /></div>
     </>
   );
 }

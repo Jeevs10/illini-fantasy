@@ -12,6 +12,7 @@ import { DayStrip, periodDays } from "./daystrip.tsx";
 import { NextLock } from "./nextlock.tsx";
 import { Avatar } from "../ui/identity.tsx";
 import { Empty, LiveTag, Score } from "../ui/bits.tsx";
+import { Arrow } from "../ui/glyphs.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -97,14 +98,8 @@ export default async function TeamPage({
               </p>
             </div>
           </div>
-          <nav className="controls" aria-label="Week navigation">
-            {period.week > (season?.first ?? 1) ? (
-              <Link className="button" href={`/team?week=${period.week - 1}`}>← Week {period.week - 1}</Link>
-            ) : null}
-            {season !== null && period.week < season.last ? (
-              <Link className="button" href={`/team?week=${period.week + 1}`}>Week {period.week + 1} →</Link>
-            ) : null}
-            <Link className="button" href="/waivers">Add or drop</Link>
+          <nav className="controls" aria-label="Team actions">
+            <Link className={`button${held < activeLimit(settings) ? " primary" : ""}`} href="/waivers">Add or drop</Link>
             <Link className="button" href="/league">Matchup</Link>
           </nav>
         </div>
@@ -114,7 +109,7 @@ export default async function TeamPage({
         <div className="panel">
           <div className="panel-head">
             <div>
-              <div className="eyebrow">Week {period.week} · {span(period.startsOn, period.endsOn)}</div>
+              <h2>Week {period.week} <span className="faint" style={{ fontWeight: 500 }}>· {span(period.startsOn, period.endsOn)}</span></h2>
               <div className="row" style={{ gap: "var(--s-2)", marginTop: 2 }}>
                 <Score value={scored} size="md" />
                 {projectedWeek > scored + 0.05 ? (
@@ -127,15 +122,31 @@ export default async function TeamPage({
                 </span>
               </div>
             </div>
+            {/* Stepping through weeks is reading, not the page's job: small, by the week it moves. */}
+            <nav className="weekstep" aria-label="Week navigation">
+              {period.week > (season?.first ?? 1) ? (
+                <Link className="button sm" href={`/team?week=${period.week - 1}`}><Arrow dir="left" /> Week {period.week - 1}</Link>
+              ) : null}
+              {season !== null && period.week < season.last ? (
+                <Link className="button sm" href={`/team?week=${period.week + 1}`}>Week {period.week + 1} <Arrow /></Link>
+              ) : null}
+            </nav>
           </div>
           <p className="sethelp panel-note">
             No lineup to set. Everyone on the roster at Sunday&rsquo;s lock scores every
             game through Saturday; moves made now count from {nextLock}.
           </p>
-          <EveryoneWeek
-            nextLock={nextLock}
-            rows={week.map((p) => ({ ...p, availability: availability.get(p.playerId) }))}
-          />
+          {held === 0 ? (
+            <Empty title="Your roster is empty"
+                   action={<Link className="button primary" href="/players?free=1">Browse free agents</Link>}>
+              Anyone added now scores from the next lock, {nextLock}.
+            </Empty>
+          ) : (
+            <EveryoneWeek
+              nextLock={nextLock}
+              rows={week.map((p) => ({ ...p, availability: availability.get(p.playerId) }))}
+            />
+          )}
         </div>
       </>
     );
@@ -221,10 +232,10 @@ export default async function TeamPage({
         </div>
         <nav className="controls" aria-label="Week navigation">
           {period.week > (season?.first ?? 1) ? (
-            <Link className="button" href={`/team?week=${period.week - 1}`}>← Week {period.week - 1}</Link>
+            <Link className="button" href={`/team?week=${period.week - 1}`}><Arrow dir="left" /> Week {period.week - 1}</Link>
           ) : null}
           {season !== null && period.week < season.last ? (
-            <Link className="button" href={`/team?week=${period.week + 1}`}>Week {period.week + 1} →</Link>
+            <Link className="button" href={`/team?week=${period.week + 1}`}>Week {period.week + 1} <Arrow /></Link>
           ) : null}
           <Link className="button" href="/waivers">Add or drop</Link>
           <Link className="button" href="/league">Matchup</Link>

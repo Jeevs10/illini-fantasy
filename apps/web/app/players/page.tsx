@@ -7,7 +7,7 @@ import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Pool, type PoolRow } from "./pool.tsx";
 import { WeekPicker } from "./weekpicker.tsx";
-import { Glyph } from "../ui/glyphs.tsx";
+import { Arrow, Glyph } from "../ui/glyphs.tsx";
 import { Empty, RoleGlossary, SubTabs } from "../ui/bits.tsx";
 
 export const dynamic = "force-dynamic";
@@ -205,13 +205,13 @@ export default async function PlayersPage({
 
       <nav className="controls" aria-label="Pages">
         {offset > 0 ? (
-          <Link className="button" href={query({ page: String(offset / PAGE - 1) })}>← Previous</Link>
+          <Link className="button" href={query({ page: String(offset / PAGE - 1) })}><Arrow dir="left" /> Previous</Link>
         ) : null}
         <span className="faint" style={{ fontSize: "var(--t-sm)" }}>
           {offset + 1}–{offset + rows.length}
         </span>
         {hasMore ? (
-          <Link className="button" href={query({ page: String(offset / PAGE + 1) })}>Next →</Link>
+          <Link className="button" href={query({ page: String(offset / PAGE + 1) })}>Next <Arrow /></Link>
         ) : null}
       </nav>
     </>

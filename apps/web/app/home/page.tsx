@@ -1,18 +1,19 @@
 import Link from "next/link";
 import {
   availabilityFor, claimsFor, eligibleSlots, gameState, leagueActivity, listTrades,
-  activeLimit, draftFor, rankedStandings, rosterOn, scoresOn, startableOn, weekMatchups,
-  type PlayerAvailability, type Slot, type Startable, type TeamOutlook,
+  activeLimit, draftFor, rankedStandings, rosterOn, scoresOn, seasonSchedule, startableOn, weekMatchups,
+  type PlayerAvailability, type Slot, type Startable,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
-import { Avatar } from "../ui/identity.tsx";
 import { Glyph } from "../ui/glyphs.tsx";
-import { AvailabilityTag, Bar, Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
+import { AvailabilityTag, Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
 import { Dot, PlayerRow } from "../ui/playerrow.tsx";
-import { ScoreBug, type BugSide } from "../ui/scorebug.tsx";
-import { MatchupCarousel } from "../ui/matchup-carousel.tsx";
 import { ActivityFeed } from "../ui/activity.tsx";
+import { MatchupList } from "../ui/matchups.tsx";
+import { Rafters, type RafterTeam } from "../ui/rafters.tsx";
+import { SeasonLine } from "../ui/seasonline.tsx";
+import { Arrow } from "../ui/glyphs.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +29,8 @@ export default async function HomePage() {
   const now = viewNow();
 
   const matchups = await weekMatchups(db, { leagueId, configId, on: day, settings, now });
-  const mine = matchups.find(
-    (m) => m.home.fantasyTeamId === fantasyTeamId || m.away.fantasyTeamId === fantasyTeamId);
 
-  const [tonight, standingsTable, trades, claims, roster, activity, draft] = await Promise.all([
+  const [tonight, standingsTable, trades, claims, roster, activity, draft, schedule] = await Promise.all([
     fantasyTeamId === null ? [] : startableOn(db, { fantasyTeamId, day, configId, now }),
     rankedStandings(db, leagueId),
     fantasyTeamId === null ? [] : listTrades(db, { leagueId, involving: fantasyTeamId, limit: 6 }),
@@ -39,14 +38,13 @@ export default async function HomePage() {
     fantasyTeamId === null ? [] : rosterOn(db, fantasyTeamId, day),
     leagueActivity(db, { leagueId, limit: 8 }),
     draftFor(db, leagueId),
+    seasonSchedule(db, leagueId),
   ]);
 
   const availability = await availabilityFor(db, tonight.map((p) => p.playerId));
   const tonightScores = fantasyTeamId === null
     ? new Map<number, number>() : await scoresOn(db, { fantasyTeamId, day, configId });
-  const outlooks: [TeamOutlook, TeamOutlook] | null = mine ? [mine.home, mine.away] : null;
 
-  const others = matchups.filter((m) => m !== mine);
   const seat = standingsTable.find((r) => r.fantasyTeamId === fantasyTeamId) ?? null;
   const offers = trades.filter((t) => t.status === "proposed" && t.to.fantasyTeamId === fantasyTeamId);
   const pendingClaims = claims.filter((c) => c.status === "pending");
@@ -56,14 +54,33 @@ export default async function HomePage() {
   const held = roster.filter((p) => !p.reserve).length;
   const teamLabel = everyone ? "My team" : "Set lineup";
 
+  const week = matchups[0] ?? null;
+  const before = week !== null && week.startsOn > day;
+  const rafters: RafterTeam[] = standingsTable.map((r) => ({
+    fantasyTeamId: r.fantasyTeamId, name: r.name, rank: r.rank, wins: r.wins, losses: r.losses,
+    ties: r.ties, pointsFor: r.pointsFor, mine: r.fantasyTeamId === fantasyTeamId,
+  }));
+
   return (
     <>
       <div className="pagehead">
         <div>
-          <h1>{fantasyTeamName ?? leagueName}</h1>
+          <h1>{leagueName}</h1>
           <p className="meta">
-            <span>{leagueName}</span>
-            {seat ? <span>{seat.wins}&ndash;{seat.losses}{seat.ties ? `–${seat.ties}` : ""} · {ordinal(seat.rank)}</span> : null}
+            {week ? (
+              <span>
+                Week {week.week} · {span(week.startsOn, week.endsOn)}
+                {before ? ` · starts ${weekday(week.startsOn)}` : ""}
+              </span>
+            ) : null}
+            {fantasyTeamName ? (
+              <span>
+                {fantasyTeamName}
+                {seat ? ` · ${seat.wins}–${seat.losses}${seat.ties ? `–${seat.ties}` : ""}` : ""}
+                {/* Rank means nothing until a week settles — the banners agree. */}
+                {seat && standingsTable.some((r) => r.wins + r.losses + r.ties > 0) ? ` · ${ordinal(seat.rank)}` : ""}
+              </span>
+            ) : null}
             <span>{held} of {activeLimit(settings)} rostered</span>
           </p>
         </div>
@@ -79,72 +96,64 @@ export default async function HomePage() {
         <p className={`notice ${draft.status === "live" ? "good" : ""}`} style={{ marginBottom: "var(--s-4)" }}>
           {draft.status === "live" ? "The draft is live." : draft.status === "paused" ? "The draft is paused."
             : "The draft is set up and waiting to start."}{" "}
-          <Link href="/draft">Go to the draft room →</Link>
+          <Link href="/draft" className="arrowlink">Go to the draft room <Arrow /></Link>
         </p>
       ) : null}
 
-      {mine && outlooks ? (
-        <div style={{ marginBottom: "var(--s-5)" }} className="rise">
-          <ScoreBug
-            week={mine.week}
-            startsOn={mine.startsOn}
-            endsOn={mine.endsOn}
-            settled={mine.settled}
-            today={day}
-            href="/league"
-            home={bug(mine.home.fantasyTeamId, mine.home.name, outlooks[0], fantasyTeamId)}
-            away={bug(mine.away.fantasyTeamId, mine.away.name, outlooks[1], fantasyTeamId)}
-          />
-        </div>
-      ) : (
-        <div className="panel">
-          <Empty title="No matchup this week"
-                 action={<Link className="button" href="/league">Open the league</Link>}>
-            This league has no scheduled matchup covering {day}. A commissioner
-            generates the schedule once every team has an owner.
-          </Empty>
-        </div>
-      )}
+      <Rafters teams={rafters} />
 
       <div className="split">
         <div>
-          <SectionHead title="Tonight" action={teamLabel} href="/team">
-            <span className="spacer" />
-          </SectionHead>
-          <div className="panel">
-            <Tonight players={tonight} scores={tonightScores} now={now} settings={settings} availability={availability}
-                     everyone={everyone} rostered={roster.length} />
-          </div>
+          {/* Before a roster exists, filling it is the only thing that will
+              ever score — so it leads, ahead of a week of zeros. */}
+          {fantasyTeamId !== null && held === 0 ? (
+            <section className="nextup" aria-labelledby="nextup-h">
+              <h2 id="nextup-h">Fill your roster</h2>
+              <p>
+                {activeLimit(settings)} open spots. Everyone on the roster at Sunday&rsquo;s lock scores
+                every game they play that week.
+              </p>
+              <div className="controls">
+                <Link className="button primary" href="/players?free=1">Browse free agents</Link>
+                {draft && draft.status !== "complete" ? <Link className="button" href="/draft">Draft room</Link> : null}
+              </div>
+            </section>
+          ) : null}
 
-          <SectionHead title="Around the league" action="All matchups" href="/league" />
-          {others.length === 0 ? (
+          <SectionHead title={week ? `Week ${week.week}` : "This week"} action="All matchups" href="/league" />
+          {matchups.length === 0 ? (
             <div className="panel">
-              <Empty title="Nothing else on" glyph="matchup">
-                Every other matchup this week is yours.
+              <Empty title="No matchups this week"
+                     action={<Link className="button" href="/league">Open the league</Link>}>
+                The schedule has nothing covering {day}. A commissioner generates it once every team has an owner.
               </Empty>
             </div>
           ) : (
-            <MatchupCarousel
-              items={others.map((m) => ({
-                id: m.matchupId,
-                node: (
-                  <ScoreBug
-                    week={m.week}
-                    startsOn={m.startsOn}
-                    endsOn={m.endsOn}
-                    settled={m.settled}
-                            today={day}
-                    href="/league"
-                    home={bug(m.home.fantasyTeamId, m.home.name, m.home, fantasyTeamId)}
-                    away={bug(m.away.fantasyTeamId, m.away.name, m.away, fantasyTeamId)}
-                  />
-                ),
-              }))}
-            />
+            <MatchupList matchups={matchups} mineId={fantasyTeamId} today={day} />
           )}
+
+          {held > 0 ? (
+            <>
+              <SectionHead title="Tonight" action={teamLabel} href="/team" />
+              <div className="panel">
+                <Tonight players={tonight} scores={tonightScores} now={now} settings={settings} availability={availability}
+                         everyone={everyone} rostered={held} />
+              </div>
+            </>
+          ) : null}
         </div>
 
         <div className="stack">
+          {schedule.length > 0 ? (
+            <div className="card">
+              <div className="card-head">
+                <h2>The season</h2>
+                <Link href="/standings" className="card-link arrowlink">Standings <Arrow /></Link>
+              </div>
+              <div className="card-body"><SeasonLine weeks={schedule} today={day} /></div>
+            </div>
+          ) : null}
+
           <Attention
             tonight={tonight}
             settings={settings}
@@ -159,47 +168,6 @@ export default async function HomePage() {
 
           <div className="card">
             <div className="card-head">
-              <h2>Standings</h2>
-              <Link href="/standings" style={{ fontSize: "var(--t-sm)", fontWeight: 600, color: "var(--ink-2)", textDecoration: "none" }}>
-                Full table →
-              </Link>
-            </div>
-            {standingsTable.every((r) => r.wins + r.losses + r.ties === 0) ? (
-              <Empty title="Nothing settled yet" glyph="league">
-                The table fills in as weeks settle.
-              </Empty>
-            ) : (
-              standingsTable.slice(0, 6).map((row) => (
-                <Link key={row.fantasyTeamId} href={`/teams/${row.fantasyTeamId}`}
-                      style={{ textDecoration: "none", color: "inherit", display: "block" }}>
-                  <PlayerRow
-                    name={row.name}
-                    mine={row.fantasyTeamId === fantasyTeamId}
-                    lead={
-                      <>
-                        <span className="faint tnum" style={{ width: "1.5ch", textAlign: "right", fontSize: "var(--t-sm)" }}>{row.rank}</span>
-                        <Avatar name={row.name} seed={row.fantasyTeamId} size="sm" mine={row.fantasyTeamId === fantasyTeamId} />
-                      </>
-                    }
-                    meta={<span>{row.wins}&ndash;{row.losses}{row.ties ? `–${row.ties}` : ""}</span>}
-                    right={
-                      <>
-                        {row.movement !== null && row.movement !== 0 ? (
-                          <span className="delta" data-dir={row.movement > 0 ? "up" : "down"}>
-                            {row.movement > 0 ? "↑" : "↓"}{Math.abs(row.movement)}
-                          </span>
-                        ) : null}
-                        <span className="score score-xs" style={{ color: "var(--ink-2)" }}>{row.pointsFor.toFixed(0)}</span>
-                      </>
-                    }
-                  />
-                </Link>
-              ))
-            )}
-          </div>
-
-          <div className="card">
-            <div className="card-head">
               <h2>League activity</h2>
               <span className="pill ghost">{activity.length}</span>
             </div>
@@ -207,28 +175,15 @@ export default async function HomePage() {
           </div>
         </div>
       </div>
-
     </>
   );
 }
 
-function bug(id: number, name: string, o: TeamOutlook, mineId: number | null): BugSide {
-  return {
-    fantasyTeamId: id, name,
-    total: o.total, projected: o.projected,
-    gamesPlayed: o.gamesPlayed,
-    live: o.live, upcoming: o.upcoming,
-    pendingSlots: bySlot(o.pending),
-    mine: id === mineId,
-  };
-}
-
-/** Still-to-play games, grouped by slot for the "N to play" breakdown. */
-function bySlot(pending: TeamOutlook["pending"]): { slot: string; count: number }[] {
-  const counts = new Map<string, number>();
-  for (const p of pending) counts.set(p.slot, (counts.get(p.slot) ?? 0) + 1);
-  return [...counts.entries()].map(([slot, count]) => ({ slot, count }));
-}
+const SPAN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const span = (from: string, to: string) =>
+  `${SPAN.format(new Date(`${from}T00:00:00Z`))} – ${SPAN.format(new Date(`${to}T00:00:00Z`))}`;
+const weekday = (iso: string) => WEEKDAY.format(new Date(`${iso}T00:00:00Z`));
 
 const ordinal = (n: number) =>
   `${n}${["th", "st", "nd", "rd"][(n % 100 - n % 10 !== 10 ? n % 10 : 0)] ?? "th"}`;

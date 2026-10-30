@@ -6,6 +6,7 @@ import type { QueuedPlayer } from "@illini/league";
 import { moveQueued, unqueuePlayer, type DraftState } from "./actions.ts";
 import { RoleTag } from "../ui/bits.tsx";
 import { playerPath } from "../../lib/links.ts";
+import { Arrow } from "../ui/glyphs.tsx";
 
 /**
  * The list the clock reads when you are not here.
@@ -61,7 +62,7 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
                     <form action={submitMove}>
                       <input type="hidden" name="playerId" value={player.playerId} />
                       <input type="hidden" name="direction" value="up" />
-                      <button type="submit" aria-label={`Move ${player.name} up`} disabled={i === 0}>↑</button>
+                      <button type="submit" aria-label={`Move ${player.name} up`} disabled={i === 0}><Arrow dir="up" size={14} /></button>
                     </form>
                     <form action={submitMove}>
                       <input type="hidden" name="playerId" value={player.playerId} />
@@ -70,7 +71,7 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
                         type="submit"
                         aria-label={`Move ${player.name} down`}
                         disabled={i === players.length - 1}
-                      >↓</button>
+                      ><Arrow dir="down" size={14} /></button>
                     </form>
                     <form action={submitRemove}>
                       <input type="hidden" name="playerId" value={player.playerId} />

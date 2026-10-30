@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { safeNext, sessionUser } from "../../lib/auth.ts";
 import { SignInForm } from "./form.tsx";
+import { BlockI } from "../ui/blocki.tsx";
 
 export default async function SignIn({
   searchParams,
@@ -15,7 +16,7 @@ export default async function SignIn({
   return (
     <div className="narrow">
       <div className="signin-brand">
-        <span className="mark" aria-hidden="true">IF</span>
+        <BlockI size={44} />
         <div>
           <h1>Illini Fantasy Hoops</h1>
           <p className="faint" style={{ fontSize: "var(--t-sm)", marginTop: 2 }}>

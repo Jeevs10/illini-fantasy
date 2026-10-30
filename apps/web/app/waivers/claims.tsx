@@ -6,6 +6,7 @@ import type { Claim } from "@illini/league";
 import { reorder, withdraw, type WaiverActionState } from "./actions.ts";
 import { Empty } from "../ui/bits.tsx";
 import { playerPath } from "../../lib/links.ts";
+import { Arrow } from "../ui/glyphs.tsx";
 
 export type ClaimRow = Claim & { runsLabel: string };
 
@@ -61,7 +62,7 @@ export function Claims({ pending, settled }: { pending: ClaimRow[]; settled: Cla
                 <form action={submitMove}>
                   <input type="hidden" name="claimId" value={claim.id} />
                   <input type="hidden" name="direction" value="up" />
-                  <button type="submit" aria-label={`Move the ${claim.playerName} claim up`} disabled={i === 0}>↑</button>
+                  <button type="submit" aria-label={`Move the ${claim.playerName} claim up`} disabled={i === 0}><Arrow dir="up" size={14} /></button>
                 </form>
                 <form action={submitMove}>
                   <input type="hidden" name="claimId" value={claim.id} />
@@ -70,7 +71,7 @@ export function Claims({ pending, settled }: { pending: ClaimRow[]; settled: Cla
                     type="submit"
                     aria-label={`Move the ${claim.playerName} claim down`}
                     disabled={i === pending.length - 1}
-                  >↓</button>
+                  ><Arrow dir="down" size={14} /></button>
                 </form>
                 <form action={submitWithdraw}>
                   <input type="hidden" name="claimId" value={claim.id} />

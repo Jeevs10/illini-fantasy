@@ -3,7 +3,9 @@ import { rankedStandings } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer } from "../../lib/session.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { Bar, Empty, Score, SubTabs } from "../ui/bits.tsx";
+import { SubTabs } from "../ui/bits.tsx";
+import { Rafters } from "../ui/rafters.tsx";
+import { Arrow } from "../ui/glyphs.tsx";
 
 const VIEWS = [{ href: "/standings", label: "Standings" }, { href: "/playoffs", label: "Playoffs" }];
 
@@ -14,13 +16,6 @@ export default async function StandingsPage() {
   const { leagueId, leagueName, fantasyTeamId } = viewer.membership;
   const table = await rankedStandings(db, leagueId);
   const played = table.reduce((a, r) => a + r.wins + r.losses + r.ties, 0);
-  const topPoints = Math.max(...table.map((r) => r.pointsFor), 0);
-  // Scaled from just under the lowest total rather than from zero: ten teams
-  // inside a hundred points of each other all read as full bars against a zero
-  // baseline, which is a chart that says nothing.
-  const floorPoints = Math.min(...table.map((r) => r.pointsFor), 0) * 0.985;
-  const share = (pf: number) =>
-    topPoints <= floorPoints ? 0 : Math.max(3, ((pf - floorPoints) / (topPoints - floorPoints)) * 100);
   const moved = table.some((r) => r.movement !== null);
 
   return (
@@ -30,7 +25,7 @@ export default async function StandingsPage() {
           <h1>Standings</h1>
           <p className="meta">
             <span>{leagueName}</span>
-            <span>Settled weeks only</span>
+            <span>{played === 0 ? "No week settled yet" : "Settled weeks only"}</span>
             {moved ? <span>Movement since last week</span> : null}
           </p>
         </div>
@@ -40,75 +35,66 @@ export default async function StandingsPage() {
         </div>
       </div>
 
+      <Rafters teams={table.map((r) => ({
+        fantasyTeamId: r.fantasyTeamId, name: r.name, rank: r.rank, wins: r.wins, losses: r.losses,
+        ties: r.ties, pointsFor: r.pointsFor, mine: r.fantasyTeamId === fantasyTeamId,
+      }))} />
+
       <div className="panel">
-        {played === 0 ? (
-          <Empty title="Nothing settled yet" glyph="league"
-                 action={<Link className="button" href="/league">Watch the week</Link>}>
-            The table fills in once Week 1 settles. Until then, follow the week
-            as it&rsquo;s played.
-          </Empty>
-        ) : (
-          <>
-            <div className="stand-head" aria-hidden="true">
-              <span>#</span><span>Team</span><span>Record</span>
-              <span>Points for</span><span className="r">PA</span><span className="r">Diff</span>
-            </div>
-            {table.map((row) => {
-              const diff = row.pointsFor - row.pointsAgainst;
-              const mine = row.fantasyTeamId === fantasyTeamId;
-              return (
-                <div className="stand-row" key={row.fantasyTeamId} data-mine={mine || undefined}>
-                  <span className="stand-rank">
-                    <span className="tnum">{row.rank}</span>
-                    {row.movement !== null && row.movement !== 0 ? (
-                      <span className="delta" data-dir={row.movement > 0 ? "up" : "down"}>
-                        {row.movement > 0 ? "↑" : "↓"}{Math.abs(row.movement)}
+        <div className="scroll">
+          <table className="standtable">
+            <caption className="sr-only">League standings</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="r">#</th>
+                <th scope="col">Team</th>
+                <th scope="col" className="r">Record</th>
+                <th scope="col" className="r">Points for</th>
+                <th scope="col" className="r">Against</th>
+                <th scope="col" className="r">Diff</th>
+              </tr>
+            </thead>
+            <tbody>
+              {table.map((row) => {
+                const diff = row.pointsFor - row.pointsAgainst;
+                const mine = row.fantasyTeamId === fantasyTeamId;
+                return (
+                  <tr key={row.fantasyTeamId} data-mine={mine || undefined}>
+                    <td className="r tnum">
+                      {played === 0 ? "—" : row.rank}
+                      {row.movement !== null && row.movement !== 0 ? (
+                        <span className="delta" data-dir={row.movement > 0 ? "up" : "down"}
+                              aria-label={`${row.movement > 0 ? "up" : "down"} ${Math.abs(row.movement)}`}>
+                          {" "}<Arrow dir={row.movement > 0 ? "up" : "down"} size={12} />{Math.abs(row.movement)}
+                        </span>
+                      ) : null}
+                    </td>
+                    <th scope="row">
+                      <span className="row" style={{ gap: "var(--s-3)", flexWrap: "nowrap" }}>
+                        <Avatar name={row.name} seed={row.fantasyTeamId} size="sm" mine={mine} />
+                        <Link href={`/teams/${row.fantasyTeamId}`} className="player-link">{row.name}</Link>
+                        {mine ? <span className="pill mine">You</span> : null}
                       </span>
-                    ) : row.movement === 0 ? (
-                      <span className="delta" data-dir="flat" aria-label="unchanged">—</span>
-                    ) : null}
-                  </span>
-
-                  <span className="plr-lead" style={{ minWidth: 0 }}>
-                    <Avatar name={row.name} seed={row.fantasyTeamId} size="sm" mine={mine} />
-                    <span className="plr-id">
-                      <Link href={`/teams/${row.fantasyTeamId}`} className="plr-name">
-                        {row.name}{mine ? <span className="pill mine" style={{ marginLeft: "var(--s-2)" }}>You</span> : null}
-                      </Link>
-                      <span className="plr-sub stand-inline">
-                        <span>{row.wins}&ndash;{row.losses}{row.ties ? `–${row.ties}` : ""}</span>
-                        <span className="dot" />
-                        <span>{row.pointsFor.toFixed(1)} PF</span>
-                      </span>
-                    </span>
-                  </span>
-
-                  <span className="stand-rec">
-                    <strong className="tnum">{row.wins}&ndash;{row.losses}{row.ties ? `–${row.ties}` : ""}</strong>
-                  </span>
-
-                  <span className="stand-pf">
-                    <Score value={row.pointsFor} size="xs" />
-                    <Bar percent={share(row.pointsFor)} />
-                  </span>
-
-                  <span className="r faint tnum" style={{ fontSize: "var(--t-sm)" }}>
-                    {row.pointsAgainst.toFixed(1)}
-                  </span>
-
-                  <span className="r delta" data-dir={diff > 0 ? "up" : diff < 0 ? "down" : "flat"}>
-                    {diff > 0 ? "+" : ""}{diff.toFixed(1)}
-                  </span>
-                </div>
-              );
-            })}
-            <p className="seatless">
-              Ties are broken by points for. Movement compares this table with
-              the one that stood a settled week ago, and is absent until there
-              are two weeks to compare.
-            </p>
-          </>
-        )}
+                    </th>
+                    <td className="r tnum" style={{ fontWeight: 700 }}>
+                      {row.wins}&ndash;{row.losses}{row.ties ? `–${row.ties}` : ""}
+                    </td>
+                    <td className="r tnum" style={{ fontWeight: 700 }}>{row.pointsFor.toFixed(1)}</td>
+                    <td className="r tnum faint">{row.pointsAgainst.toFixed(1)}</td>
+                    <td className="r tnum delta" data-dir={diff > 0 ? "up" : diff < 0 ? "down" : "flat"}>
+                      {diff > 0 ? "+" : ""}{diff.toFixed(1)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="seatless">
+          {played === 0
+            ? "The order fills in once Week 1 settles."
+            : "Ties are broken by points for. Movement compares this table with the one a settled week ago."}
+        </p>
       </div>
     </>
   );

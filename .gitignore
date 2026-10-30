@@ -9,3 +9,7 @@ tsconfig.tsbuildinfo
 .next/
 next-env.d.ts
 .vercel
+
+# Impeccable runtime state and review screenshots
+apps/web/.impeccable/live/
+apps/web/.impeccable/review/

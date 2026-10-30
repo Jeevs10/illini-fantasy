@@ -6,7 +6,7 @@ import {
 import { GAME_CONFIG, type BlockName } from "@illini/scoring";
 import { Avatar } from "../../ui/identity.tsx";
 import { AvailabilityTag, Bar, Empty, ET, Score, StatTile } from "../../ui/bits.tsx";
-import { Glyph } from "../../ui/glyphs.tsx";
+import { Arrow, Glyph } from "../../ui/glyphs.tsx";
 import { dataPlayerUrl, schoolPath } from "../../../lib/links.ts";
 
 /** "83rd", "1st" — English ordinals, for a percentile read as a rank rather
@@ -79,7 +79,7 @@ export function Hero({ card, outlook, linkAway }: { card: PlayerCard; outlook?: 
             Prospect Analyzer <Glyph name="external" size={13} />
           </a>
         ) : null}
-        {linkAway ? <Link className="button sm" href={linkAway}>← All players</Link> : null}
+        {linkAway ? <Link className="button sm" href={linkAway}><Arrow dir="left" /> All players</Link> : null}
       </div>
     </section>
   );
@@ -202,7 +202,10 @@ const day = (iso: string) => DAY.format(new Date(`${iso}T00:00:00Z`));
 export function ProjectionSection({ outlook, week }: { outlook: PlayerOutlook; week: WeekProjection }) {
   const { latest, history, upcoming } = outlook;
   if (!latest && upcoming.length === 0) return null;
-  const peak = Math.max(1, ...upcoming.map((g) => g.projected));
+  // Each game against his own typical night: the opponent and the pace move a
+  // projection a point or two, and that difference is the read, not the size.
+  const playing = upcoming.filter((g) => !g.listedOut);
+  const typical = playing.length === 0 ? 0 : playing.reduce((x, g) => x + g.projected, 0) / playing.length;
   return (
     <div className="panel">
       <div className="panel-head">
@@ -274,8 +277,10 @@ export function ProjectionSection({ outlook, week }: { outlook: PlayerOutlook; w
                     : g.opponent ?? "TBD"}
                   {g.site === "neutral" ? <span className="faint"> · neutral</span> : null}
                 </span>
-                <Bar percent={(g.projected / peak) * 100} tone={g.listedOut ? "quiet" : undefined}
-                     label={`${g.projected.toFixed(1)} projected`} />
+                <span className="slate-vs tnum" data-dir={g.listedOut ? "flat"
+                  : g.projected - typical >= 0.05 ? "up" : g.projected - typical <= -0.05 ? "down" : "flat"}>
+                  {g.listedOut ? "" : `${g.projected - typical >= 0 ? "+" : "−"}${Math.abs(g.projected - typical).toFixed(1)} vs typical`}
+                </span>
                 <span className="slate-val tnum">{g.listedOut ? "Out" : g.projected.toFixed(1)}</span>
               </li>
             ))}

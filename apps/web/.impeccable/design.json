@@ -1,0 +1,564 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-30T00:00:00Z",
+  "title": "Design System: Illini Fantasy Hoops",
+  "extensions": {
+    "colorMeta": {
+      "arena-navy": {
+        "role": "neutral",
+        "displayName": "Arena Navy",
+        "tonalRamp": [
+          "#182235",
+          "#243A61",
+          "#2C5090",
+          "#3065C5",
+          "#5C86D1",
+          "#8EA8D7",
+          "#BFCCE4",
+          "#EEF1F6"
+        ]
+      },
+      "deep-navy": {
+        "role": "neutral",
+        "displayName": "Deep Navy",
+        "tonalRamp": [
+          "#172136",
+          "#223862",
+          "#2A4D93",
+          "#2C60C8",
+          "#5982D4",
+          "#8CA6D9",
+          "#BECBE4",
+          "#EEF1F6"
+        ]
+      },
+      "sunken-well": {
+        "role": "neutral",
+        "displayName": "Sunken Well",
+        "tonalRamp": [
+          "#182235",
+          "#253A60",
+          "#2D508F",
+          "#3265C3",
+          "#5D86D0",
+          "#8EA8D7",
+          "#BFCCE3",
+          "#EEF1F6"
+        ]
+      },
+      "illini-felt": {
+        "role": "neutral",
+        "displayName": "Illini Felt",
+        "tonalRamp": [
+          "#182334",
+          "#253C5F",
+          "#2E548F",
+          "#336BC2",
+          "#5E8ACF",
+          "#8FABD6",
+          "#BFCDE3",
+          "#EEF1F6"
+        ]
+      },
+      "felt-head": {
+        "role": "neutral",
+        "displayName": "Felt Head",
+        "tonalRamp": [
+          "#182334",
+          "#253B5F",
+          "#2E528E",
+          "#3368C1",
+          "#5F88CE",
+          "#8FAAD6",
+          "#BFCDE3",
+          "#EEF1F6"
+        ]
+      },
+      "raised-felt": {
+        "role": "neutral",
+        "displayName": "Raised Felt",
+        "tonalRamp": [
+          "#192334",
+          "#273C5E",
+          "#30538C",
+          "#366ABF",
+          "#6189CC",
+          "#91AAD4",
+          "#C0CDE2",
+          "#EFF1F6"
+        ]
+      },
+      "banner-white": {
+        "role": "neutral",
+        "displayName": "Banner White",
+        "tonalRamp": [
+          "#1D232F",
+          "#303C55",
+          "#40547D",
+          "#4E6BA7",
+          "#738BBA",
+          "#9CABC9",
+          "#C6CDDC",
+          "#F0F1F5"
+        ]
+      },
+      "chalk": {
+        "role": "neutral",
+        "displayName": "Chalk",
+        "tonalRamp": [
+          "#1F242E",
+          "#333E52",
+          "#455878",
+          "#5571A0",
+          "#798FB4",
+          "#A0AEC5",
+          "#C8CFDA",
+          "#F0F2F4"
+        ]
+      },
+      "faded-chalk": {
+        "role": "neutral",
+        "displayName": "Faded Chalk",
+        "tonalRamp": [
+          "#20252C",
+          "#363F4F",
+          "#495A74",
+          "#5B739A",
+          "#7E91AF",
+          "#A3AFC2",
+          "#C9CFD9",
+          "#F1F2F4"
+        ]
+      },
+      "steel": {
+        "role": "neutral",
+        "displayName": "Steel",
+        "tonalRamp": [
+          "#1D2430",
+          "#2E3D56",
+          "#3D567F",
+          "#4A6EAB",
+          "#708DBD",
+          "#9AACCB",
+          "#C5CEDD",
+          "#F0F2F5"
+        ]
+      },
+      "steel-soft": {
+        "role": "neutral",
+        "displayName": "Steel Soft",
+        "tonalRamp": [
+          "#1B2431",
+          "#2B3D59",
+          "#385685",
+          "#426EB3",
+          "#6A8DC3",
+          "#96ACCF",
+          "#C3CEDF",
+          "#EFF2F5"
+        ]
+      },
+      "steel-hard": {
+        "role": "neutral",
+        "displayName": "Steel Hard",
+        "tonalRamp": [
+          "#22262A",
+          "#3A414B",
+          "#515D6C",
+          "#66788F",
+          "#8794A6",
+          "#A8B1BD",
+          "#CCD0D6",
+          "#F1F2F3"
+        ]
+      },
+      "illinois-orange": {
+        "role": "primary",
+        "displayName": "Illinois Orange",
+        "tonalRamp": [
+          "#3E200F",
+          "#733512",
+          "#AF480D",
+          "#F25903",
+          "#F57C38",
+          "#EEA277",
+          "#EFC9B3",
+          "#F9F0EC"
+        ]
+      },
+      "orange-ink": {
+        "role": "primary",
+        "displayName": "Orange Ink",
+        "tonalRamp": [
+          "#3E200F",
+          "#733412",
+          "#AF470D",
+          "#F25803",
+          "#F57C38",
+          "#EEA177",
+          "#EFC9B3",
+          "#F9F0EC"
+        ]
+      },
+      "orange-wash": {
+        "role": "primary",
+        "displayName": "Orange Wash",
+        "tonalRamp": [
+          "#26222A",
+          "#433A4A",
+          "#5F516C",
+          "#7B678E",
+          "#9787A6",
+          "#B3A9BC",
+          "#D1CCD6",
+          "#F2F1F3"
+        ],
+        "canonical": "color-mix(in srgb, #FF5F05 15%, #13294B)",
+        "approxHex": "#3A3043"
+      },
+      "orange-line": {
+        "role": "primary",
+        "displayName": "Orange Line",
+        "tonalRamp": [
+          "#311F1B",
+          "#59342C",
+          "#844739",
+          "#B25843",
+          "#C27B6B",
+          "#CEA197",
+          "#DFC8C3",
+          "#F5F0EF"
+        ],
+        "canonical": "color-mix(in srgb, #FF5F05 48%, #13294B)",
+        "approxHex": "#8A4333"
+      },
+      "live-mint": {
+        "role": "secondary",
+        "displayName": "Live Mint",
+        "tonalRamp": [
+          "#18342B",
+          "#265F4C",
+          "#2F8E6E",
+          "#34C091",
+          "#5FCEA8",
+          "#90D5BE",
+          "#C0E3D7",
+          "#EEF6F3"
+        ],
+        "note": "Wash and line at 14% / 42% into felt, like orange."
+      },
+      "caution-amber": {
+        "role": "tertiary",
+        "displayName": "Caution Amber",
+        "tonalRamp": [
+          "#3B2D12",
+          "#6D5017",
+          "#A57517",
+          "#E49C11",
+          "#E9B144",
+          "#E7C37E",
+          "#EBD9B7",
+          "#F8F4ED"
+        ]
+      },
+      "coral": {
+        "role": "tertiary",
+        "displayName": "Coral",
+        "tonalRamp": [
+          "#3E140F",
+          "#731D12",
+          "#AF210D",
+          "#F21F03",
+          "#F54F38",
+          "#EE8577",
+          "#EFBBB3",
+          "#F9EDEC"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "varsity-display": {
+        "displayName": "Varsity Display",
+        "purpose": "Largest headline numerals (score 2xl); 3rem on phones."
+      },
+      "varsity-numeral": {
+        "displayName": "Varsity Numeral",
+        "purpose": "Headline numbers: stat-tile values, matchup scores, scores at the large step and up. Never a ticking clock."
+      },
+      "banner-mark": {
+        "displayName": "Banner Mark",
+        "purpose": "Team monogram stitched on a rafter banner."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section and panel heads."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Page text; prose to 66ch."
+      },
+      "reading": {
+        "displayName": "Reading",
+        "purpose": "The one size for every table cell and list row; rank by weight and case."
+      },
+      "score": {
+        "displayName": "Score",
+        "purpose": "Small and mid scores and ticking clocks; tabular Barlow."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Condensed caps for column heads, captions on values, and state words. Not a kicker above headings."
+      }
+    },
+    "stitching": [
+      {
+        "name": "stitch-actual",
+        "value": "2px solid",
+        "purpose": "A number that happened."
+      },
+      {
+        "name": "stitch-projected",
+        "value": "2px dashed",
+        "purpose": "A projection, a pre-season banner, the waiting draft clock."
+      },
+      {
+        "name": "stitch-final",
+        "value": "4px double",
+        "purpose": "A settled final."
+      }
+    ],
+    "shadows": [
+      {
+        "name": "shadow-1",
+        "value": "0 1px 2px rgba(0, 0, 0, .30)",
+        "purpose": "Seat: resting panels, primary button, active segment."
+      },
+      {
+        "name": "shadow-2",
+        "value": "0 1px 2px rgba(0, 0, 0, .30), 0 6px 16px -8px rgba(0, 0, 0, .55)",
+        "purpose": "Lift: your matchup, raised cards, draft clock."
+      },
+      {
+        "name": "shadow-3",
+        "value": "0 2px 6px rgba(0, 0, 0, .35), 0 18px 40px -16px rgba(0, 0, 0, .70)",
+        "purpose": "Float: the player-card modal and menus."
+      }
+    ],
+    "motion": [
+      {
+        "name": "e-out",
+        "value": "cubic-bezier(.2, .8, .3, 1)",
+        "purpose": "Default ease for state changes and entrances."
+      },
+      {
+        "name": "e-in-out",
+        "value": "cubic-bezier(.4, 0, .2, 1)",
+        "purpose": "Loops: live pulse, skeleton shimmer."
+      },
+      {
+        "name": "d-1",
+        "value": "120ms",
+        "purpose": "Hover and colour changes."
+      },
+      {
+        "name": "d-2",
+        "value": "200ms",
+        "purpose": "Dimming and notices."
+      },
+      {
+        "name": "d-3",
+        "value": "340ms",
+        "purpose": "Rise entrances, banner drop, score tick."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "560px"
+      },
+      {
+        "name": "compact",
+        "value": "640px"
+      },
+      {
+        "name": "pool-phone",
+        "value": "759px"
+      },
+      {
+        "name": "tablet",
+        "value": "1000px"
+      },
+      {
+        "name": "shell",
+        "value": "1240px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action in a view; orange fill, navy text.",
+      "html": "<button class=\"ds-btn-primary\">Browse free agents</button>",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-btn-primary{font-family:var(--f-ui);font-size:.875rem;font-weight:700;padding:0 16px;min-height:40px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);box-shadow:var(--shadow-1);cursor:pointer;transition:background-color 120ms cubic-bezier(.2,.8,.3,1),transform 120ms cubic-bezier(.2,.8,.3,1)}.ds-btn-primary:hover{background:var(--accent-ink);border-color:var(--accent-ink)}.ds-btn-primary:active{transform:translateY(1px)}.ds-btn-primary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Every secondary action: felt fill, steel border.",
+      "html": "<button class=\"ds-btn\">My team</button>",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-btn{font-family:var(--f-ui);font-size:.875rem;font-weight:650;padding:0 16px;min-height:40px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;transition:background-color 120ms cubic-bezier(.2,.8,.3,1),border-color 120ms cubic-bezier(.2,.8,.3,1)}.ds-btn:hover{background:var(--surface-2);border-color:var(--line-hard)}.ds-btn:active{transform:translateY(1px)}.ds-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Felt field; orange-ink border and soft ring on focus.",
+      "html": "<input class=\"ds-input\" type=\"search\" placeholder=\"Search players\">",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-input{font-family:var(--f-ui);font-size:.875rem;padding:0 12px;min-height:40px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);transition:border-color 120ms,box-shadow 120ms}.ds-input::placeholder{color:var(--ink-3)}.ds-input:hover{border-color:var(--line-hard)}.ds-input:focus{outline:none;border-color:var(--accent-ink);box-shadow:0 0 0 3px color-mix(in srgb,#FF5F05 18%,transparent)}"
+    },
+    {
+      "name": "Masthead Nav",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Deep navy masthead with Block I, condensed wordmark, and white-tint active state.",
+      "html": "<nav class=\"ds-nav\"><span class=\"ds-mark\"><svg width=\"16\" height=\"20\" viewBox=\"0 0 16 20\" aria-hidden=\"true\"><path fill=\"#FF5F05\" d=\"M0 0h16v5h-4v10h4v5H0v-5h4V5H0z\"/></svg>Illini Fantasy</span><a href=\"#\" data-active=\"true\">Home</a><a href=\"#\">My Team</a><a href=\"#\">Matchup</a><a href=\"#\">Players</a></nav>",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-nav{display:flex;align-items:center;gap:4px;min-height:60px;padding:0 24px;background:color-mix(in srgb,#081226 92%,transparent);border-bottom:1px solid var(--line-hard);font-family:var(--f-ui)}.ds-mark{display:inline-flex;align-items:center;gap:12px;margin-right:16px;font-family:var(--f-cond);font-weight:700;font-size:1.0625rem;text-transform:uppercase;color:#F4F6FA}.ds-nav a{font-size:.875rem;font-weight:600;min-height:38px;display:inline-flex;align-items:center;padding:0 12px;border-radius:4px;text-decoration:none;color:color-mix(in srgb,#F4F6FA 66%,transparent);transition:color 120ms,background-color 120ms}.ds-nav a:hover{color:#F4F6FA;background:color-mix(in srgb,#F4F6FA 8%,transparent)}.ds-nav a[data-active=true]{color:#F4F6FA;background:color-mix(in srgb,#F4F6FA 11%,transparent)}.ds-nav a:focus-visible{outline:2px solid #F4F6FA;outline-offset:2px}"
+    },
+    {
+      "name": "Chips",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Condensed state chips: free is steel, mine is orange, live is mint.",
+      "html": "<span class=\"ds-pill ds-free\">Free</span> <span class=\"ds-pill ds-mine\">Yours</span> <span class=\"ds-pill ds-live\"><i></i>Live</span> <span class=\"ds-pill\">G</span>",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-cond);font-size:.75rem;font-weight:700;padding:2px 8px;min-height:21px;border-radius:4px;background:var(--sunken);color:var(--ink-2);border:1px solid transparent}.ds-free{background:transparent;border-color:var(--line-hard)}.ds-mine{background:var(--accent-wash);color:var(--accent-ink);border-color:var(--accent-line)}.ds-live{background:color-mix(in srgb,#4FD1A5 14%,#13294B);color:#4FD1A5;border-color:color-mix(in srgb,#4FD1A5 42%,#13294B)}.ds-live i{width:7px;height:7px;border-radius:50%;background:currentColor}"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Felt panel with a felt-head band and steel border.",
+      "html": "<section class=\"ds-card\"><header><h2>Needs you</h2></header><div class=\"ds-body\">12 roster spots open. A free agent added now plays from Sunday's lock.</div></section>",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-card{background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow-1);overflow:hidden;color:var(--ink);font-family:var(--f-ui)}.ds-card header{padding:16px 24px;background:var(--surface-2);border-bottom:1px solid var(--line-soft)}.ds-card h2{margin:0;font-size:1.0625rem;font-weight:700;letter-spacing:-.02em}.ds-body{padding:16px 24px;font-size:.875rem;color:var(--ink-2)}"
+    },
+    {
+      "name": "The Rafters",
+      "kind": "custom",
+      "refersTo": "banner",
+      "description": "Banners hung from one steel rule; drop is exact points-for; yours stitched in orange; dashed before a week settles.",
+      "html": "<ol class=\"ds-rafters\"><li style=\"--drop:1\"><a class=\"ds-banner\" data-mine href=\"#\"><span class=\"r\">1st</span><span class=\"m\">T1</span><span class=\"n\">Team 1</span><span class=\"rec\">3–0</span><span class=\"p\">312 pts</span></a></li><li style=\"--drop:.72\"><a class=\"ds-banner\" href=\"#\"><span class=\"r\">2nd</span><span class=\"m\">T2</span><span class=\"n\">Team 2</span><span class=\"rec\">2–1</span><span class=\"p\">225 pts</span></a></li><li style=\"--drop:0\"><a class=\"ds-banner\" data-stitch=\"projected\" href=\"#\"><span class=\"r\">&nbsp;</span><span class=\"m\">T3</span><span class=\"n\">Team 3</span><span class=\"rec\">0–0</span><span class=\"p\">0 pts</span></a></li></ol>",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-rafters{list-style:none;margin:0;padding:14px 0 0;display:grid;grid-auto-flow:column;grid-auto-columns:84px;gap:12px;align-items:start;position:relative;font-family:var(--f-ui)}.ds-rafters::before{content:'';position:absolute;left:0;right:0;top:0;height:4px;background:var(--line-hard);border-radius:2px;box-shadow:0 1px 0 rgba(0,0,0,.35)}.ds-rafters li{position:relative}.ds-rafters li::before,.ds-rafters li::after{content:'';position:absolute;top:-10px;width:2px;height:10px;background:var(--line-hard)}.ds-rafters li::before{left:22%}.ds-rafters li::after{right:22%}.ds-banner{position:relative;display:grid;justify-items:center;align-content:start;gap:2px;height:calc(148px + var(--drop,0)*96px);padding:12px 8px 26px;background:var(--surface);color:var(--ink);text-decoration:none;clip-path:polygon(0 0,100% 0,100% 100%,50% calc(100% - 16px),0 100%);transition:background-color 120ms}.ds-banner::before{content:'';position:absolute;inset:5px 5px 21px;border:2px solid color-mix(in srgb,#F4F6FA 45%,transparent)}.ds-banner[data-stitch=projected]::before{border-style:dashed}.ds-banner:hover{background:var(--raised)}.ds-banner[data-mine]{background:var(--raised)}.ds-banner[data-mine]::before{border-color:var(--accent)}.ds-banner .r{font-family:var(--f-cond);font-weight:700;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}.ds-banner .m{font-family:var(--f-varsity);font-size:1.75rem;line-height:1.1}.ds-banner[data-mine] .m,.ds-banner[data-mine] .r{color:var(--accent)}.ds-banner .n{font-family:var(--f-cond);font-weight:600;font-size:.75rem;color:var(--ink-2)}.ds-banner .rec{font-weight:700;font-size:.875rem;margin-top:auto}.ds-banner .p{font-size:.75rem;color:var(--ink-3)}"
+    },
+    {
+      "name": "Matchup Row",
+      "kind": "custom",
+      "refersTo": "matchup-row",
+      "description": "One list of the week's games; yours lifted in orange, the rest dimmed; scores stitched by kind.",
+      "html": "<ol class=\"ds-mlist\"><li data-mine><span class=\"side\"><b>Team 1</b><span class=\"sc\">48.2</span></span><span class=\"mid\">Live</span><span class=\"side r\"><b>Team 12</b><span class=\"sc\">41.7</span></span></li><li><span class=\"side\"><b>Team 2</b><span class=\"sc\" data-stitch=\"projected\">62.4</span></span><span class=\"mid\">Projected</span><span class=\"side r\"><b>Team 11</b><span class=\"sc\" data-stitch=\"projected\">58.9</span></span></li><li><span class=\"side\"><b>Team 3</b><span class=\"sc\" data-stitch=\"final\">71.0</span></span><span class=\"mid\">Final</span><span class=\"side r\"><b>Team 10</b><span class=\"sc\" data-stitch=\"final\">66.3</span></span></li></ol>",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-mlist{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-family:var(--f-ui);color:var(--ink)}.ds-mlist li{display:grid;grid-template-columns:1fr 6.5rem 1fr;align-items:center;gap:12px;padding:12px 16px;border-radius:6px;background:var(--surface);border:1px solid var(--line-soft);transition:opacity 200ms}.ds-mlist li:not([data-mine]){opacity:.78}.ds-mlist li:not([data-mine]):hover{opacity:1}.ds-mlist li[data-mine]{background:var(--raised);border:2px solid var(--accent);box-shadow:var(--shadow-2)}.side{display:flex;align-items:center;gap:12px;font-size:.875rem}.side.r{flex-direction:row-reverse}.side b{flex:1}.mid{text-align:center;font-family:var(--f-cond);font-weight:700;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}.sc{font-family:var(--f-varsity);font-size:1.375rem;line-height:1.1;min-width:4.25rem;padding:4px 8px;text-align:center;border:2px solid transparent;border-radius:4px;font-variant-numeric:tabular-nums}.sc[data-stitch=projected]{border:2px dashed var(--line-hard);color:var(--ink-2)}.sc[data-stitch=final]{border:4px double var(--line-hard)}li[data-mine] .side:first-child .sc{color:var(--accent)}"
+    },
+    {
+      "name": "Season Line",
+      "kind": "custom",
+      "refersTo": "season-line",
+      "description": "The season as a transit line of weeks: past filled, now orange, ahead outlined.",
+      "html": "<ol class=\"ds-season\"><li data-state=\"past\"><i></i><span>1</span></li><li data-state=\"past\"><i></i><span>2</span></li><li data-state=\"now\"><i></i><span>3</span></li><li><i></i><span>4</span></li><li><i></i><span>5</span></li></ol>",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-season{list-style:none;margin:0;padding:0;display:flex;font-family:var(--f-ui);width:260px}.ds-season li{flex:1;position:relative;display:grid;justify-items:center;gap:4px;padding:6px 0;color:var(--ink-3)}.ds-season li::before{content:'';position:absolute;left:0;right:0;top:17px;height:3px;background:var(--line)}.ds-season li[data-state=past]::before{background:var(--ink-3)}.ds-season li:first-child::before{left:50%}.ds-season li:last-child::before{right:50%}.ds-season i{position:relative;width:12px;height:12px;border-radius:50%;background:var(--surface);border:2px solid var(--line-hard);box-sizing:border-box}.ds-season [data-state=past] i{background:var(--ink-3);border-color:var(--ink-3)}.ds-season [data-state=now] i{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-wash)}.ds-season span{font-size:11px;font-variant-numeric:tabular-nums}.ds-season [data-state=now] span{color:var(--accent);font-weight:700}"
+    },
+    {
+      "name": "Stat Tile",
+      "kind": "custom",
+      "refersTo": "stat-tile",
+      "description": "Condensed caption over a Graduate headline numeral; tiles butted on steel-soft gaps.",
+      "html": "<div class=\"ds-tiles\"><div><span>Points for</span><strong>312.4</strong></div><div><span>Record</span><strong>3–0</strong></div><div><span>Budget left</span><strong>$87</strong></div></div>",
+      "css": ":host{--bg:#0C1A33;--surface:#13294B;--surface-2:#17305A;--raised:#1C3866;--sunken:#0A1529;--ink:#F4F6FA;--ink-2:#BCC8DC;--ink-3:#95A6C1;--line:#2B4166;--line-soft:#223A5F;--line-hard:#5B6B80;--accent:#FF5F05;--accent-ink:#FF7A30;--accent-wash:color-mix(in srgb,#FF5F05 15%,#13294B);--accent-line:color-mix(in srgb,#FF5F05 48%,#13294B);--on-accent:#0C1A33;--f-ui:Barlow,ui-sans-serif,system-ui,sans-serif;--f-cond:'Barlow Condensed',Barlow,sans-serif;--f-varsity:Graduate,Georgia,serif;--shadow-1:0 1px 2px rgba(0,0,0,.30);--shadow-2:0 1px 2px rgba(0,0,0,.30),0 6px 16px -8px rgba(0,0,0,.55);} .ds-tiles{display:grid;grid-template-columns:repeat(3,140px);gap:1px;background:var(--line-soft)}.ds-tiles div{background:var(--surface);padding:16px 24px;display:grid;gap:4px}.ds-tiles span{font-family:var(--f-cond);font-size:.75rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}.ds-tiles strong{font-family:var(--f-varsity);font-weight:400;font-size:1.75rem;line-height:1;color:var(--ink)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Rafters",
+    "overview": "The league hangs the way the program hangs its banners in the State Farm Center: every fantasy team is a banner of navy felt, and the standings are the row of banners overhead. The ground is the arena ceiling at night, one navy with a single soft wash of light behind the masthead. Panels are Illini Blue felt hung on it. Steel is the line of the rafters: rules, borders, wires. White ink is the lettering. Orange is the light that tells you which banner is yours.\n\nIt is a working stat sheet, not a broadcast. Density is high and even: tables keep one reading size and rank by weight and case, lists keep one row shape, and state is carried by form before colour. The thing you came for is lit and lifted; everything else steps back a shade until you point at it. There is one theme, navy, and no light mode.\n\nThe system refuses the category's dark scoreboard dashboard: no big VS split, no neon accent, no grid of identical cards.",
+    "keyCharacteristics": [
+      "Navy ground, Illini Blue felt panels, steel rules, banner-white ink; one navy theme only.",
+      "Illinois Orange spent on exactly three things: your team, scores, and the primary action.",
+      "Stitching is state: solid for actual, dashed for projected, doubled for final.",
+      "A varsity block (Graduate) for banner monograms and headline numerals only; Barlow for everything else.",
+      "Lengths and positions are exact quantities, never decoration.",
+      "Focus lifts; the rest dims."
+    ],
+    "rules": [
+      {
+        "name": "The Three Spends Rule",
+        "body": "Orange goes to your team, scores, and the primary action, and nowhere else. Free-agent chips, chrome, and neutral state are steel. If a new use of orange cannot be named as one of the three, it is steel.",
+        "section": "colors"
+      },
+      {
+        "name": "The Live Is Not Yours Rule",
+        "body": "Live mint and orange never substitute for each other; a row can be both yours and live, and must read as both.",
+        "section": "colors"
+      },
+      {
+        "name": "The Varsity Block Rule",
+        "body": "Graduate is for banner monograms and headline numerals only: stat-tile values, matchup scores, and scores at the large step and up. Never for body, labels, names, or a clock that ticks every second; a ticking clock is tabular Barlow so its digits keep their width.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Reading Size Rule",
+        "body": "Every table and list reads at one size (0.875rem). Rank comes from weight (700 for the name that matters, 400 for the uncounted) and case (condensed caps for heads), never from a second size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Caps Are Labels Rule",
+        "body": "Uppercase is only the condensed label voice, attached to a value, a column, or a state. It is not a kicker above a heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Exact Length Rule",
+        "body": "A length or a position on screen is a quantity: a banner's drop is its points-for against the league's most (148px plus up to 96px), a range strip's tick is the projection. Nothing grows or sweeps in to look lively, and a bar whose scale changes with the page is removed rather than kept as decoration.",
+        "section": "layout"
+      },
+      {
+        "name": "The Focus Lifts Rule",
+        "body": "In a list of peers, yours is raised felt with the lift shadow and an orange border; the others sit at 78% opacity and come back to full on hover or focus.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Stitching Rule",
+        "body": "The border a number wears says what kind of number it is: solid 2px for actual, dashed 2px for projected, 4px double for final. Dashes are reserved for projections and pre-season banners (and the waiting draft clock); empty states, dividers, and decoration never dash.",
+        "section": "shapes"
+      },
+      {
+        "name": "The No Side-Stripe Rule",
+        "body": "No coloured stripe down a row's or card's edge. School colour rides on the avatar's outer ring. The rafters' full-width 4px steel rule is a deliberate exception: it is the beam the banners hang from, spans the whole width, and is not a side tab.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** spend orange only on your team, scores, and the primary action; make everything else steel.",
+      "**Do** stitch numbers by kind: solid for actual, dashed for projected, 4px double for final.",
+      "**Do** set banner monograms and headline numerals in Graduate, and everything else in Barlow or Barlow Condensed.",
+      "**Do** keep tables and lists at one 0.875rem reading size, ranking by weight and case.",
+      "**Do** make lengths exact: a banner's drop is points-for, a tick is the projection.",
+      "**Do** lift the reader's own item (raised felt, lift shadow, orange border) and dim its peers to 78%.",
+      "**Do** put school colour on the avatar's outer ring.",
+      "**Do** use the drawn Arrow glyph wherever an arrow acts as an icon.",
+      "**Do** pair live mint with a word or a breathing dot."
+    ],
+    "donts": [
+      "**Don't** use orange for free-agent chips, chrome, or neutral state.",
+      "**Don't** set a ticking clock, a name, or a label in Graduate.",
+      "**Don't** use a dashed border for anything that is not a projection or a pre-season banner, including empty states.",
+      "**Don't** put an icon tile in an empty state.",
+      "**Don't** add coloured side-stripes to rows or cards.",
+      "**Don't** introduce a second reading size in a table.",
+      "**Don't** build a VS split, a neon accent, or a grid of identical stat cards.",
+      "**Don't** add a light theme.",
+      "**Don't** type an arrow character as an icon."
+    ]
+  }
+}

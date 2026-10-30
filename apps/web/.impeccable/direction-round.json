@@ -1,0 +1,152 @@
+{
+  "title": "Choose the visual world for Illini Fantasy Hoops",
+  "question": "The roll assigned The Rafters: the league hung like the program's banners at State Farm Center. Keep it, take an alternate, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "kind": "assigned",
+      "label": "The Rafters",
+      "kicker": "THE ROLL",
+      "lineage": "Big Ten title and retired-jersey banners hung in the State Farm Center rafters",
+      "thesis": "Every fantasy team is a banner, and the league is the row of banners overhead.",
+      "palette": ["#0C1A33", "#13294B", "#FF5F05", "#F4F6FA", "#5B6B80"],
+      "materials": ["navy felt", "orange tackle-twill numerals", "white chain stitching", "steel rafter rule"],
+      "viewport": "Top nav, then a rafter strip of all teams' banners ordered by standings with drop length = points for; below it this week's matchups, yours lifted, the rest dimmed a step.",
+      "risk": "Banners are a signature for the league view; on dense tables the world must recede to type and palette or it turns into costume.",
+      "raised": [
+        {"from": "challenger-acetate", "raise": "Rank by weight and case, not a ladder of sizes: one reading size for every table."},
+        {"from": "challenger-streaming", "raise": "The open matchup lifts; every other banner and card dims a step behind it."},
+        {"from": "challenger-labanotation", "raise": "A banner's drop is an exact quantity (points for), never a decorative length."},
+        {"from": "challenger-emission", "raise": "State by form as well as hue: actual points solid-stitched, projections dashed, a final double-stitched."},
+        {"from": "challenger-transit", "raise": "The season reads as one line of weeks: past filled, this week lit, the rest outlined."}
+      ],
+      "wireframe": {"cols": 12, "rows": 10, "regions": [
+        {"label": "nav", "x": 0, "y": 0, "w": 12, "h": 1},
+        {"label": "rafters: 12 team banners", "x": 0, "y": 1, "w": 12, "h": 3, "accent": true},
+        {"label": "this week's matchups", "x": 0, "y": 4, "w": 8, "h": 6},
+        {"label": "standings + activity", "x": 8, "y": 4, "w": 4, "h": 6}
+      ]}
+    },
+    {
+      "id": "model-pick",
+      "kind": "pick",
+      "label": "Block I",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "The Illinois Athletics identity program",
+      "thesis": "The league dressed exactly as the program dresses itself: Block I, Illini Blue, Illinois Orange.",
+      "palette": ["#FFFFFF", "#13294B", "#FF5F05", "#E8E9EA"],
+      "materials": ["flat official color fields", "athletic block numerals", "white ground"],
+      "viewport": "Illini Blue header with the Block I, a white working ground, orange as the committed color for scores and your team.",
+      "risk": "The most familiar option: it will read like the official athletics site, polished but expected."
+    },
+    {
+      "id": "challenger-gateboard",
+      "kind": "challenger",
+      "catalogId": "vernacular-ephemera-boarding-pass-and-gate-board",
+      "label": "Departure Board",
+      "verdict": "competitive",
+      "lineage": "airport boarding pass and live gate board",
+      "thesis": "The week as a live board: players rerank in place as they score, and a change stays lit until you've seen it.",
+      "palette": ["#0B0D10", "#F2F2F2", "#FFB000", "#FF5F05"],
+      "materials": ["split-flap rows", "tabular figures", "segmented pass"],
+      "viewport": "A ranked board of every player in your matchup, reordering live by points; your team as a segmented pass beside it.",
+      "case": "Wins on clarity for live game nights; loses on identification: nothing in it is Illinois.",
+      "risk": "Strongest during games, thin on the quiet days and before the season.",
+      "wireframe": {"cols": 12, "rows": 10, "regions": [
+        {"label": "nav", "x": 0, "y": 0, "w": 12, "h": 1},
+        {"label": "live board: players ranked", "x": 0, "y": 1, "w": 8, "h": 9, "accent": true},
+        {"label": "your pass", "x": 8, "y": 1, "w": 4, "h": 5},
+        {"label": "league", "x": 8, "y": 6, "w": 4, "h": 4}
+      ]},
+      "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-boarding-pass-and-gate-board-hero.webp"
+    },
+    {
+      "id": "challenger-acetate",
+      "kind": "challenger",
+      "catalogId": "rw-manual-acetate-tab-board",
+      "label": "Acetate Manual",
+      "verdict": "declined",
+      "lineage": "tabbed software reference manual",
+      "thesis": "Sections as colored tab boards with acetate leaves.",
+      "palette": ["#E8E4DA", "#E2671B", "#1F57A6"],
+      "materials": ["acetate", "divider board"],
+      "viewport": "Tab rail down the edge, one section per tab.",
+      "case": "Staff don't recognise themselves in a manual; tabs fight standard navigation.",
+      "risk": "Costume on a working screen.",
+      "kept": "One reading size does the work."
+    },
+    {
+      "id": "challenger-streaming",
+      "kind": "challenger",
+      "catalogId": "pop-culture-shelf-streaming-title-card-wall",
+      "label": "Title Wall",
+      "verdict": "declined",
+      "lineage": "streaming catalog rows",
+      "thesis": "Players as poster tiles that expand on focus.",
+      "palette": ["#0B0B0F", "#E50914", "#FFFFFF"],
+      "materials": ["poster tiles", "focus lift"],
+      "viewport": "Rows of headshot tiles by position.",
+      "case": "Hides the numbers staff want until you focus a tile.",
+      "risk": "Reads as entertainment, not a league.",
+      "kept": "The focused item lifts; the rest dim."
+    },
+    {
+      "id": "challenger-transit",
+      "kind": "challenger",
+      "catalogId": "wayfinding-cartography-signage-midnight-transit-diagram",
+      "label": "Transit Diagram",
+      "verdict": "declined",
+      "lineage": "metro line map",
+      "thesis": "The season drawn as rail lines and interchanges.",
+      "palette": ["#0E1B3D", "#D7263D", "#2E5BBA", "#F2B134"],
+      "materials": ["enamel", "line ink"],
+      "viewport": "Teams as lines crossing at matchups.",
+      "case": "A clever map of something nobody needs to navigate.",
+      "risk": "Diagram over task.",
+      "kept": "The season as one line of stations."
+    },
+    {
+      "id": "challenger-labanotation",
+      "kind": "challenger",
+      "catalogId": "notation-diagram-systems-labanotation",
+      "label": "Dance Score",
+      "verdict": "declined",
+      "lineage": "labanotation",
+      "thesis": "Time runs upward; length is exact duration.",
+      "palette": ["#FFFFFF", "#111111", "#BBBBBB"],
+      "materials": ["score paper", "shaded blocks"],
+      "viewport": "A vertical staff of games.",
+      "case": "Foreign notation for a basketball staff.",
+      "risk": "Unreadable without a key.",
+      "kept": "Length is an exact quantity."
+    },
+    {
+      "id": "challenger-emission",
+      "kind": "challenger",
+      "catalogId": "operate-c-emission-line-rail",
+      "label": "Emission Rail",
+      "verdict": "declined",
+      "lineage": "spectrogram plate",
+      "thesis": "Everything hangs off one calibrated rail; state is line form.",
+      "palette": ["#2B2D31", "#E8E2D4", "#F5C518"],
+      "materials": ["hairlines", "charcoal continuum"],
+      "viewport": "One rail of hairline ticks.",
+      "case": "Too abstract for a league; no Illinois in it.",
+      "risk": "Austere to the point of opaque.",
+      "kept": "State by form, not only hue."
+    }
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "buildPath": {"value": "code"},
+  "canon": true,
+  "canonCard": {
+    "kind": "canon",
+    "label": "The category standard",
+    "thesis": "A dark fantasy dashboard like Sleeper or ESPN Fantasy, executed impeccably.",
+    "palette": ["#0E1116", "#FFFFFF", "#3B82F6"],
+    "materials": ["clean grid", "big score numerals"],
+    "viewport": "Matchup scoreboard first, standings and news beside it.",
+    "risk": "Indistinguishable from the apps everyone already has; close to what the site is today."
+  },
+  "steer": true
+}

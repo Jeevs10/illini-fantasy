@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Glyph, type GlyphName } from "./ui/glyphs.tsx";
+import { BlockI } from "./ui/blocki.tsx";
 
 interface Dest {
   href: string;
@@ -79,7 +80,7 @@ export function Nav({
       <header className="masthead">
         <div className="shell masthead-inner">
           <Link href="/home" className="wordmark">
-            <span className="mark" aria-hidden="true">IF</span>
+            <BlockI size={26} />
             Illini Fantasy
           </Link>
 
