@@ -37,6 +37,9 @@
   --line:      #2B4166;
   --line-soft: #223A5F;
   --line-hard: #5B6B80;
+  /* Data marks: bars, ranges, sparks. Steel, so a chart never reads as
+     "yours" just for being drawn. */
+  --steel:     #A9B8CF;
 
   /* Illinois Orange. Yours, the score, the one action. On navy it clears
      4.5:1 at every size, so it needs no darker text twin. */
@@ -163,7 +166,7 @@ h3 { font-size: var(--t-md); }
 h4 { font-size: var(--t-sm); }
 
 a { color: inherit; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
-a:hover { color: var(--accent-ink); }
+a:hover { color: var(--ink); }
 
 p { margin: 0; }
 
@@ -334,7 +337,7 @@ p { margin: 0; }
   content: "";
   position: absolute; left: var(--s-3); right: var(--s-3); bottom: -11px;
   height: 2px; border-radius: 2px;
-  background: var(--accent);
+  background: var(--on-deep);
   animation: sweep var(--d-2) var(--e-out) both;
 }
 .masthead :where(a, button, select):focus-visible { outline-color: var(--on-deep); }
@@ -465,7 +468,7 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
     border-radius: 0;
     transition: color var(--d-1) var(--e-out);
   }
-  .bnav a[data-active="true"], .bnav button[aria-expanded="true"] { color: var(--accent-ink); }
+  .bnav a[data-active="true"], .bnav button[aria-expanded="true"] { color: var(--on-deep); }
   .bnav .glyph {
     width: 22px; height: 22px;
     display: grid; place-items: center;
@@ -476,7 +479,7 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
     content: "";
     position: absolute; top: 0; width: 26px; height: 2px;
     border-radius: 0 0 2px 2px;
-    background: var(--accent);
+    background: var(--on-deep);
   }
   .bnav a { position: relative; }
   .whoami-name { display: none; }
@@ -614,7 +617,7 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
   font-size: var(--t-sm); font-weight: 600; color: var(--ink-2); text-decoration: none;
   display: inline-flex; align-items: center; min-height: 26px;
 }
-.sectionhead a:hover { color: var(--accent-ink); }
+.sectionhead a:hover { color: var(--ink); }
 
 /* ---- surfaces -------------------------------------------------------- */
 
@@ -767,7 +770,7 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 }
 .bar > span {
   display: block; height: 100%;
-  background: var(--accent);
+  background: var(--steel);
   border-radius: inherit;
   transform-origin: left;
   animation: sweep var(--d-3) var(--e-out) both;
@@ -808,13 +811,13 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 .plr-id { min-width: 0; }
 .plr-name {
   display: block;
-  font-weight: 650;
+  font-weight: 600;
   font-size: var(--t-sm);
   letter-spacing: -0.005em;
   text-decoration: none;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.plr-name:hover { color: var(--accent-ink); }
+.plr-name:hover { color: var(--ink); text-decoration: underline; }
 .plr-sub {
   display: flex; align-items: center; gap: var(--s-2);
   flex-wrap: wrap;
@@ -865,8 +868,8 @@ tbody tr[data-mine="true"] > td, tbody tr[data-mine="true"] > th { background: c
 td.r, th.r { text-align: right; }
 td.c, th.c { text-align: center; }
 .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.player-link { text-decoration: none; font-weight: 650; }
-.player-link:hover { color: var(--accent-ink); }
+.player-link { text-decoration: none; font-weight: 600; }
+.player-link:hover { color: var(--ink); text-decoration: underline; }
 .sub { display: block; font-size: var(--t-xs); color: var(--ink-3); margin-top: 1px; }
 tr[data-counted="false"] td { color: var(--ink-3); }
 tr[data-counted="false"] .player-link { font-weight: 400; }
@@ -905,7 +908,7 @@ tr[data-counted="false"] .player-link { font-weight: 400; }
 button, .button {
   font-family: var(--f-ui);
   font-size: var(--t-sm);
-  font-weight: 650;
+  font-weight: 600;
   padding: 0 var(--s-4);
   min-height: 40px;
   border-radius: var(--r-md);
@@ -982,7 +985,7 @@ select:disabled { opacity: .5; cursor: not-allowed; }
   padding-inline: var(--s-3);
   border: 0; background: transparent;
   border-radius: var(--r-sm);
-  font-size: var(--t-sm); font-weight: 650;
+  font-size: var(--t-sm); font-weight: 600;
   color: var(--ink-2);
   text-decoration: none;
   display: inline-flex; align-items: center; white-space: nowrap;
@@ -1043,7 +1046,7 @@ select:disabled { opacity: .5; cursor: not-allowed; }
 }
 .daystrip a[data-active="true"] .dow { color: color-mix(in srgb, var(--on-deep) 70%, transparent); }
 .daystrip a[data-active="true"] .dnum { color: var(--on-deep); }
-.daystrip a .pip { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); margin-top: 1px; }
+.daystrip a .pip { width: 4px; height: 4px; border-radius: 50%; background: var(--ink-2); margin-top: 1px; }
 
 /* ---- notices, empty, skeleton ----------------------------------------- */
 
@@ -1281,8 +1284,8 @@ table.board tbody th.board-round { border-bottom: 1px solid var(--line-soft); fo
   transition: background-color var(--d-1) var(--e-out);
 }
 .picker label:hover { background: var(--surface); }
-.picker input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-ink); flex: none; }
-.picker label:has(input:checked) { background: var(--accent-wash); font-weight: 650; }
+.picker input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--ink-2); flex: none; }
+.picker label:has(input:checked) { background: var(--raised); font-weight: 600; }
 
 /* ---- forms and one-offs ------------------------------------------------- */
 
@@ -1337,8 +1340,8 @@ table.board tbody th.board-round { border-bottom: 1px solid var(--line-soft); fo
   .setrow { grid-template-columns: minmax(0, 1fr); }
 }
 
-.onetime { background: var(--accent-wash); border: 1px solid var(--accent-line); border-radius: var(--r-md); padding: var(--s-4); }
-.onetime-head { margin: 0 0 var(--s-3); font-size: var(--t-sm); font-weight: 650; }
+.onetime { background: var(--raised); border: 1px solid var(--line-hard); border-radius: var(--r-md); padding: var(--s-4); }
+.onetime-head { margin: 0 0 var(--s-3); font-size: var(--t-sm); font-weight: 600; }
 .onetime-row { display: flex; gap: var(--s-2); }
 .onetime-row input { flex: 1; min-width: 0; font-family: var(--f-mono); font-size: var(--t-xs); background: var(--surface); }
 .onetime-foot { margin: var(--s-3) 0 0; font-size: var(--t-xs); color: var(--ink-2); }
@@ -1375,13 +1378,13 @@ table.board tbody th.board-round { border-bottom: 1px solid var(--line-soft); fo
 .spark { display: flex; align-items: flex-end; justify-content: flex-start; gap: 3px; height: 46px; }
 .spark > span {
   flex: 0 1 22px; min-width: 3px;
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--steel) 45%, transparent);
   border-radius: 2px 2px 0 0;
   transition: background-color var(--d-1) var(--e-out);
   animation: sweep var(--d-3) var(--e-out) both;
   transform-origin: bottom;
 }
-.spark > span[data-best="true"] { background: var(--accent); }
+.spark > span[data-best="true"] { background: var(--ink); }
 
 /* ---- rosters ------------------------------------------------------ */
 
@@ -1431,7 +1434,7 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 .wk > summary::marker, .wk > summary::-webkit-details-marker { display: none; }
 .wk > summary:hover { background: var(--surface-2); }
 .wk[open] > summary { border-bottom: 1px solid var(--line-soft); }
-.wk[open] > summary .plr-name { color: var(--accent-ink); }
+.wk[open] > summary .plr-name { color: var(--ink); }
 .wk > .plr {
   padding-left: var(--s-6);
   background: color-mix(in srgb, var(--sunken) 45%, transparent);
@@ -1450,7 +1453,7 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
   display: flex; flex-direction: column; justify-content: space-around;
   gap: var(--s-4); min-width: 15rem; flex: 1;
 }
-.bracket-round + .bracket-round { border-left: 1px dashed var(--line-hard); padding-left: var(--s-5); }
+.bracket-round + .bracket-round { border-left: 1px solid var(--line); padding-left: var(--s-5); }
 .bracket-roundlabel {
   font-size: var(--t-xs); font-weight: 700; font-family: var(--f-cond);
   letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3);
@@ -1468,7 +1471,7 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
   min-height: 2.5rem;
 }
 .bracket-side + .bracket-side { border-top: 1px solid var(--line-soft); }
-.bracket-side[data-winner="true"] { background: var(--accent-wash); font-weight: 700; }
+.bracket-side[data-winner="true"] { background: var(--raised); font-weight: 700; }
 .bracket-name {
   flex: 1; min-width: 0; display: flex; align-items: baseline; gap: var(--s-2);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1486,7 +1489,7 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 
 /* The playoff cut line — drawn under the last team still in, not the first
    team out, so the row that matters is the one with the rule beneath it. */
-.row[data-cut="true"] { padding-bottom: var(--s-3); border-bottom: 1px dashed var(--line-hard); }
+.row[data-cut="true"] { padding-bottom: var(--s-3); border-bottom: 1px solid var(--line-hard); }
 
 .daystrip .games {
   font-size: 10px; font-weight: 700; letter-spacing: .04em;
@@ -1541,7 +1544,7 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 /* Just the number. The share bar that used to sit under it scaled against
    whatever happened to be on the page, so the same player drew a different bar
    on page 1 and page 2 — a column that looked like data and was decoration. */
-.pool-total { text-align: right; font-size: var(--t-sm); font-weight: 650; }
+.pool-total { text-align: right; font-size: var(--t-sm); font-weight: 600; }
 .pool-act { display: flex; justify-content: flex-end; }
 .pool-inline { display: none; }
 .pool-conf { display: contents; }
@@ -1557,7 +1560,7 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
   transition: color var(--d-1) var(--e-out);
 }
 .pool-sort:hover { text-decoration: underline; }
-.pool-sort[data-active="true"] { color: var(--accent-ink); }
+.pool-sort[data-active="true"] { color: var(--ink); }
 
 /* Which week the pool is ranked for. Sits in the filter row with the
    segmented controls, so it borrows their height rather than setting its own. */
@@ -1735,12 +1738,12 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 }
 .rangestrip-band {
   position: absolute; top: 3px; bottom: 3px;
-  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--steel) 32%, transparent);
   border-radius: var(--r-pill);
 }
 .rangestrip-tick {
   position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px;
-  background: var(--accent); border-radius: 2px;
+  background: var(--ink); border-radius: 2px;
 }
 
 .slate { list-style: none; margin: var(--s-2) 0 0; padding: 0; display: grid; }
@@ -1778,7 +1781,7 @@ details[open] > summary.capline .chev { transform: rotate(90deg); }
 .schoolgame { scroll-snap-align: start; }
 .schoolgame { background: var(--surface); padding: var(--s-3) var(--s-4); display: grid; gap: 2px; font-size: var(--t-sm); }
 .schoolgame .when { font-size: var(--t-xs); color: var(--ink-3); font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
-.schoolgame .opp { font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schoolgame .opp { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .schoolgame .proj { font-size: var(--t-xs); color: var(--ink-2); }
 .plr-school { color: inherit; text-decoration: none; }
 .plr-school:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
@@ -1915,8 +1918,8 @@ li[data-mine] .mside:first-child .mside-score[data-stitch="projected"] { border-
   width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line-hard);
 }
 .seasonline [data-state="past"] .station { background: var(--ink-3); border-color: var(--ink-3); }
-.seasonline [data-state="now"] .station { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-wash); }
-.seasonline [data-state="now"] .wk { color: var(--accent); font-weight: 700; }
+.seasonline [data-state="now"] .station { background: var(--ink); border-color: var(--ink); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 16%, transparent); }
+.seasonline [data-state="now"] .wk { color: var(--ink); font-weight: 700; }
 .seasonline .wk { font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .seasonline a:hover .wk { color: var(--ink); }
 .seasonline-now { margin: var(--s-2) 0 0; font-size: var(--t-sm); color: var(--ink-2); }
@@ -1930,7 +1933,7 @@ li[data-mine] .mside:first-child .mside-score[data-stitch="projected"] { border-
 .nextup h2 { font-size: var(--t-xl); }
 .nextup p { margin: var(--s-2) 0 var(--s-4); color: var(--ink-2); max-width: 60ch; }
 .card-link { font-size: var(--t-sm); font-weight: 600; color: var(--ink-2); text-decoration: none; }
-.card-link:hover { color: var(--accent-ink); }
+.card-link:hover { color: var(--ink); text-decoration: underline; }
 .standtable tbody th { font-weight: 400; text-align: left; padding: var(--s-3); border-bottom: 1px solid var(--line-soft); }
 .standtable tbody tr:last-child th { border-bottom: 0; }
 .standtable td.r, .standtable th.r { width: 1%; white-space: nowrap; }

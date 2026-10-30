@@ -14,6 +14,7 @@ colors:
   steel: "#2B4166"
   steel-soft: "#223A5F"
   steel-hard: "#5B6B80"
+  steel-mark: "#A9B8CF"
   illinois-orange: "#FF5F05"
   orange-ink: "#FF7A30"
   orange-wash: "color-mix(in srgb, #FF5F05 15%, #13294B)"
@@ -195,7 +196,7 @@ A deep two-blue navy palette with steel lines and a single orange light.
 
 ### Primary
 - **Illinois Orange** (`illinois-orange`): the official orange. Spent only on your team (your banner's stitching and monogram, your matchup's border and score, your avatar ring, your rows' wash), on scores, and on the primary action button. It clears 4.5:1 on navy at every size, so it has no darker text twin.
-- **Orange Ink** (`orange-ink`): the hover and text tint of the same orange; primary-button hover, `mine` pills, link hover.
+- **Orange Ink** (`orange-ink`): the hover and text tint of the same orange; primary-button hover and `mine` pills. Link hover is white ink with an underline, not orange.
 - **Orange Wash / Orange Line** (`orange-wash`, `orange-line`): orange mixed into felt for the background and border of things that are yours (your rows at 70%, the on-the-clock bar, the next-action panel's stitching).
 
 ### Secondary
@@ -214,10 +215,10 @@ Each carries its own wash (14%) and line (42%) mixed into felt, matching the ora
 - **Felt Head** (`felt-head`): panel and table heads, row hover.
 - **Raised Felt** (`raised-felt`): the lifted thing: your banner, your matchup, the next-action panel, hovered banners.
 - **Banner White** (`banner-white`): primary ink. **Chalk** (`chalk`): secondary ink. **Faded Chalk** (`faded-chalk`): captions, labels, ranks, uncounted rows.
-- **Steel** (`steel`): panel borders and table-head rules. **Steel Soft** (`steel-soft`): row dividers and quiet insets. **Steel Hard** (`steel-hard`): the rafter rule and wires, projected and final stitching, the masthead underline, hovered borders, free-agent chips.
+- **Steel** (`steel`): panel borders and table-head rules. **Steel Soft** (`steel-soft`): row dividers and quiet insets. **Steel Hard** (`steel-hard`): the rafter rule and wires, projected and final stitching, the masthead underline, hovered borders, free-agent chips. **Steel Mark** (`steel-mark`, `--steel`): the fill of chart marks, meter bars, sparks and the range band, so data never reads as yours.
 
 ### Named Rules
-**The Three Spends Rule.** Orange goes to your team, scores, and the primary action, and nowhere else. Free-agent chips, chrome, and neutral state are steel. If a new use of orange cannot be named as one of the three, it is steel.
+**The Three Spends Rule.** Orange goes to your team, scores, and the primary action, and nowhere else. Free-agent chips, chrome, nav markers, sort headers, checked pickers, bracket winners and every chart mark (bars, sparks, range bands, tick) are steel or white ink. If a new use of orange cannot be named as one of the three, it is steel.
 
 **The Live Is Not Yours Rule.** Live mint and orange never substitute for each other; a row can be both yours and live, and must read as both.
 
@@ -314,7 +315,7 @@ A single 4px steel-hard rule across the width with a banner per team hung from t
 Every game of the week as one list instead of a VS split. Your game is first, raised, bordered 2px orange and lifted; the rest dim to 78%. Your side is always left. Each score sits in a stitched box in Graduate: plain once scored, dashed and chalk when it is still a projection, doubled when final. The centre holds a condensed state word and the model's win chance.
 
 ### Season Line (signature)
-The season as one transit line of weeks: a 3px steel line through 12px stations. Past weeks are filled faded chalk, the current week is orange with a wash halo, weeks ahead are outlined. Each station opens that week.
+The season as one transit line of weeks: a 3px steel line through 12px stations. Past weeks are filled faded chalk, the current week is solid white ink with a soft halo, weeks ahead are outlined. Each station opens that week.
 
 ### Stat Tile
 A caption in the label voice over a Graduate numeral, tiles butted together with 1px steel-soft gaps.
