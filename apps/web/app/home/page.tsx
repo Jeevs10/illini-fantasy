@@ -5,6 +5,7 @@ import {
   type PlayerAvailability, type Slot, type Startable,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
+import { liveMatchups } from "../../lib/live.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Glyph } from "../ui/glyphs.tsx";
 import { AvailabilityTag, Empty, ET, LiveTag, Score, SectionHead } from "../ui/bits.tsx";
@@ -28,7 +29,9 @@ export default async function HomePage() {
   const day = viewDate();
   const now = viewNow();
 
-  const matchups = await weekMatchups(db, { leagueId, configId, on: day, settings, now });
+  // Tonight's games as they stand, so the home bug moves while they are played.
+  const { views: matchups } = await liveMatchups(
+    await weekMatchups(db, { leagueId, configId, on: day, settings, now }), now);
   // Drafted tenures begin on opening night, not draft night. Before the first
   // week starts, the roster that counts is the one that will be held then;
   // reading it as of today would call a freshly drafted team empty.

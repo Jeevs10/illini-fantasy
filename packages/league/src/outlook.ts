@@ -71,6 +71,8 @@ export interface TeamOutlook extends TeamPeriod {
    * everything scored so far plus everything still expected, summed.
    */
   projected: number;
+  /** Provisional points from games in progress inside `total` (withLive), absent when there are none. */
+  liveTotal?: number;
 }
 
 /** Whether a night has tipped off, is under way, or has been filed. */
@@ -259,7 +261,11 @@ export async function periodOutlook(
     settings?: LeagueSettings; now?: Date;
   },
 ): Promise<TeamOutlook> {
-  const today = now.toISOString().slice(0, 10);
+  // The basketball day (4am Eastern turnover, as `basketballDate` files games),
+  // not the UTC date: UTC turns over at 7pm Eastern, which would drop tonight's
+  // games from `pending` the moment they tip off and hide them while they are
+  // being played.
+  const today = new Date(now.getTime() - 9 * 3_600_000).toISOString().slice(0, 10);
   const scored = await scorePeriod(db, { fantasyTeamId, configId, from, to, settings, asOf: today });
 
   const { rows } = await db.query<{
@@ -295,7 +301,17 @@ export async function periodOutlook(
         -- not play, and a DNP is zero points, not a game still to come. Left
         -- pending it would read as "live" for the rest of the season and hold
         -- a finished week open behind it.
-        AND l.played_on >= $5
+        --
+        -- One exception, for live scoring: last night stays pending until this
+        -- morning's feed lands, so a game that ended after the 4am turnover
+        -- keeps its provisional live score instead of vanishing until ~6am.
+        -- Only while live scoring is in use (forward_live_params has rows) and
+        -- only until a feed dated today arrives — after that a night with no
+        -- line is a DNP again, exactly as before.
+        AND (l.played_on >= $5
+             OR (l.played_on = $5::date - 1
+                 AND EXISTS (SELECT 1 FROM forward_live_params)
+                 AND NOT EXISTS (SELECT 1 FROM forward_live_params WHERE as_of >= $5::date)))
         AND (s.score IS NULL OR l.played_on > $5)
       ORDER BY sched.tipoff NULLS LAST, p.name`,
     [fantasyTeamId, configId, from, to, today],

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type {
-  CountedGame, LeagueSettings, MatchupView, PendingGame, PlayerAvailability, PlayerWeek, Slot, TeamOutlook,
+  CountedGame, LeagueSettings, LiveLine, MatchupView, PendingGame, PlayerAvailability, PlayerWeek, Slot, TeamOutlook,
 } from "@illini/league";
-import { availabilityFor, seasonSchedule, seasonWeeks, weekMatchups } from "@illini/league";
+import { availabilityFor, liveKey, seasonSchedule, seasonWeeks, weekMatchups } from "@illini/league";
 import { db } from "../../lib/db.ts";
+import { liveMatchups } from "../../lib/live.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { buildSlots } from "../team/slots.ts";
 import { Avatar } from "../ui/identity.tsx";
@@ -23,7 +24,7 @@ export default async function LeaguePage({
   const now = viewNow();
   const today = viewDate();
 
-  const [matchups, season, schedule] = await Promise.all([
+  const [scheduled, season, schedule] = await Promise.all([
     weekMatchups(db, {
       leagueId, configId, on: viewDate(date), settings, now,
       week: week ? Number(week) : undefined,
@@ -31,6 +32,8 @@ export default async function LeaguePage({
     seasonWeeks(db, leagueId),
     seasonSchedule(db, leagueId),
   ]);
+  // Tonight's games as they stand, scored provisionally from ESPN's live box.
+  const { views: matchups, live } = await liveMatchups(scheduled, now);
 
   if (matchups.length === 0) {
     return (
@@ -91,7 +94,7 @@ export default async function LeaguePage({
                style={{ marginTop: "var(--s-6)" }}>
         <h2 style={{ marginBottom: "var(--s-3)" }}>{open.home.name} v {open.away.name}, player by player</h2>
         <Matchup view={open} today={today} now={now} settings={settings} availability={availability}
-                 fantasyTeamId={open === mine ? fantasyTeamId : null} />
+                 live={live} fantasyTeamId={open === mine ? fantasyTeamId : null} />
       </section>
     </>
   );
@@ -103,9 +106,10 @@ const span = (from: string, to: string) =>
 
 /** One matchup in full: both rosters, side by side. */
 function Matchup({
-  view, fantasyTeamId, today, now, settings, availability,
+  view, fantasyTeamId, today, now, settings, availability, live,
 }: {
   view: MatchupView;
+  live: Map<string, LiveLine>;
   fantasyTeamId: number | null;
   today: string;
   now: Date;
@@ -129,9 +133,9 @@ function Matchup({
     <>
       <div className="rosters">
         <RosterPanel side={left} mine={left.fantasyTeamId === fantasyTeamId} projecting={projecting}
-                     now={now} settings={settings} availability={availability} />
+                     now={now} settings={settings} availability={availability} live={live} />
         <RosterPanel side={right} mine={right.fantasyTeamId === fantasyTeamId} projecting={projecting}
-                     now={now} settings={settings} availability={availability} />
+                     now={now} settings={settings} availability={availability} live={live} />
       </div>
     </>
   );
@@ -154,8 +158,9 @@ function Matchup({
  * add up a player's week themselves.
  */
 function RosterPanel({
-  side, mine, projecting, now, settings, availability,
+  side, mine, projecting, now, settings, availability, live,
 }: {
+  live: Map<string, LiveLine>;
   side: MatchupView["home"];
   mine: boolean;
   /** Whether this week still has games in it worth quoting a forecast for. */
@@ -216,8 +221,15 @@ function RosterPanel({
                 <span className="weekfig-note">final</span>
               </span>
             ) : (
-              <WeekFigure scored={side.total} projected={side.projected} size="lg" block
-                          played={side.gamesPlayed > 0} tone={mine ? "accent" : "default"} />
+              <>
+                <WeekFigure scored={side.total} projected={side.projected} size="lg" block
+                            played={side.gamesPlayed > 0 || (side.liveTotal ?? 0) !== 0} tone={mine ? "accent" : "default"} />
+                {side.liveTotal !== undefined ? (
+                  <span className="weekfig-note" style={{ display: "block", color: "var(--live)" }}>
+                    incl. {side.liveTotal.toFixed(1)} live
+                  </span>
+                ) : null}
+              </>
             )}
         </span>
       </div>
@@ -250,6 +262,7 @@ function RosterPanel({
                   played={played.get(row.player.playerId) ?? []}
                   pending={pending.get(row.player.playerId) ?? []}
                   availability={availability.get(row.player.playerId)}
+                  live={live}
                 />
               )
           ))}
@@ -263,6 +276,7 @@ function RosterPanel({
                   played={played.get(p.playerId) ?? []}
                   pending={pending.get(p.playerId) ?? []}
                   availability={availability.get(p.playerId)}
+                  live={live}
                 />
               ))}
             </>
@@ -279,8 +293,9 @@ const DAY = new Intl.DateTimeFormat("en-US", {
 const dayOf = (ymd: string) => DAY.format(new Date(`${ymd}T00:00:00Z`));
 
 function StarterRow({
-  slot, player, played, pending, now, projecting, availability,
+  slot, player, played, pending, now, projecting, availability, live,
 }: {
+  live: Map<string, LiveLine>;
   slot: string;
   player: PlayerWeek;
   played: CountedGame[];
@@ -291,12 +306,14 @@ function StarterRow({
 }) {
   const projected = player.projected ?? player.total;
   const next = pending[0];
-  const live = pending.some((p) => p.tipoff !== null && new Date(p.tipoff) <= now);
+  const lines = pending.map((g) => live.get(liveKey(g.playerId, g.playedOn))).filter((l): l is LiveLine => !!l);
+  const playing = lines.find((l) => !l.final);
+  const onNow = pending.some((p) => p.tipoff !== null && new Date(p.tipoff) <= now);
   const games = played.length + pending.length;
 
   return (
     <details className="wk">
-      <summary className="plr" data-state={live ? "live" : undefined}>
+      <summary className="plr" data-state={onNow ? "live" : undefined}>
         <span className="plr-lead">
           <span className="slot" data-slot={slot}
                 style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{slot}</span>
@@ -311,7 +328,10 @@ function StarterRow({
             {played.length > 0 && pending.length > 0 ? (
               <><span className="dot" /><span>{played.length} in</span></>
             ) : null}
-            {live ? (
+            {lines.length > 0 ? (
+              <><span className="dot" />{playing ? <LiveTag label={playing.detail || "Live"} /> : <span>final, not yet filed</span>}
+                <span className="dot" /><span>{statLine(lines[lines.length - 1]!)}</span></>
+            ) : onNow ? (
               <><span className="dot" /><LiveTag /></>
             ) : next ? (
               <>
@@ -329,7 +349,8 @@ function StarterRow({
           * has games in it is not described by either alone. */}
         <span className="plr-right">
           <span className="plr-figure">
-            <Score value={player.total} size="sm" tone={played.length === 0 ? "quiet" : "default"} />
+            <Score value={player.total} size="sm"
+                   tone={player.live !== undefined ? "live" : played.length === 0 ? "quiet" : "default"} />
             <span className="cap">pts</span>
           </span>
           {projecting ? (
@@ -359,7 +380,30 @@ function StarterRow({
           <span className="plr-right"><Score value={g.score} size="xs" /></span>
         </div>
       ))}
-      {pending.map((g) => (
+      {pending.map((g) => {
+        const l = live.get(liveKey(g.playerId, g.playedOn));
+        return l ? (
+          <div className="plr" key={`n-${g.playedOn}`} data-state={l.final ? undefined : "live"}>
+            <span className="plr-lead">
+              <span className="slot" data-slot={g.slot}
+                    style={{ minWidth: "2.6rem", height: 22, fontSize: 10 }}>{g.slot}</span>
+            </span>
+            <span className="plr-id">
+              <span className="plr-name">{dayOf(g.playedOn)}</span>
+              <span className="plr-sub">
+                <span>vs {l.opponent} {l.us}-{l.them}</span>
+                <span className="dot" />{l.final ? <span>final, provisional</span> : <LiveTag label={l.detail || "Live"} />}
+                <span className="dot" /><span>{statLine(l)}</span>
+              </span>
+            </span>
+            <span className="plr-right">
+              <span className="plr-figure">
+                <Score value={l.points ?? 0} size="xs" tone="live" />
+                <span className="cap">live</span>
+              </span>
+            </span>
+          </div>
+        ) : (
         <div className="plr" key={`n-${g.playedOn}`}>
           <span className="plr-lead">
             <span className="slot" data-slot={g.slot}
@@ -379,9 +423,18 @@ function StarterRow({
             </span>
           </span>
         </div>
-      ))}
+        );
+      })}
     </details>
   );
+}
+
+/** "14 pts · 6 reb · 3 ast · 24 min", the box line a live number is made of. */
+function statLine(l: LiveLine): string {
+  const bits = [`${l.pts} pts`, `${l.reb} reb`, `${l.ast} ast`];
+  if (l.stl) bits.push(`${l.stl} stl`);
+  if (l.blk) bits.push(`${l.blk} blk`);
+  return `${bits.join(" · ")} · ${l.min} min`;
 }
 
 /**

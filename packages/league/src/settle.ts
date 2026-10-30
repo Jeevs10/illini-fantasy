@@ -24,6 +24,8 @@ export interface PlayerWeek {
    * set by `periodOutlook` — settlement has no unplayed nights to project.
    */
   projected?: number;
+  /** Provisional points from a game in progress inside `total` (withLive); display only. */
+  live?: number;
 }
 
 export interface TeamPeriod {

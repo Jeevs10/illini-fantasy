@@ -98,6 +98,20 @@ export interface ForwardFeed {
   projections?: ForwardProjection[];
   /** CBBD's whole schedule as of the feed, so conference slates published mid-season arrive. Absent before 2026-10-30. */
   games?: ForwardGame[];
+  /** valAdj's constants and this morning's team ratings, to score tonight's games live. Absent before 2026-10-31. */
+  live?: ForwardLive;
+}
+
+/** schedule.py live_scoring() plus the morning's ratings; see migration 020_live.sql. */
+export interface ForwardLive {
+  box: Record<"pts" | "shots" | "ast" | "tov" | "orb" | "drb" | "stl" | "blk" | "pf", number>;
+  oppDefK: number;
+  levelK: number;
+  levelRef: number;
+  teamW: number;
+  ftPoss: number;
+  worstDef: number;
+  teams: { cbbdTeamId: number; slug: string; def: number | null; net: number | null }[];
 }
 
 export interface ForwardGame {
@@ -184,6 +198,8 @@ export interface ForwardIngestResult {
   gameProjections: number;
   /** Schedule rows added or changed from the feed's games. */
   scheduled: number;
+  /** Team ratings stored for live scoring. */
+  liveTeams: number;
 }
 
 /** Rejects a payload that is not a feed, naming what is wrong with it. */
@@ -401,12 +417,38 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
 
   const injuries = feed.injuries === undefined ? 0 : await writeInjuries(db, feed.injuries, ids, feed.generated);
   const projections = feed.projections === undefined ? 0 : await writeProjections(db, feed.projections, ids, feed.asof);
+  const liveTeams = feed.live === undefined ? 0 : await writeLive(db, feed.live, feed.season, feed.asof, teamOf);
 
   return {
     players: current.length, created: fresh.length, projections: projected.length,
     lines: feed.lines.length, written, unmatched, unscheduled, injuries, configId,
-    gameProjections: projections, scheduled,
+    gameProjections: projections, scheduled, liveTeams,
   };
+}
+
+/**
+ * The morning's live-scoring inputs, replacing any sent earlier the same day:
+ * a re-pushed feed carries the same refit, and the newest wins.
+ */
+async function writeLive(
+  db: Db, live: ForwardLive, season: number, asOf: string, teamOf: Map<number, number>,
+): Promise<number> {
+  const { teams, ...params } = live;
+  await db.query(
+    `INSERT INTO forward_live_params (season, as_of, params) VALUES ($1, $2, $3)
+     ON CONFLICT (season, as_of) DO UPDATE SET params = EXCLUDED.params`,
+    [season, asOf, JSON.stringify(params)],
+  );
+  const rows = teams
+    .filter((t) => teamOf.has(t.cbbdTeamId))
+    .map((t) => [teamOf.get(t.cbbdTeamId)!, asOf, t.def, t.net]);
+  return insertMany(db, {
+    table: "forward_team_rating",
+    columns: ["team_id", "as_of", "def", "net"],
+    rows,
+    dedupeOn: [0, 1],
+    conflict: "(team_id, as_of) DO UPDATE SET def = EXCLUDED.def, net = EXCLUDED.net",
+  });
 }
 
 /**

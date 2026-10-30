@@ -225,3 +225,22 @@ test("a night is live for the length of a game, not for the rest of the season",
   assert.equal(nightState(undated, new Date("2026-11-20T15:00:00Z")), "upcoming");
   assert.equal(nightState(undated, new Date("2026-11-22T15:00:00Z")), "final");
 });
+
+test("last night stays pending for live scoring only until this morning's feed lands", async () => {
+  // 5am Eastern on the 17th: the basketball day has turned over, and the 16th
+  // (players 1 and 3 started, no scores filed) is last night.
+  const now = new Date("2026-11-17T10:00:00Z");
+  const lastNight = async () => (await periodOutlook(db, {
+    fantasyTeamId: 1, configId, from: "2026-11-16", to: "2026-11-22", settings: SETTINGS, now,
+  })).pending.filter((p) => p.playedOn === "2026-11-16").map((p) => p.playerId).sort();
+
+  assert.deepEqual(await lastNight(), [], "without live scoring a past night with no line is over, as before");
+
+  await db.query(`INSERT INTO forward_live_params (season, as_of, params) VALUES (2026, '2026-11-16', '{}')`);
+  assert.deepEqual(await lastNight(), [1, 3], "before today's feed, last night keeps its provisional live score");
+
+  await db.query(`INSERT INTO forward_live_params (season, as_of, params) VALUES (2026, '2026-11-17', '{}')`);
+  assert.deepEqual(await lastNight(), [], "once today's feed is in, a night with no line is a DNP again");
+
+  await db.query("DELETE FROM forward_live_params");
+});

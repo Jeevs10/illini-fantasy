@@ -85,3 +85,118 @@ export class EspnClient {
     }));
   }
 }
+
+// ---------- live games ----------
+
+/** A game on ESPN's scoreboard, as far as live scoring needs it. */
+export interface EspnLiveEvent {
+  eventId: string;
+  /** ESPN's game state: before tip, in progress, over. */
+  state: "pre" | "in" | "post";
+  /** "2nd - 8:41", "Halftime", "Final", "Final/OT". */
+  detail: string;
+  teams: { espnId: string; location: string; homeAway: "home" | "away"; score: number }[];
+}
+
+export interface EspnBoxLine {
+  athleteId: string;
+  name: string;
+  min: number; pts: number; fgm: number; fga: number; tpm: number; tpa: number; ftm: number; fta: number;
+  orb: number; drb: number; reb: number; ast: number; stl: number; blk: number; tov: number; pf: number;
+}
+
+export interface EspnBox {
+  eventId: string;
+  state: "pre" | "in" | "post";
+  detail: string;
+  teams: { espnId: string; location: string; players: EspnBoxLine[] }[];
+}
+
+interface RawCompetitor { homeAway: "home" | "away"; score?: string; team: { id: string; location: string } }
+interface RawStatus { type: { state: "pre" | "in" | "post"; detail?: string; shortDetail?: string } }
+interface RawScoreboard { events: { id: string; competitions: { competitors: RawCompetitor[]; status: RawStatus }[] }[] }
+interface RawSummary {
+  header: { id: string; competitions: { status: RawStatus }[] };
+  boxscore?: {
+    players?: {
+      team: { id: string; location: string };
+      statistics: { names: string[]; athletes: { athlete: { id: string; displayName: string }; stats: string[] }[] }[];
+    }[];
+  };
+}
+
+/**
+ * Live games for scoring in progress. No file cache, unlike `teams()`: a box
+ * score is stale in seconds. Responses are kept in memory for LIVE_TTL_MS so a
+ * busy page (every matchup asking about the same games) costs one fetch per
+ * game per window, which keeps a full Saturday slate well inside what the
+ * public API tolerates.
+ */
+const LIVE_TTL_MS = 20_000;
+const liveCache = new Map<string, { at: number; value: Promise<unknown> }>();
+
+async function liveJson<T>(url: string): Promise<T> {
+  const hit = liveCache.get(url);
+  if (hit && Date.now() - hit.at < LIVE_TTL_MS) return hit.value as Promise<T>;
+  const value = fetch(url).then(async (res) => {
+    if (!res.ok) throw new Error(`espn ${res.status} for ${url}`);
+    return res.json() as Promise<T>;
+  });
+  liveCache.set(url, { at: Date.now(), value });
+  value.catch(() => liveCache.delete(url));
+  return value;
+}
+
+const made = (s: string | undefined): [number, number] => {
+  const [m, a] = (s ?? "0-0").split("-").map((x) => Number(x) || 0);
+  return [m ?? 0, a ?? 0];
+};
+
+/** Every D1 game ESPN lists for a date (YYYY-MM-DD, ESPN's own day). */
+export async function espnScoreboard(date: string): Promise<EspnLiveEvent[]> {
+  const data = await liveJson<RawScoreboard>(
+    `${BASE}/scoreboard?dates=${date.replaceAll("-", "")}&groups=50&limit=500`);
+  return data.events.map((e) => {
+    const c = e.competitions[0]!;
+    return {
+      eventId: e.id,
+      state: c.status.type.state,
+      detail: c.status.type.shortDetail ?? c.status.type.detail ?? "",
+      teams: c.competitors.map((t) => ({
+        espnId: t.team.id, location: t.team.location, homeAway: t.homeAway, score: Number(t.score ?? 0),
+      })),
+    };
+  });
+}
+
+/** One game's box score so far, player by player. */
+export async function espnBox(eventId: string): Promise<EspnBox> {
+  const data = await liveJson<RawSummary>(`${BASE}/summary?event=${eventId}`);
+  const status = data.header.competitions[0]!.status.type;
+  return {
+    eventId,
+    state: status.state,
+    detail: status.shortDetail ?? status.detail ?? "",
+    teams: (data.boxscore?.players ?? []).map((t) => {
+      const block = t.statistics[0];
+      const col = (name: string) => block?.names.indexOf(name) ?? -1;
+      const [iMin, iPts, iFg, i3, iFt, iReb, iAst, iTo, iStl, iBlk, iOr, iDr, iPf] =
+        ["MIN", "PTS", "FG", "3PT", "FT", "REB", "AST", "TO", "STL", "BLK", "OREB", "DREB", "PF"].map(col);
+      return {
+        espnId: t.team.id,
+        location: t.team.location,
+        players: (block?.athletes ?? []).filter((a) => a.stats.length > 0).map((a) => {
+          const n = (i: number | undefined) => (i === undefined || i < 0 ? 0 : Number(a.stats[i]) || 0);
+          const [fgm, fga] = made(a.stats[iFg!]);
+          const [tpm, tpa] = made(a.stats[i3!]);
+          const [ftm, fta] = made(a.stats[iFt!]);
+          return {
+            athleteId: a.athlete.id, name: a.athlete.displayName,
+            min: n(iMin), pts: n(iPts), fgm, fga, tpm, tpa, ftm, fta,
+            orb: n(iOr), drb: n(iDr), reb: n(iReb), ast: n(iAst), stl: n(iStl), blk: n(iBlk), tov: n(iTo), pf: n(iPf),
+          };
+        }),
+      };
+    }),
+  };
+}
