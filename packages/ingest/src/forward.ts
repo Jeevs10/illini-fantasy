@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Db } from "@illini/db";
 import { insertMany } from "@illini/db";
-import { canonicaliseName } from "@illini/crosswalk";
+import { canonicaliseName, normaliseTeam } from "@illini/crosswalk";
+import { basketballDate } from "./nightly.ts";
 
 /**
  * The Data repo's forward model, as illini-fantasy reads it.
@@ -95,6 +96,19 @@ export interface ForwardFeed {
   injuries?: ForwardInjury[];
   /** Projected valAdj for each upcoming game. Absent from feeds written before 2026-10-30. */
   projections?: ForwardProjection[];
+  /** CBBD's whole schedule as of the feed, so conference slates published mid-season arrive. Absent before 2026-10-30. */
+  games?: ForwardGame[];
+}
+
+export interface ForwardGame {
+  gameId: number;
+  /** Tip-off, ISO 8601 UTC. */
+  start: string;
+  homeId: number | null;
+  awayId: number | null;
+  homeName: string | null;
+  awayName: string | null;
+  neutral: boolean;
 }
 
 export interface ForwardProjection {
@@ -167,6 +181,8 @@ export interface ForwardIngestResult {
   configId: number;
   /** Game projections written or replaced. */
   gameProjections: number;
+  /** Schedule rows added or changed from the feed's games. */
+  scheduled: number;
 }
 
 /** Rejects a payload that is not a feed, naming what is wrong with it. */
@@ -185,11 +201,33 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
   const configId = await forwardConfigId(db);
 
   // ---- schools, by CBBD id (syncTeams has filled them)
-  const teamOf = new Map(
+  const loadTeams = async () => new Map(
     (await db.query<{ id: string; cbbd_id: number }>(
       "SELECT id, cbbd_id FROM team WHERE cbbd_id IS NOT NULL")).rows
       .map((r) => [r.cbbd_id, Number(r.id)]),
   );
+  let teamOf = await loadTeams();
+
+  // ---- the schedule, before anything is matched against it
+  let scheduled = 0;
+  if (feed.games !== undefined && feed.games.length > 0) {
+    teamOf = await syncTeamsFrom(db, feed.games, teamOf);
+    scheduled = await insertMany(db, {
+      table: "game",
+      columns: ["played_on", "season", "home_team_id", "away_team_id", "neutral_site", "cbbd_id", "tipoff"],
+      rows: feed.games
+        .filter((g) => g.homeId !== null && g.awayId !== null && teamOf.has(g.homeId) && teamOf.has(g.awayId))
+        .map((g) => [basketballDate(g.start), season, teamOf.get(g.homeId!), teamOf.get(g.awayId!),
+                     g.neutral, g.gameId, g.start]),
+      dedupeOn: [5],
+      conflict: `(cbbd_id) DO UPDATE SET played_on = EXCLUDED.played_on,
+        home_team_id = EXCLUDED.home_team_id, away_team_id = EXCLUDED.away_team_id,
+        neutral_site = EXCLUDED.neutral_site, tipoff = EXCLUDED.tipoff
+        WHERE (game.played_on, game.home_team_id, game.away_team_id, game.neutral_site, game.tipoff)
+          IS DISTINCT FROM (EXCLUDED.played_on, EXCLUDED.home_team_id, EXCLUDED.away_team_id,
+                            EXCLUDED.neutral_site, EXCLUDED.tipoff)`,
+    });
+  }
 
   // ---- players: create the ones we have not seen, then bring every one up to date
   const known = async () => new Map(
@@ -351,8 +389,37 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
   return {
     players: current.length, created: fresh.length, projections: projected.length,
     lines: feed.lines.length, written, unmatched, unscheduled, injuries, configId,
-    gameProjections: projections,
+    gameProjections: projections, scheduled,
   };
+}
+
+/**
+ * Any school on the feed's schedule we have no CBBD id for — a non-D1
+ * opponent, mostly — added by name, so its games can be stored. A school we
+ * already have under that name gains the id; one we have under the id keeps
+ * its row.
+ */
+async function syncTeamsFrom(
+  db: Db, games: ForwardGame[], known: Map<number, number>,
+): Promise<Map<number, number>> {
+  const missing = new Map<number, string>();
+  for (const g of games) {
+    if (g.homeId !== null && !known.has(g.homeId) && g.homeName) missing.set(g.homeId, g.homeName);
+    if (g.awayId !== null && !known.has(g.awayId) && g.awayName) missing.set(g.awayId, g.awayName);
+  }
+  if (missing.size === 0) return known;
+  await insertMany(db, {
+    table: "team",
+    columns: ["name", "normalised", "cbbd_id"],
+    rows: [...missing].map(([id, name]) => [name, normaliseTeam(name), id]),
+    dedupeOn: [1],
+    conflict: "(normalised) DO UPDATE SET cbbd_id = coalesce(team.cbbd_id, EXCLUDED.cbbd_id)",
+  });
+  return new Map(
+    (await db.query<{ id: string; cbbd_id: number }>(
+      "SELECT id, cbbd_id FROM team WHERE cbbd_id IS NOT NULL")).rows
+      .map((r) => [r.cbbd_id, Number(r.id)]),
+  );
 }
 
 /**

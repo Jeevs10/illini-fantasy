@@ -92,7 +92,7 @@ try {
     console.log(
       `forward ${feed.asof}: players ${r.players} (${r.created} new), projections ${r.projections}, ` +
       `lines ${r.lines} -> ${r.written} new scores, unmatched ${r.unmatched}, not in schedule ${r.unscheduled}, ` +
-      `injury rows ${r.injuries}`,
+      `injury rows ${r.injuries}, game projections ${r.gameProjections}, schedule rows ${r.scheduled}`,
     );
     for (const l of await settleDue(db, { season, through: feed.asof })) {
       console.log(`  league ${l.leagueId}: waiver runs ${l.waiverRuns}, trades ${l.trades}, ` +

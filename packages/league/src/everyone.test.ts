@@ -79,6 +79,7 @@ before(async () => {
   for (const [id, name, normalised, cbbd] of teams) {
     await db.query("INSERT INTO team (id, name, normalised, cbbd_id) VALUES ($1,$2,$3,$4)", [id, name, normalised, cbbd]);
   }
+  await db.query("SELECT setval('team_id_seq', 100)");
   for (const [cbbd, day, tip, home, away] of games) {
     await db.query(
       `INSERT INTO game (played_on, season, home_team_id, away_team_id, cbbd_id, tipoff)
@@ -284,4 +285,20 @@ test("a player's season in points is what he has scored plus his projection for 
   assert.equal(ill.totalScore, 9);
   assert.equal(ill.seasonPoints, 49);
   assert.equal(pool[0]!.name, "Ill One");
+});
+
+test("the feed's schedule adds a game published after the first load, and its lines then land", async () => {
+  const f = feed("2026-11-13", [line(105, "1", 6)]);
+  f.games = [{ gameId: 105, start: "2026-11-14T01:00:00.000Z", homeId: 1, awayId: 99,
+               homeName: "Illinois", awayName: "Chicago State", neutral: false }];
+  const r = await ingestForwardFeed(db, f);
+  assert.equal(r.scheduled, 1);
+  assert.equal(r.unscheduled, 0, "the line found the game the same feed brought");
+  const { rows } = await db.query<{ played_on: string; name: string }>(
+    `SELECT to_char(g.played_on, 'YYYY-MM-DD') AS played_on, t.name FROM game g JOIN team t ON t.id = g.away_team_id
+      WHERE g.cbbd_id = 105`);
+  // 8pm Eastern on the 13th is the 14th in UTC; it is filed under the night it was played.
+  assert.deepEqual(rows[0], { played_on: "2026-11-13", name: "Chicago State" });
+  // Resending the same schedule changes nothing.
+  assert.equal((await ingestForwardFeed(db, f)).scheduled, 0);
 });
