@@ -17,6 +17,10 @@ export const label = (day: string): string => {
 export const window7 = (today: string): { from: string; to: string } =>
   ({ from: shift(today, -1), to: shift(today, 5) });
 
+/** The seven days of a scoring period, from its first day. */
+export const periodDays = (startsOn: string): { from: string; to: string } =>
+  ({ from: startsOn, to: shift(startsOn, 6) });
+
 /**
  * Yesterday through the next five nights.
  *
@@ -26,9 +30,18 @@ export const window7 = (today: string): { from: string; to: string } =>
  * and a college slate is uneven enough that most of them are empty.
  */
 export function DayStrip({
-  day, today, slate,
-}: { day: string; today: string; slate: Map<string, number> }) {
-  const days = Array.from({ length: 7 }, (_, i) => shift(today, i - 1));
+  day, today, slate, from,
+}: {
+  day: string; today: string; slate: Map<string, number>;
+  /**
+   * The strip's first day. Defaults to yesterday; the team page passes the
+   * first day of the week it is showing, so stepping to week 3 shows week 3's
+   * nights rather than this week's again.
+   */
+  from?: string;
+}) {
+  const first = from ?? shift(today, -1);
+  const days = Array.from({ length: 7 }, (_, i) => shift(first, i));
   return (
     <nav className="daystrip" aria-label="Choose a night">
       {days.map((d) => {

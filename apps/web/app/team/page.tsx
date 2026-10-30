@@ -8,7 +8,7 @@ import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Lineup, type LineupPlayer, type OffNightPlayer } from "./lineup.tsx";
 import { EveryoneWeek } from "./everyone.tsx";
 import { TeamNameHeading } from "./teamname.tsx";
-import { DayStrip, window7 } from "./daystrip.tsx";
+import { DayStrip, periodDays } from "./daystrip.tsx";
 import { NextLock } from "./nextlock.tsx";
 import { Avatar } from "../ui/identity.tsx";
 import { Empty, LiveTag, Score } from "../ui/bits.tsx";
@@ -63,7 +63,9 @@ export default async function TeamPage({
     );
   }
 
-  const { from, to } = window7(today);
+  // The strip shows the week on the page, not the week around today: the
+  // arrows move between weeks, and a strip that stayed put would contradict them.
+  const { from, to } = periodDays(period.startsOn);
 
   if (settings.lineupMode === "everyone") {
     const nextPeriodStart = new Date(`${period.endsOn}T00:00:00Z`);
@@ -106,7 +108,7 @@ export default async function TeamPage({
           </nav>
         </div>
 
-        <DayStrip day={day} today={today} slate={slate} />
+        <DayStrip day={day} today={today} slate={slate} from={from} />
 
         <div className="panel">
           <div className="panel-head">
@@ -224,7 +226,7 @@ export default async function TeamPage({
         </nav>
       </div>
 
-      <DayStrip day={day} today={today} slate={slate} />
+      <DayStrip day={day} today={today} slate={slate} from={from} />
 
       <div className="panel">
         <div className="panel-head">
