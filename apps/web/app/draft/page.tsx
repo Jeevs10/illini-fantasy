@@ -7,7 +7,7 @@ import { requireViewer, viewDate } from "../../lib/session.ts";
 import { Clock } from "./clock.tsx";
 import { Pool } from "./pool.tsx";
 import { Queue } from "./queue.tsx";
-import { Board } from "./board.tsx";
+import { Board, JustTaken } from "./board.tsx";
 import { SetUp, Controls } from "./controls.tsx";
 import { Empty } from "../ui/bits.tsx";
 
@@ -72,6 +72,20 @@ export default async function DraftPage({
     fantasyTeamId === null ? Promise.resolve([]) : draftQueue(db, { leagueId, fantasyTeamId }),
   ]);
   const queued = new Set(queue.map((p) => p.playerId));
+  // The board is every slot, made or not; the strip under the clock is the
+  // unmade ones from here on, and the rail the last few that were made.
+  const upNext = room.board
+    .filter((p) => p.playerId === null)
+    .sort((a, b) => a.overall - b.overall)
+    .slice(0, 9)
+    .map((p) => ({
+      overall: p.overall, round: p.round, teamName: p.teamName,
+      mine: p.fantasyTeamId === fantasyTeamId,
+    }));
+  const recent = room.board
+    .filter((p) => p.playerId !== null)
+    .sort((a, b) => b.overall - a.overall)
+    .slice(0, 6);
 
   const query = (over: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
@@ -104,6 +118,7 @@ export default async function DraftPage({
         yourNextPick={room.yourNextPick}
         picksMade={room.picksMade}
         totalPicks={draft.totalPicks}
+        upNext={upNext}
       />
 
       {commissioner ? <Controls status={draft.status} pickSeconds={draft.pickSeconds} /> : null}
@@ -123,7 +138,10 @@ export default async function DraftPage({
             }}
             clearSearchHref={query({ q: undefined })}
           />
-          <Queue players={queue} clocked={draft.pickSeconds > 0} />
+          <div className="draftside">
+            <Queue players={queue} clocked={draft.pickSeconds > 0} />
+            <JustTaken picks={recent} yourTeamId={fantasyTeamId} started={draft.status !== "scheduled"} />
+          </div>
         </div>
       )}
 

@@ -95,59 +95,66 @@ export default async function TradesPage() {
         </div>
       </div>
 
-      {fantasyTeamId === null || !mine ? (
-        <div className="panel">
-          <Empty title="No team here" glyph="team">
-            You are a member of {leagueName} but do not run a team in it, so
-            there is nobody to trade. Everything agreed in the league is below.
-          </Empty>
+      {/* An offer to you is the one thing here with a clock you must answer,
+          so it comes before anything you might start. */}
+      {incoming.length > 0 ? <Offers incoming={worded(incoming)} outgoing={[]} title="Waiting on you" /> : null}
+
+      <div className="tradegrid">
+        <div className="tradegrid-main">
+          {fantasyTeamId === null || !mine ? (
+            <div className="panel">
+              <Empty title="No team here" glyph="team">
+                You are a member of {leagueName} but do not run a team in it, so
+                there is nobody to trade. Everything agreed in the league is
+                alongside.
+              </Empty>
+            </div>
+          ) : closed ? (
+            // The form is gone rather than disabled. A control that argues with
+            // you after you have filled it in is worse than one that was never
+            // offered, and the deadline is not a thing a manager can fix.
+            <div className="panel">
+              <Empty title="Trading is closed" glyph="swap">
+                Nothing has been offered or agreed in {leagueName} since{" "}
+                {DEADLINE.format(new Date(`${settings.tradeDeadline!}T12:00:00Z`))}. Deals
+                agreed before then still executed when their review window closed.
+              </Empty>
+            </div>
+          ) : (
+            <Propose mine={mine} others={others} />
+          )}
         </div>
-      ) : closed ? (
-        <>
-          {/* The form is gone rather than disabled. A control that argues with
-              you after you have filled it in is worse than one that was never
-              offered, and the deadline is not a thing a manager can fix. */}
+
+        <aside className="tradegrid-rail" aria-label="Trades in the league">
+          {outgoing.length > 0 ? <Offers incoming={[]} outgoing={worded(outgoing)} title="Your open offers" /> : null}
+          {/* Public on purpose, and only drawn when something is in it: the
+              review window is in the page meta for anyone who wants the rule. */}
+          {review.length > 0 ? <Review trades={worded(review)} commissioner={role === "commissioner"} /> : null}
+
           <div className="panel">
-            <Empty title="Trading is closed" glyph="swap">
-              Nothing has been offered or agreed in {leagueName} since{" "}
-              {DEADLINE.format(new Date(`${settings.tradeDeadline!}T12:00:00Z`))}. Deals
-              agreed before then still executed when their review window closed.
-              Everything the league did is below.
-            </Empty>
+            <div className="panel-head">
+              <h2>Trade history</h2>
+              {history.length > 0 ? <span className="pill">{history.length}</span> : null}
+            </div>
+            {history.length === 0 ? (
+              <p className="panel-body faint">
+                Nothing has been traded in {leagueName} this season. Settled,
+                turned-down and vetoed deals all land here.
+              </p>
+            ) : (
+              <>
+                <ul className="deals">
+                  {worded(history).map((trade) => <Deal key={trade.id} trade={trade} />)}
+                </ul>
+                <p className="seatless">
+                  A trade that could not be honoured says so rather than
+                  disappearing: the sentence names the player whose move voided it.
+                </p>
+              </>
+            )}
           </div>
-          <Offers incoming={worded(incoming)} outgoing={worded(outgoing)} />
-        </>
-      ) : (
-        <>
-          <Propose mine={mine} others={others} />
-          <Offers incoming={worded(incoming)} outgoing={worded(outgoing)} />
-        </>
-      )}
-
-      <Review trades={worded(review)} commissioner={role === "commissioner"} />
-
-      <div className="panel">
-        <div className="panel-head">
-          <h2>Settled</h2>
-          <span className="pill">{history.length}</span>
-        </div>
-        {history.length === 0 ? (
-          <Empty title="No trades yet" glyph="swap">
-            Nothing has been traded in {leagueName} this season.
-          </Empty>
-        ) : (
-          <ul className="deals">
-            {worded(history).map((trade) => <Deal key={trade.id} trade={trade} />)}
-          </ul>
-        )}
-        <p className="seatless">
-          A trade that could not be honoured says so rather than disappearing. A
-          player dropped or traded elsewhere before the window closed voids the
-          deal, and the sentence names him &mdash; both managers agreed to
-          something, and are owed the reason it did not happen.
-        </p>
+        </aside>
       </div>
-
     </>
   );
 }

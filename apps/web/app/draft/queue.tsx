@@ -6,7 +6,7 @@ import type { QueuedPlayer } from "@illini/league";
 import { moveQueued, unqueuePlayer, type DraftState } from "./actions.ts";
 import { RoleTag } from "../ui/bits.tsx";
 import { playerPath } from "../../lib/links.ts";
-import { Arrow } from "../ui/glyphs.tsx";
+import { Arrow, Glyph } from "../ui/glyphs.tsx";
 
 /**
  * The list the clock reads when you are not here.
@@ -75,7 +75,7 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
                     </form>
                     <form action={submitRemove}>
                       <input type="hidden" name="playerId" value={player.playerId} />
-                      <button type="submit" aria-label={`Remove ${player.name} from your queue`}>×</button>
+                      <button type="submit" aria-label={`Remove ${player.name} from your queue`}><Glyph name="close" size={14} /></button>
                     </form>
                   </span>
                 ) : (

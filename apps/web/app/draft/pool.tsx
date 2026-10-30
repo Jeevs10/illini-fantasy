@@ -114,7 +114,7 @@ export function Pool({
                     {player.conference ? <span className="sub">{player.conference}</span> : null}
                   </td>
                   {projected ? (
-                    <td className="r num" style={{ fontWeight: 650 }}>
+                    <td className="r num" style={{ fontWeight: 600 }}>
                       {player.seasonPoints === null ? "—" : player.seasonPoints.toFixed(0)}
                     </td>
                   ) : null}

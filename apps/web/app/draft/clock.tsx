@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { BoardPick, DraftStatus } from "@illini/league";
+import { monogram } from "../ui/identity.tsx";
+
+/** A pick still to be made, as the on-deck strip shows it. */
+export interface OnDeck { overall: number; round: number; teamName: string; mine: boolean }
 
 /** How often an open room asks the server what happened. */
 const POLL_MS = 5000;
@@ -23,7 +28,7 @@ const mmss = (seconds: number) =>
  */
 export function Clock({
   status, onTheClock, secondsLeft, deadline, nowIso, yourTurn, yourNextPick,
-  picksMade, totalPicks,
+  picksMade, totalPicks, upNext,
 }: {
   status: DraftStatus;
   onTheClock: BoardPick | null;
@@ -34,6 +39,8 @@ export function Clock({
   yourNextPick: number | null;
   picksMade: number;
   totalPicks: number;
+  /** The next picks in order, the one on the clock first. */
+  upNext: OnDeck[];
 }) {
   const router = useRouter();
   const [left, setLeft] = useState<number | null>(secondsLeft);
@@ -67,42 +74,46 @@ export function Clock({
 
   if (status === "complete") {
     return (
-      <div className="clockbar" data-state="complete">
-        <div>
-          <span className="eyebrow">Draft complete</span>
-          <strong className="clock-team">{totalPicks} picks made</strong>
+      <section className="clockbar" data-state="complete" aria-labelledby="clock-head">
+        <div className="clock-now">
+          <h2 id="clock-head" className="clock-team">The draft is done</h2>
+          <p className="clock-sub">All {totalPicks} picks are in and every roster is set.</p>
         </div>
-        <span className="pill live">Rosters are set</span>
-      </div>
+        <Link className="button primary" href="/team">See your roster</Link>
+      </section>
     );
   }
 
   if (status === "scheduled") {
     return (
-      <div className="clockbar" data-state="scheduled">
-        <div>
-          <span className="eyebrow">Not started</span>
-          <strong className="clock-team">
+      <section className="clockbar" data-state="scheduled" aria-labelledby="clock-head">
+        <div className="clock-now">
+          <h2 id="clock-head" className="clock-team">
             {onTheClock ? `${onTheClock.teamName} picks first` : "The order is drawn"}
-          </strong>
+          </h2>
+          <p className="clock-sub">
+            {totalPicks} picks, snaking back every round.
+            {yourNextPick !== null ? ` You pick at ${yourNextPick}.` : ""}
+          </p>
         </div>
-        <span className="pill">{totalPicks} picks</span>
-      </div>
+        <Deck picks={upNext} label="The first picks" />
+      </section>
     );
   }
 
   const urgent = left !== null && left <= 15;
+  const who = onTheClock?.teamName ?? "Nobody";
   return (
-    <div className="clockbar" data-state={status} data-yours={yourTurn} data-urgent={urgent}>
-      <div>
-        <span className="eyebrow">
-          {status === "paused" ? "Paused" : yourTurn ? "You are on the clock" : "On the clock"}
-        </span>
-        <strong className="clock-team">{onTheClock?.teamName ?? "—"}</strong>
-        <span className="clock-sub">
-          Pick {onTheClock?.overall ?? picksMade + 1} &middot; round {onTheClock?.round ?? "—"}
-          {yourNextPick !== null && !yourTurn ? ` · you pick at ${yourNextPick}` : ""}
-        </span>
+    <section className="clockbar" data-state={status} data-yours={yourTurn} data-urgent={urgent}
+             aria-labelledby="clock-head">
+      <div className="clock-now">
+        <h2 id="clock-head" className="clock-team">
+          {yourTurn ? "You're on the clock" : `${who} ${status === "paused" ? "is up when it resumes" : "is on the clock"}`}
+        </h2>
+        <p className="clock-sub tnum">
+          Pick {onTheClock?.overall ?? picksMade + 1}, round {onTheClock?.round ?? "—"}
+          {yourNextPick !== null && !yourTurn ? `. You pick at ${yourNextPick}, ${picksAway(yourNextPick, onTheClock?.overall ?? picksMade + 1)}.` : ""}
+        </p>
       </div>
       {status === "paused" ? (
         <span className="pill warn">Clock stopped</span>
@@ -113,11 +124,38 @@ export function Clock({
         // The turn change below it is the announcement that matters.
         <span className="countdown num" aria-hidden="true">{mmss(left)}</span>
       )}
+      <Deck picks={upNext.slice(1)} label="On deck" />
       <p className="sr-only" role="status" aria-live="polite">
         {status === "paused" ? "The draft is paused."
           : yourTurn ? "You are on the clock."
-          : `${onTheClock?.teamName ?? "Nobody"} is on the clock.`}
+          : `${who} is on the clock.`}
       </p>
-    </div>
+    </section>
+  );
+}
+
+const picksAway = (yours: number, current: number) => {
+  const n = yours - current;
+  return n === 1 ? "the next pick" : `${n} picks away`;
+};
+
+/**
+ * The picks still to come, hung as small banners in the order they fall. The
+ * snake is the thing a manager cannot do in their head, and this is it drawn:
+ * how many teams pick before you, and who.
+ */
+function Deck({ picks, label }: { picks: OnDeck[]; label: string }) {
+  if (picks.length === 0) return null;
+  return (
+    <ol className="ondeck" aria-label={label}>
+      {picks.map((p) => (
+        <li key={p.overall} data-mine={p.mine || undefined}
+            aria-label={`Pick ${p.overall}: ${p.teamName}${p.mine ? " (you)" : ""}`}>
+          <span className="ondeck-pick tnum">{p.overall}</span>
+          <span className="ondeck-mark" aria-hidden="true">{monogram(p.teamName)}</span>
+          <span className="ondeck-name" aria-hidden="true">{p.mine ? "You" : p.teamName}</span>
+        </li>
+      ))}
+    </ol>
   );
 }

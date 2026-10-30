@@ -6,13 +6,16 @@ import { respond, withdraw, type TradeActionState } from "./actions.ts";
 import { Empty } from "../ui/bits.tsx";
 
 /**
- * Offers waiting on somebody, in both directions.
+ * Offers waiting on somebody.
  *
- * Incoming and outgoing share a panel because they are one question — what is
- * outstanding — and separating them into two panels puts an empty box on the
- * screen of every manager who has only ever been offered a trade.
+ * The page asks this for one direction at a time: offers waiting on you lead
+ * the page, because they are the only thing on it with a clock you have to
+ * answer, and your own unanswered ones sit in the rail. Neither is drawn when
+ * it is empty, so the empty state only shows if the page passes both.
  */
-export function Offers({ incoming, outgoing }: { incoming: DealRow[]; outgoing: DealRow[] }) {
+export function Offers({
+  incoming, outgoing, title = "Offers",
+}: { incoming: DealRow[]; outgoing: DealRow[]; title?: string }) {
   const [state, answer, answering] = useActionState<TradeActionState, FormData>(respond, {});
   const [pulled, pull, pulling] = useActionState<TradeActionState, FormData>(withdraw, {});
   const latest = (pulled.at ?? 0) > (state.at ?? 0) ? pulled : state;
@@ -20,7 +23,7 @@ export function Offers({ incoming, outgoing }: { incoming: DealRow[]; outgoing: 
   return (
     <div className="panel">
       <div className="panel-head">
-        <h2>Offers</h2>
+        <h2>{title}</h2>
         <span className="pill">{incoming.length + outgoing.length}</span>
       </div>
 

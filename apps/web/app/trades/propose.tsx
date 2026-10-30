@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { TradeableTeam } from "@illini/league";
 import { offer, type TradeActionState } from "./actions.ts";
 import { Empty } from "../ui/bits.tsx";
+import { Avatar } from "../ui/identity.tsx";
 
 /**
  * The offer form.
@@ -46,7 +47,6 @@ export function Propose({ mine, others }: { mine: TradeableTeam; others: Tradeab
     <div className="panel">
       <div className="panel-head">
         <h2>Propose a trade</h2>
-        <span className="pill">{mine.players.length} to offer</span>
       </div>
 
       <div role="status" aria-live="polite">
@@ -58,24 +58,13 @@ export function Propose({ mine, others }: { mine: TradeableTeam; others: Tradeab
       </div>
 
       <form action={submit} className="panel-body tradeform">
-        <label className="field">
-          <span>Trade with</span>
-          <select
-            name="toTeamId"
-            value={withId}
-            onChange={(event) => { setWith(Number(event.target.value)); setGets([]); }}
-          >
-            {others.map((team) => (
-              <option key={team.fantasyTeamId} value={team.fantasyTeamId}>
-                {team.teamName}{team.ownerName ? ` — ${team.ownerName}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-
         <div className="pickers">
           <fieldset className="picker">
-            <legend>You give</legend>
+            <legend>
+              <Avatar name={mine.teamName} seed={mine.fantasyTeamId} size="xs" mine />
+              <span className="picker-team">{mine.teamName}</span>
+              <span className="picker-verb">gives</span>
+            </legend>
             {mine.players.length === 0 ? (
               <p className="deal-nothing">Nobody on your roster yet.</p>
             ) : mine.players.map((player) => (
@@ -92,7 +81,26 @@ export function Propose({ mine, others }: { mine: TradeableTeam; others: Tradeab
           </fieldset>
 
           <fieldset className="picker">
-            <legend>You get</legend>
+            {/* The other side of the table is chosen in its own heading, so
+                the roster under it is always the one being asked for. */}
+            <legend>
+              <Avatar name={them.teamName} seed={them.fantasyTeamId} size="xs" />
+              <label className="sr-only" htmlFor="trade-with">Trade with</label>
+              <select
+                id="trade-with"
+                name="toTeamId"
+                className="picker-select"
+                value={withId}
+                onChange={(event) => { setWith(Number(event.target.value)); setGets([]); }}
+              >
+                {others.map((team) => (
+                  <option key={team.fantasyTeamId} value={team.fantasyTeamId}>
+                    {team.teamName}{team.ownerName ? ` — ${team.ownerName}` : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="picker-verb">gives</span>
+            </legend>
             {them.players.length === 0 ? (
               <p className="deal-nothing">{them.teamName} has nobody rostered.</p>
             ) : them.players.map((player) => (
@@ -121,7 +129,7 @@ export function Propose({ mine, others }: { mine: TradeableTeam; others: Tradeab
           />
         </label>
 
-        <div className="controls">
+        <div className="tradefoot">
           <button type="submit" className="primary" disabled={pending || gives.length + gets.length === 0}>
             Send offer
           </button>

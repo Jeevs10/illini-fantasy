@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { DraftRoom } from "@illini/league";
+import type { BoardPick, DraftRoom } from "@illini/league";
 import { RoleTag } from "../ui/bits.tsx";
 import { playerPath } from "../../lib/links.ts";
 
@@ -85,6 +85,48 @@ export function Board({ room, yourTeamId }: { room: DraftRoom; yourTeamId: numbe
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The last few picks, newest first: what a manager who looked away for two
+ * minutes needs, without reading the board cell by cell.
+ */
+export function JustTaken({
+  picks, yourTeamId, started,
+}: { picks: BoardPick[]; yourTeamId: number | null; started: boolean }) {
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h2>Just taken</h2>
+      </div>
+      {picks.length === 0 ? (
+        <p className="panel-body faint">
+          {started ? "Nobody has been drafted yet." : "Picks land here as they are made."}
+        </p>
+      ) : (
+        <ol className="taken">
+          {picks.map((p) => (
+            <li key={p.overall} data-mine={p.fantasyTeamId === yourTeamId || undefined}>
+              <span className="taken-pick num">{p.overall}</span>
+              <span className="taken-who">
+                <span className="row" style={{ gap: "var(--s-2)", flexWrap: "nowrap" }}>
+                  <Link href={playerPath(p.playerId!, p.playerName ?? "")} className="player-link">
+                    {p.playerName}
+                  </Link>
+                  <RoleTag role={p.role} />
+                </span>
+                <span className="sub">
+                  {p.fantasyTeamId === yourTeamId ? "You" : p.teamName}
+                  {p.auto ? " · auto" : ""}
+                  {p.school ? ` · ${p.school}` : ""}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Trade, TradeSide, TradeStatus } from "@illini/league";
 import { Avatar } from "../ui/identity.tsx";
+import { Glyph } from "../ui/glyphs.tsx";
 import { playerPath } from "../../lib/links.ts";
 
 /** How a settled trade should read. Live ones say their own thing. */
@@ -60,7 +61,7 @@ export function Deal({ trade, children }: { trade: DealRow; children?: React.Rea
     <li className="deal" data-status={trade.status}>
       <div className="deal-sides">
         <Side side={trade.from} heading="gives" />
-        <span className="deal-swap" aria-hidden="true">⇄</span>
+        <span className="deal-swap" aria-hidden="true"><Glyph name="swap" size={18} /></span>
         <Side side={trade.to} heading="gives" />
       </div>
 
