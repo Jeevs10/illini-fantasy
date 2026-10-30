@@ -181,7 +181,7 @@ export async function startableInPeriod(
           ORDER BY tr.as_of DESC LIMIT 1
        ) rating ON true
        LEFT JOIN LATERAL (
-         SELECT avg(sc.score) AS projected,
+         SELECT coalesce((SELECT gp.projected FROM player_game_projection gp WHERE gp.player_id = roster.player_id AND gp.played_on = slate.played_on LIMIT 1), avg(sc.score)) AS projected,
                 (array_agg(sc.archetype ORDER BY sc.played_on DESC))[1] AS archetype
            FROM player_game_score sc
           WHERE sc.player_id = roster.player_id AND sc.config_id = $5

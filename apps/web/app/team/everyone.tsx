@@ -17,8 +17,9 @@ export interface EveryoneRow {
   counting: boolean;
   held: boolean;
   reserve: boolean;
-  games: { playedOn: string; tipoff: string | null; opponent: string | null; score: number | null }[];
+  games: { playedOn: string; tipoff: string | null; opponent: string | null; score: number | null; projected: number | null }[];
   scored: number;
+  projectedWeek: number;
   availability?: PlayerAvailability;
 }
 
@@ -40,7 +41,8 @@ export function EveryoneWeek({ rows, nextLock }: { rows: EveryoneRow[]; nextLock
   const reserved = rows.filter((r) => r.held && r.reserve && !r.counting);
 
   const games = (r: EveryoneRow) => r.games.length === 0 ? "no games this week"
-    : r.games.map((g) => `${day(g.playedOn)}${g.opponent ? ` ${g.opponent}` : ""}${g.score === null ? "" : ` ${g.score.toFixed(1)}`}`).join(" · ");
+    : r.games.map((g) => `${day(g.playedOn)}${g.opponent ? ` ${g.opponent}` : ""}${
+      g.score !== null ? ` ${g.score.toFixed(1)}` : g.projected !== null ? ` (proj ${g.projected.toFixed(1)})` : ""}`).join(" · ");
 
   const irButton = (r: EveryoneRow) => {
     if (!r.held) return null;
@@ -107,7 +109,14 @@ export function EveryoneWeek({ rows, nextLock }: { rows: EveryoneRow[]; nextLock
           {counting.map((r) => row(r, (
             <span className="row" style={{ gap: "var(--s-2)" }}>
               {irButton(r)}
-              <Score value={r.scored} size="sm" tone={r.games.some((g) => g.score !== null) ? "default" : "quiet"} />
+              <span style={{ textAlign: "right" }}>
+                <Score value={r.scored} size="sm" tone={r.games.some((g) => g.score !== null) ? "default" : "quiet"} />
+                {r.projectedWeek > r.scored + 0.05 ? (
+                  <span className="faint tnum" style={{ display: "block", fontSize: "var(--t-xs)" }}>
+                    proj {r.projectedWeek.toFixed(1)}
+                  </span>
+                ) : null}
+              </span>
             </span>
           )))}
         </section>

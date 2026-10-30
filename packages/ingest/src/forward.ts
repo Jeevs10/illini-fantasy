@@ -88,6 +88,21 @@ export interface ForwardFeed {
   lines: ForwardLine[];
   /** Absent from feeds written before 2026-10-29. */
   injuries?: ForwardInjury[];
+  /** Projected valAdj for each upcoming game. Absent from feeds written before 2026-10-30. */
+  projections?: ForwardProjection[];
+}
+
+export interface ForwardProjection {
+  gameId: number;
+  date: string;
+  key: string;
+  cbbdTeamId: number | null;
+  proj: number;
+  mpg: number | null;
+  poss: number;
+  oppDef: number;
+  /** Listed out on the morning's injury report, so projected at zero. */
+  out?: boolean;
 }
 
 /** The site's injury wording onto the app's five statuses. Unrecognised wording is questionable, as RotoWire's is. */
@@ -145,6 +160,8 @@ export interface ForwardIngestResult {
   /** Availability rows written: new statuses, plus `available` for players who came off the list. */
   injuries: number;
   configId: number;
+  /** Game projections written or replaced. */
+  gameProjections: number;
 }
 
 /** Rejects a payload that is not a feed, naming what is wrong with it. */
@@ -318,11 +335,48 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
   });
 
   const injuries = feed.injuries === undefined ? 0 : await writeInjuries(db, feed.injuries, ids, feed.generated);
+  const projections = feed.projections === undefined ? 0 : await writeProjections(db, feed.projections, ids, feed.asof);
 
   return {
     players: current.length, created: fresh.length, projections: projected.length,
     lines: feed.lines.length, written, unmatched, unscheduled, injuries, configId,
+    gameProjections: projections,
   };
+}
+
+/**
+ * The morning's game projections, replacing the last ones for the same games.
+ * A game already played keeps the projection it had at tip-off: the feed only
+ * sends games that are not final, so nothing overwrites it afterwards.
+ */
+async function writeProjections(
+  db: Db, list: ForwardProjection[], ids: Map<string, number>, asof: string,
+): Promise<number> {
+  if (list.length === 0) return 0;
+  const games = new Map(
+    (await db.query<{ id: string; cbbd_id: number; played_on: string }>(
+      `SELECT id, cbbd_id, to_char(played_on, 'YYYY-MM-DD') AS played_on
+         FROM game WHERE cbbd_id = ANY($1::int[])`,
+      [[...new Set(list.map((p) => p.gameId))]])).rows
+      .map((r) => [r.cbbd_id, r]),
+  );
+  const rows: unknown[][] = [];
+  for (const p of list) {
+    const playerId = ids.get(p.key);
+    const g = games.get(p.gameId);
+    if (playerId === undefined || !g) continue;
+    rows.push([playerId, Number(g.id), g.played_on, p.proj, p.mpg, p.out === true, asof]);
+  }
+  return insertMany(db, {
+    table: "player_game_projection",
+    columns: ["player_id", "game_id", "played_on", "projected", "mpg", "listed_out", "as_of"],
+    rows,
+    dedupeOn: [0, 1],
+    conflict: `(player_id, game_id) DO UPDATE SET played_on = EXCLUDED.played_on,
+      projected = EXCLUDED.projected, mpg = EXCLUDED.mpg, listed_out = EXCLUDED.listed_out,
+      as_of = EXCLUDED.as_of
+      WHERE player_game_projection.as_of <= EXCLUDED.as_of`,
+  });
 }
 
 /**

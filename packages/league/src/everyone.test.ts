@@ -12,6 +12,7 @@ import { NoLineupError } from "./lineups.ts";
 import { setPeriodLineup } from "./periodlineup.ts";
 import { playerPool } from "./roster.ts";
 import { weekRoster } from "./weekroster.ts";
+import { playerWeekProjection } from "./leaders.ts";
 import { NotYourTeamError, renameTeam, TeamNameTaken } from "./teamname.ts";
 
 /**
@@ -241,4 +242,34 @@ test("a manager renames their own team, and only their own", async () => {
   await assert.rejects(renameTeam(db, { fantasyTeamId: 2, byUserId: 1, name: "The Orange Krush" }),
     (e: Error) => e instanceof TeamNameTaken);
   await assert.rejects(renameTeam(db, { fantasyTeamId: 1, byUserId: 1, name: "   " }), /needs a name/);
+});
+
+test("a game ahead is projected from the model's number for it, a game played from its score", async () => {
+  const f = feed("2026-11-09", []);
+  f.projections = [
+    { gameId: 104, date: "2026-11-10", key: "1", cbbdTeamId: 1, proj: 3.5, mpg: 30, poss: 70, oppDef: 2 },
+    { gameId: 104, date: "2026-11-10", key: "2", cbbdTeamId: 1, proj: 1.25, mpg: 20, poss: 70, oppDef: 2 },
+  ];
+  const r = await ingestForwardFeed(db, f);
+  assert.equal(r.gameProjections, 2);
+
+  // Monday the 9th: Tuesday's game is still ahead.
+  const before = await weekRoster(db, {
+    fantasyTeamId: 1, from: "2026-11-08", to: "2026-11-14", configId, season: 2027, settings,
+    now: at("2026-11-09T12:00:00Z"), today: "2026-11-09",
+  });
+  const ill = before.find((p) => p.name === "Ill One")!;
+  assert.equal(ill.games[0]!.projected, 3.5);
+  assert.equal(ill.projectedWeek, 3.5);
+  assert.equal(before.reduce((a, p) => a + p.projectedWeek, 0), 4.75);
+
+  // Wednesday: the line (1) has replaced the projection.
+  const after = await weekRoster(db, {
+    fantasyTeamId: 1, from: "2026-11-08", to: "2026-11-14", configId, season: 2027, settings,
+    now: at("2026-11-11T12:00:00Z"), today: "2026-11-11",
+  });
+  assert.equal(after.find((p) => p.name === "Ill One")!.projectedWeek, 1);
+
+  const week = await playerWeekProjection(db, { playerId: pid.get("2")!, configId, from: "2026-11-08", to: "2026-11-14" });
+  assert.deepEqual([week.gamesScheduled, week.projectedTotal], [1, 1.25]);
 });

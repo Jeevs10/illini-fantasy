@@ -121,7 +121,8 @@ export async function startableOn(
         WHERE s.config_id = $3 AND s.played_on < $2
         GROUP BY s.player_id
      )
-     SELECT roster.player_id, roster.name, form.archetype, form.projected,
+     SELECT roster.player_id, roster.name, form.archetype,
+            coalesce((SELECT gp.projected FROM player_game_projection gp WHERE gp.player_id = roster.player_id AND gp.played_on = $2::date LIMIT 1), form.projected) AS projected,
             tonight.game_id, tonight.tipoff,
             opp.name AS opponent, rating.strength AS opponent_strength,
             (SELECT st.role FROM player_game_stat st

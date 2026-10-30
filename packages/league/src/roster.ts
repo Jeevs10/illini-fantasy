@@ -373,12 +373,19 @@ export async function playerPool(
               count(*) AS games,
               count(*) FILTER (WHERE s.score IS NOT NULL AND n.played_on <= $12) AS played,
               coalesce(sum(s.score) FILTER (WHERE s.score IS NOT NULL AND n.played_on <= $12), 0) AS scored,
+              -- Nights still to come: the model's number for each where the
+              -- feed has one, the rest priced off his average below.
               count(*) FILTER (
+                WHERE n.played_on >= $12 AND (s.score IS NULL OR n.played_on > $12) AND gp.projected IS NULL
+              ) AS remaining,
+              coalesce(sum(gp.projected) FILTER (
                 WHERE n.played_on >= $12 AND (s.score IS NULL OR n.played_on > $12)
-              ) AS remaining
+              ), 0) AS remaining_projected
          FROM nights n
          LEFT JOIN player_game_score s
            ON s.player_id = n.player_id AND s.played_on = n.played_on AND s.config_id = $3
+         LEFT JOIN player_game_projection gp
+           ON gp.player_id = n.player_id AND gp.played_on = n.played_on
         GROUP BY n.player_id
      )`;
 
@@ -387,6 +394,7 @@ export async function playerPool(
             coalesce(week.played, 0) AS week_played,
             coalesce(week.scored, 0) AS week_scored,
             coalesce(week.scored, 0)
+              + coalesce(week.remaining_projected, 0)
               + coalesce(week.remaining, 0) * coalesce(form.per_game, 0) AS week_projected`;
 
   const weekJoins = window === undefined ? "" : `

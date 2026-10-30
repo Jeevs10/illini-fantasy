@@ -258,24 +258,31 @@ export async function playerWeekProjection(
     playerId: number; configId: number; from: string; to: string;
   },
 ): Promise<WeekProjection> {
-  const { rows } = await db.query<{ average: string | null; games_scheduled: string }>(
+  const { rows } = await db.query<{
+    average: string | null; games_scheduled: string; projected_games: string | null; with_projection: string;
+  }>(
     `WITH form AS (
        SELECT avg(score) AS average FROM player_game_score
         WHERE player_id = $1 AND config_id = $2 AND played_on < $3
      ),
      sched AS (
-       SELECT count(*) AS games_scheduled
+       SELECT count(*) AS games_scheduled,
+              -- The model's number for each game when there is one, his average otherwise.
+              sum(gp.projected) AS projected_games, count(gp.projected) AS with_projection
          FROM game g JOIN player p ON p.id = $1
+         LEFT JOIN player_game_projection gp ON gp.player_id = p.id AND gp.game_id = g.id
         WHERE g.played_on BETWEEN $3 AND $4
           AND (g.home_team_id = p.team_id OR g.away_team_id = p.team_id)
      )
-     SELECT form.average, sched.games_scheduled FROM form, sched`,
+     SELECT form.average, sched.games_scheduled, sched.projected_games, sched.with_projection FROM form, sched`,
     [playerId, configId, from, to],
   );
   const row = rows[0];
   const average = row?.average == null ? 0 : Number(row.average);
   const gamesScheduled = row ? Number(row.games_scheduled) : 0;
-  return { gamesScheduled, average, projectedTotal: average * gamesScheduled };
+  const withProjection = row ? Number(row.with_projection) : 0;
+  const projectedTotal = Number(row?.projected_games ?? 0) + average * (gamesScheduled - withProjection);
+  return { gamesScheduled, average: gamesScheduled > 0 ? projectedTotal / gamesScheduled : average, projectedTotal };
 }
 
 /**

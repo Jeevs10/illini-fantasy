@@ -215,7 +215,10 @@ async function pendingForCurrentStarters(
            -- Form is what is known *now*, not what the season will know by the
            -- night in question: averaging up to a future game date would price
            -- that game off results nobody has seen yet.
-           SELECT avg(sc.score) AS projected FROM player_game_score sc
+           -- The model's projection for this game when the feed has one; his
+           -- average so far when it does not (player_game_projection, 016).
+           SELECT coalesce((SELECT gp.projected FROM player_game_projection gp WHERE gp.player_id = p.id AND gp.played_on = g.played_on LIMIT 1), avg(sc.score)) AS projected
+             FROM player_game_score sc
             WHERE sc.player_id = p.id AND sc.config_id = $2
               AND sc.played_on < LEAST(g.played_on, $6::date)
          ) form ON true
@@ -279,7 +282,7 @@ export async function periodOutlook(
        ) sched ON true
        LEFT JOIN team opp ON opp.id = sched.opp_id
        LEFT JOIN LATERAL (
-         SELECT avg(sc.score) AS projected
+         SELECT coalesce((SELECT gp.projected FROM player_game_projection gp WHERE gp.player_id = l.player_id AND gp.played_on = l.played_on LIMIT 1), avg(sc.score)) AS projected
            FROM player_game_score sc
           WHERE sc.player_id = l.player_id AND sc.config_id = $2
             AND sc.played_on < LEAST(l.played_on, $5::date)

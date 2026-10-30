@@ -82,6 +82,7 @@ export default async function TeamPage({
     const counting = week.filter((p) => p.counting);
     const held = week.filter((p) => p.held && !p.reserve).length;
     const scored = counting.reduce((a, p) => a + p.scored, 0);
+    const projectedWeek = counting.reduce((a, p) => a + p.projectedWeek, 0);
     return (
       <>
         <div className="pagehead">
@@ -116,6 +117,11 @@ export default async function TeamPage({
               <div className="eyebrow">Week {period.week} · {span(period.startsOn, period.endsOn)}</div>
               <div className="row" style={{ gap: "var(--s-2)", marginTop: 2 }}>
                 <Score value={scored} size="md" />
+                {projectedWeek > scored + 0.05 ? (
+                  <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
+                    proj <strong className="tnum">{projectedWeek.toFixed(1)}</strong>
+                  </span>
+                ) : null}
                 <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
                   {counting.length} counting
                 </span>
