@@ -1,12 +1,13 @@
 import Link from "next/link";
 import {
   activeLimit, availabilityFor, carryForwardLineup, eligibleSlots, lockOf, periodContaining, periodForWeek,
-  rosterLimit, rosterOn, seasonWeeks, slateByDay, startableInPeriod, weekRoster, type Slot,
+  rosterLimit, rosterOn, seasonWeeks, slateByDay, startableInPeriod, TEAM_NAME_MAX, weekRoster, type Slot,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Lineup, type LineupPlayer, type OffNightPlayer } from "./lineup.tsx";
 import { EveryoneWeek } from "./everyone.tsx";
+import { TeamNameHeading } from "./teamname.tsx";
 import { DayStrip, window7 } from "./daystrip.tsx";
 import { NextLock } from "./nextlock.tsx";
 import { Avatar } from "../ui/identity.tsx";
@@ -85,7 +86,7 @@ export default async function TeamPage({
           <div className="row" style={{ gap: "var(--s-4)", flexWrap: "nowrap", minWidth: 0 }}>
             <Avatar name={fantasyTeamName ?? "Team"} seed={fantasyTeamId} size="xl" mine />
             <div style={{ minWidth: 0 }}>
-              <h1>{fantasyTeamName}</h1>
+              <TeamNameHeading name={fantasyTeamName ?? "Team"} max={TEAM_NAME_MAX} />
               <p className="meta">
                 <span>{leagueName}</span>
                 <span>{held} of {activeLimit(settings)} rostered</span>
@@ -102,7 +103,6 @@ export default async function TeamPage({
             ) : null}
             <Link className="button" href="/waivers">Add or drop</Link>
             <Link className="button" href="/league">Matchup</Link>
-            <Link className="button" href="/settings">Rename team</Link>
           </nav>
         </div>
 
@@ -204,7 +204,7 @@ export default async function TeamPage({
         <div className="row" style={{ gap: "var(--s-4)", flexWrap: "nowrap", minWidth: 0 }}>
           <Avatar name={fantasyTeamName ?? "Team"} seed={fantasyTeamId} size="xl" mine />
           <div style={{ minWidth: 0 }}>
-            <h1>{fantasyTeamName}</h1>
+            <TeamNameHeading name={fantasyTeamName ?? "Team"} max={TEAM_NAME_MAX} />
             <p className="meta">
               <span>{leagueName}</span>
               <span>{roster.length} of {rosterLimit(settings)} rostered</span>
