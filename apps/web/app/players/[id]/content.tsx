@@ -256,9 +256,8 @@ export function SeasonAveragesSection({
 function EmptyLog({ card }: { card: PlayerCard }) {
   return (
     <Empty title="No scored games" glyph="clock">
-      {card.name} has no games under this league&rsquo;s scoring config yet.
-      Freshmen and transfers appear here once they have played a night that has
-      been ingested.
+      {card.name} hasn&rsquo;t played a scored game yet. Each regular-season
+      game shows up here the morning after it&rsquo;s played.
     </Empty>
   );
 }
@@ -272,12 +271,12 @@ export function GameLogSection({ card }: { card: PlayerCard }) {
         <div>
           <h2>Game log</h2>
           <p>
-            {card.log.some((g) => (g.archetype as string) === "forward")
-              ? <>Each night scored the way the Player Score rates a player: the box line through its
-                  box weights, the defence it came against, and the level of his program and team.</>
-              : <>Each night&rsquo;s six blocks, the opponent multiplier applied to
+            {card.log.some((g) => (g.archetype as string) !== "forward")
+              ? <>Each night&rsquo;s six blocks, the opponent multiplier applied to
                   them, and the minutes ramp — so a score can be read rather than
-                  taken on faith.</>}
+                  taken on faith.</>
+              : <>Each night scored the way the Player Score rates a player: the box line through its
+                  box weights, the defence it came against, and the level of his program and team.</>}
           </p>
         </div>
         <span className="pill">{card.games} scored</span>
