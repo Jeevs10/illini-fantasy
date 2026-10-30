@@ -1,6 +1,6 @@
-import { PASSWORD_MIN, USERNAME_MAX, USERNAME_RULE } from "@illini/league";
+import { PASSWORD_MIN, TEAM_NAME_MAX, USERNAME_MAX, USERNAME_RULE } from "@illini/league";
 import { requireViewer } from "../../lib/session.ts";
-import { AccountForms } from "./form.tsx";
+import { AccountForms, TeamNameForm } from "./form.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,14 @@ export default async function Settings() {
           </p>
         </div>
       </div>
+
+      {viewer.membership.fantasyTeamId !== null && viewer.membership.fantasyTeamName ? (
+        <TeamNameForm
+          teamName={viewer.membership.fantasyTeamName}
+          leagueName={viewer.membership.leagueName}
+          max={TEAM_NAME_MAX}
+        />
+      ) : null}
 
       <AccountForms
         username={viewer.username}

@@ -1,7 +1,9 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { changeMyPassword, renameAccount, type PasswordState, type RenameState } from "./actions.ts";
+import {
+  changeMyPassword, renameAccount, renameMyTeam, type PasswordState, type RenameState, type TeamNameState,
+} from "./actions.ts";
 
 /**
  * The limits, passed in rather than imported live — `join/[token]/register.tsx`
@@ -64,6 +66,45 @@ function RenameForm({ username, rules }: { username: string; rules: Rules }) {
         <div className="controls">
           <button className="primary" type="submit" disabled={saving}>
             {saving ? "Saving…" : "Change username"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+/** The viewer's team in the league they are looking at. */
+export function TeamNameForm({ teamName, leagueName, max }: { teamName: string; leagueName: string; max: number }) {
+  const [state, submit, saving] = useActionState<TeamNameState, FormData>(renameMyTeam, {});
+  const [value, setValue] = useState(teamName);
+
+  return (
+    <form action={submit} className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>Team name</h2>
+          <p>What {leagueName} sees on the scoreboard, the standings and the draft board.</p>
+        </div>
+      </div>
+      <div className="panel-body">
+        <label className="field">
+          <span>Team name</span>
+          <input
+            name="teamName" required maxLength={max}
+            value={value} onChange={(e) => setValue(e.target.value)}
+          />
+          <small className="fineprint">Up to {max} characters, and not already used in the league.</small>
+        </label>
+
+        <div role="status" aria-live="polite">
+          {state.error ?? state.ok ? (
+            <p className={`notice ${state.error ? "bad" : "good"}`}>{state.error ?? state.ok}</p>
+          ) : null}
+        </div>
+
+        <div className="controls">
+          <button className="primary" type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Rename team"}
           </button>
         </div>
       </div>

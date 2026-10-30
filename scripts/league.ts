@@ -91,8 +91,14 @@ try {
 
     // The commissioner exists as a row before they have a password: `passwd`
     // is what turns the seat into an account somebody can sign in to.
-    const owner = await upsertUser(db,
-      { email: emailArg ?? "commish@illini.test", displayName: "Commissioner" });
+    // An existing account keeps its own name; "Commissioner" is only a
+    // placeholder for a seat nobody has signed in to yet.
+    const email = (emailArg ?? "commish@illini.test").trim().toLowerCase();
+    const { rows: [existing] } = await db.query<{ id: string }>(
+      "SELECT id FROM app_user WHERE email = $1", [email]);
+    const owner = existing
+      ? { id: Number(existing.id) }
+      : await upsertUser(db, { email, displayName: "Commissioner" });
     const { rows: [league] } = await db.query<{ id: string }>(
       `INSERT INTO league (name, season, config_id, settings, commissioner_id)
        VALUES ($1,$2,$3,$4,$5) RETURNING id`,

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  AccountTaken, changePassword, passwordProblem, setUsername, usernameProblem,
+  AccountTaken, NotYourTeamError, TeamNameTaken, changePassword, passwordProblem, renameTeam, setUsername,
+  teamNameProblem, usernameProblem,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer } from "../../lib/session.ts";
@@ -47,4 +48,26 @@ export async function changeMyPassword(
   const ok = await changePassword(db, { userId: viewer.userId, current, next });
   if (!ok) return { error: "That isn't your current password." };
   return { ok: "Your password has been changed." };
+}
+
+export interface TeamNameState { error?: string; ok?: string; }
+
+/** Renames the viewer's team in the league they are looking at. */
+export async function renameMyTeam(_state: TeamNameState, formData: FormData): Promise<TeamNameState> {
+  const viewer = await requireViewer();
+  const { fantasyTeamId } = viewer.membership;
+  if (fantasyTeamId === null) return { error: "You do not run a team in this league." };
+  const name = String(formData.get("teamName") ?? "");
+  const problem = teamNameProblem(name);
+  if (problem) return { error: problem };
+  try {
+    const { to } = await renameTeam(db, { fantasyTeamId, byUserId: viewer.userId, name });
+    // The team name is on the masthead, the scorebug, the standings and the board.
+    revalidatePath("/", "layout");
+    return { ok: `Your team is now ${to}.` };
+  } catch (error) {
+    if (error instanceof TeamNameTaken) return { error: `${error.name} is already a team in this league.` };
+    if (error instanceof NotYourTeamError) return { error: "That team is not yours to rename." };
+    throw error;
+  }
 }

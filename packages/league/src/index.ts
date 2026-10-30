@@ -20,3 +20,4 @@ export * from "./winprob.ts";
 export * from "./reserve.ts";
 export * from "./maintenance.ts";
 export * from "./weekroster.ts";
+export * from "./teamname.ts";

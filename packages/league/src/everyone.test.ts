@@ -12,6 +12,7 @@ import { NoLineupError } from "./lineups.ts";
 import { setPeriodLineup } from "./periodlineup.ts";
 import { playerPool } from "./roster.ts";
 import { weekRoster } from "./weekroster.ts";
+import { NotYourTeamError, renameTeam, TeamNameTaken } from "./teamname.ts";
 
 /**
  * The 2026-27 league end to end, on a two-team, two-seat miniature of it:
@@ -228,4 +229,16 @@ test("the team page's week reads the roster held at the lock", async () => {
   assert.deepEqual([pur.counting, pur.held, pur.scored], [true, false, 2], "dropped Tuesday, still this week's");
   // Thursday's score is the future from Wednesday.
   assert.equal(w1.find((p) => p.name === "Ill One")!.scored, 5);
+});
+
+test("a manager renames their own team, and only their own", async () => {
+  assert.deepEqual(await renameTeam(db, { fantasyTeamId: 1, byUserId: 1, name: "  The   Orange Krush " }),
+    { from: "Team 1", to: "The Orange Krush" });
+  const { rows } = await db.query<{ name: string }>("SELECT name FROM fantasy_team WHERE id = 1");
+  assert.equal(rows[0]!.name, "The Orange Krush");
+  await assert.rejects(renameTeam(db, { fantasyTeamId: 2, byUserId: 99, name: "Mine now" }),
+    (e: Error) => e instanceof NotYourTeamError);
+  await assert.rejects(renameTeam(db, { fantasyTeamId: 2, byUserId: 1, name: "The Orange Krush" }),
+    (e: Error) => e instanceof TeamNameTaken);
+  await assert.rejects(renameTeam(db, { fantasyTeamId: 1, byUserId: 1, name: "   " }), /needs a name/);
 });

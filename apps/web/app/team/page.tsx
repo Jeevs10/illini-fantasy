@@ -102,6 +102,7 @@ export default async function TeamPage({
             ) : null}
             <Link className="button" href="/waivers">Add or drop</Link>
             <Link className="button" href="/league">Matchup</Link>
+            <Link className="button" href="/settings">Rename team</Link>
           </nav>
         </div>
 
