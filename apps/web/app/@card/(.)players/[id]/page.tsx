@@ -26,7 +26,7 @@ export default async function PlayerCardModal({ params }: { params: Promise<{ id
   const { card, rankTrend, averages, projection, availability, percentileOf, outlook } = data;
 
   return (
-    <Modal>
+    <Modal label={card.name}>
       <Hero card={card} outlook={outlook} />
       {availability && availability.status !== "available" ? (
         <Availability availability={availability} />

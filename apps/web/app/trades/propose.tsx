@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import type { TradeableTeam } from "@illini/league";
 import { offer, type TradeActionState } from "./actions.ts";
@@ -18,6 +18,17 @@ export function Propose({ mine, others }: { mine: TradeableTeam; others: Tradeab
   const [state, submit, pending] = useActionState<TradeActionState, FormData>(offer, {});
   const [withId, setWith] = useState(others[0]?.fantasyTeamId ?? 0);
   const them = others.find((t) => t.fantasyTeamId === withId) ?? others[0];
+  // What is ticked, so the button and the sentence beside it can say what is
+  // about to be sent. The server refuses an empty offer; the form should not
+  // offer to send one.
+  const [gives, setGives] = useState<number[]>([]);
+  const [gets, setGets] = useState<number[]>([]);
+  const toggle = (set: React.Dispatch<React.SetStateAction<number[]>>, id: number) =>
+    set((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  // A sent offer clears the boxes, as the uncontrolled form used to on its own.
+  useEffect(() => { if (state.ok) { setGives([]); setGets([]); } }, [state]);
+  const names = (ids: number[], from: TradeableTeam | undefined) =>
+    ids.map((id) => from?.players.find((p) => p.playerId === id)?.name).filter(Boolean).join(", ");
 
   if (!them) {
     return (
@@ -52,7 +63,7 @@ export function Propose({ mine, others }: { mine: TradeableTeam; others: Tradeab
           <select
             name="toTeamId"
             value={withId}
-            onChange={(event) => setWith(Number(event.target.value))}
+            onChange={(event) => { setWith(Number(event.target.value)); setGets([]); }}
           >
             {others.map((team) => (
               <option key={team.fantasyTeamId} value={team.fantasyTeamId}>
@@ -69,7 +80,9 @@ export function Propose({ mine, others }: { mine: TradeableTeam; others: Tradeab
               <p className="deal-nothing">Nobody on your roster yet.</p>
             ) : mine.players.map((player) => (
               <label key={player.playerId}>
-                <input type="checkbox" name="give" value={player.playerId} />
+                <input type="checkbox" name="give" value={player.playerId}
+                       checked={gives.includes(player.playerId)}
+                       onChange={() => toggle(setGives, player.playerId)} />
                 <span>
                   {player.name}
                   <span className="sub">{player.teamName ?? "—"}</span>
@@ -86,7 +99,9 @@ export function Propose({ mine, others }: { mine: TradeableTeam; others: Tradeab
               // Keyed by team as well, so switching the other side resets the
               // boxes rather than carrying a tick across to a different player.
               <label key={`${them.fantasyTeamId}-${player.playerId}`}>
-                <input type="checkbox" name="get" value={player.playerId} />
+                <input type="checkbox" name="get" value={player.playerId}
+                       checked={gets.includes(player.playerId)}
+                       onChange={() => toggle(setGets, player.playerId)} />
                 <span>
                   {player.name}
                   <span className="sub">{player.teamName ?? "—"}</span>
@@ -107,9 +122,15 @@ export function Propose({ mine, others }: { mine: TradeableTeam; others: Tradeab
         </label>
 
         <div className="controls">
-          <button type="submit" className="primary" disabled={pending}>Send offer</button>
-          <span className="deal-note">
-            Nothing moves until they accept, and then not until the window closes.
+          <button type="submit" className="primary" disabled={pending || gives.length + gets.length === 0}>
+            Send offer
+          </button>
+          <span className="deal-note" aria-live="polite">
+            {gives.length + gets.length === 0
+              ? "Tick at least one player on either side."
+              : <>You give <strong>{names(gives, mine) || "nothing"}</strong> and get{" "}
+                  <strong>{names(gets, them) || "nothing"}</strong>. Nothing moves until {them.teamName}{" "}
+                  accepts, and then not until the review window closes.</>}
           </span>
         </div>
       </form>

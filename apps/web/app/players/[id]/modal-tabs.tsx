@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { PanelTabs } from "../../ui/tabs.tsx";
+import { useId, useState } from "react";
+import { PanelTabs, panelId, tabId } from "../../ui/tabs.tsx";
 
 /**
  * The modal's own organisation of the card's three sections.
@@ -21,11 +21,13 @@ export function CardTabs({
     { key: "log", label: "Game log" },
   ];
   const [active, setActive] = useState("overview");
+  const idBase = useId();
 
   return (
     <>
-      <PanelTabs tabs={tabs} active={active} onSelect={setActive} ariaLabel="Player card sections" />
-      <div style={{ marginTop: "var(--s-4)" }}>
+      <PanelTabs tabs={tabs} active={active} onSelect={setActive} ariaLabel="Player card sections" idBase={idBase} />
+      <div role="tabpanel" id={panelId(idBase)} aria-labelledby={tabId(idBase, active)}
+           style={{ marginTop: "var(--s-4)" }}>
         {active === "overview" ? overview : null}
         {active === "averages" ? seasonAverages : null}
         {active === "log" ? gameLog : null}

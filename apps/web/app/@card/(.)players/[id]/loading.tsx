@@ -2,7 +2,7 @@ import { Modal } from "../../../ui/modal.tsx";
 
 export default function Loading() {
   return (
-    <Modal>
+    <Modal label="Loading player">
       <div className="hero">
         <div className="skel" style={{ width: 62, height: 62, borderRadius: 18, flex: "none" }} />
         <div className="hero-id">

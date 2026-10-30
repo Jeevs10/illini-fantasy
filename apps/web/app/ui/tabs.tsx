@@ -29,17 +29,39 @@ export function NavTabs({ tabs, ariaLabel }: { tabs: NavTab[]; ariaLabel: string
 
 export interface PanelTab { key: string; label: string }
 
+/** The ids a tab and its panel share, so each can name the other. */
+export const tabId = (base: string, key: string) => `${base}-tab-${key}`;
+export const panelId = (base: string) => `${base}-panel`;
+
+/**
+ * The ARIA tabs pattern: one tab in the Tab order, the arrow keys (and Home
+ * and End) moving between them, each naming the panel it controls. The owner
+ * renders that panel with `role="tabpanel"` and `id={panelId(idBase)}`.
+ */
 export function PanelTabs({
-  tabs, active, onSelect, ariaLabel,
-}: { tabs: PanelTab[]; active: string; onSelect: (key: string) => void; ariaLabel: string }) {
+  tabs, active, onSelect, ariaLabel, idBase,
+}: { tabs: PanelTab[]; active: string; onSelect: (key: string) => void; ariaLabel: string; idBase: string }) {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const i = tabs.findIndex((t) => t.key === active);
+    const next = e.key === "ArrowRight" ? (i + 1) % tabs.length
+      : e.key === "ArrowLeft" ? (i - 1 + tabs.length) % tabs.length
+      : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    onSelect(tabs[next]!.key);
+    document.getElementById(tabId(idBase, tabs[next]!.key))?.focus();
+  };
   return (
-    <div className="segmented" role="tablist" aria-label={ariaLabel}>
+    <div className="segmented" role="tablist" aria-label={ariaLabel} onKeyDown={onKeyDown}>
       {tabs.map((t) => (
         <button
           key={t.key}
+          id={tabId(idBase, t.key)}
           type="button"
           role="tab"
           aria-selected={t.key === active}
+          aria-controls={panelId(idBase)}
+          tabIndex={t.key === active ? 0 : -1}
           data-active={t.key === active || undefined}
           onClick={() => onSelect(t.key)}
         >
