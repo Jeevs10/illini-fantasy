@@ -939,6 +939,10 @@ button.ghost:hover:not(:disabled) { background: var(--sunken); color: var(--ink)
 button.sm, .button.sm { min-height: 32px; padding-inline: var(--s-3); font-size: var(--t-xs); border-radius: var(--r-sm); }
 button.danger:hover:not(:disabled) { border-color: var(--crit); color: var(--crit); background: var(--crit-wash); }
 button:disabled { opacity: .45; cursor: not-allowed; }
+/* A disabled main action is not a spend of orange: felt, steel, faded chalk. */
+button.primary:disabled {
+  opacity: 1; background: var(--surface-2); border-color: var(--line); color: var(--ink-3); box-shadow: none;
+}
 
 input[type="email"], input[type="search"], input[type="text"],
 input[type="password"], input[type="number"], select, textarea {
@@ -1367,6 +1371,7 @@ table.board tbody th.board-round { border-bottom: 1px solid var(--line-soft); fo
 .inviteform label { display: grid; gap: var(--s-1); }
 .inviteform label:first-child { flex: 1 1 18rem; }
 .inviteform input, .inviteform select { width: 100%; }
+@media (max-width: 420px) { .inviteform label:first-child { flex-basis: 100%; } }
 
 /* The settings screen. A number, its unit, and the sentence that says what it
    does — laid out so the sentence sits beside the field rather than under a
@@ -2082,7 +2087,7 @@ table.budgets tbody th { text-align: left; font-weight: 600; font-size: var(--t-
 table.budgets .r { width: 1%; white-space: nowrap; text-align: right; }
 .budgets-team { display: flex; align-items: center; gap: var(--s-2); margin-bottom: 5px; min-width: 0; }
 .budgets-team span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.budgets-left { font-weight: 700; font-size: var(--t-md); }
+.budgets-left { font-weight: 700; }
 table.budgets tr[data-mine] { background: color-mix(in srgb, var(--accent-wash) 70%, transparent); }
 table.budgets tr[data-mine] .budgets-left { color: var(--accent); }
 
@@ -2098,8 +2103,8 @@ table.budgets tr[data-mine] .budgets-left { color: var(--accent); }
 .banner-solo .banner-mark { font-size: 2rem; }
 @media (max-width: 560px) { .banner-solo { width: 72px; height: 108px; } .banner-solo .banner-mark { font-size: 1.5rem; } }
 
-.bracket-match[data-stitch="projected"] { border: 1px dashed var(--line-hard); }
-.bracket-match[data-stitch="final"] { border: 3px double var(--line-hard); }
+.bracket-match[data-stitch="projected"] { border: var(--stitch-projected) var(--line-hard); }
+.bracket-match[data-stitch="final"] { border: var(--stitch-final) var(--line-hard); }
 table.picture tr[data-cut] > * { border-bottom: 2px solid var(--line-hard); }
 table.picture tr[data-out] { color: var(--ink-3); }
 
@@ -2116,4 +2121,15 @@ table.picture tr[data-out] { color: var(--ink-3); }
 @media (max-width: 640px) {
   .sch-narrow { display: none; }
   .sch-wide { display: inline; }
+}
+
+/* The snake's turn: where the order reverses for a new round, a steel post
+   with the round's number, so "two picks away" across the turn reads true. */
+.ondeck li.ondeck-turn {
+  width: auto; padding: 0 var(--s-1); clip-path: none; background: none;
+  display: grid; align-content: center; justify-items: center; gap: 4px;
+  font-family: var(--f-cond); font-weight: 700; font-size: var(--t-xs); color: var(--ink-3);
+}
+.ondeck li.ondeck-turn::before {
+  position: static; inset: auto; width: 4px; height: 34px; border: 0; border-radius: 2px; background: var(--line-hard);
 }

@@ -330,7 +330,7 @@ A quiet steel-soft inset with a heading, one line at 48ch, and the way forward. 
 The rafters' banner at a third of the size: 68px felt with the notched foot, a condensed pick number, a Graduate monogram and a condensed name. Under the draft clock they hang in pick order to show the snake (dashed, because those picks are still to come; yours in orange). On the commissioner page the same banners are the seats, solid when a manager holds one and dashed while it is open.
 
 ### Pennant
-A single team's banner at the head of its page (92 × 132px, no wires), with rank only once a week has settled. A school's page hangs the same shape in the school's own colour with its initials. The way in (sign-in, invite links, commissioner-only notices) hangs one steel-stitched banner with the Block I over the heading.
+A single team's banner at the head of its page (92 × 132px, no wires), with rank only once a week has settled. A school's page hangs the same shape in the school's own colour with its initials. The way in (sign-in, invite links, commissioner-only notices) hangs one steel-stitched banner lettered "IF" in Graduate over the heading. The Block I appears in the masthead only.
 
 ### Leader Bar
 A steel bar beside a leader's score whose length is that score over the top score on the board. Your players' bars are orange line. Hidden under 560px, where the number alone carries it.

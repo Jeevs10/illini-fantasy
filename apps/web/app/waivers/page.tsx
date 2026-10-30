@@ -115,8 +115,8 @@ export default async function WaiversPage() {
                           <Avatar name={team.teamName} seed={team.fantasyTeamId} size="xs" mine={yours} />
                           <span>{team.teamName}</span>
                         </span>
-                        <Bar percent={(team.spent / state.budget) * 100} thin
-                             label={`$${team.spent} of $${state.budget} spent`} />
+                        <Bar percent={(team.remaining / state.budget) * 100} thin
+                             label={`$${team.remaining} of $${state.budget} left`} />
                       </th>
                       <td className="r tnum budgets-left">${team.remaining}</td>
                     </tr>

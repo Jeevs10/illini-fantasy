@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { BoardPick, DraftStatus } from "@illini/league";
@@ -148,13 +148,19 @@ function Deck({ picks, label }: { picks: OnDeck[]; label: string }) {
   if (picks.length === 0) return null;
   return (
     <ol className="ondeck" aria-label={label}>
-      {picks.map((p) => (
-        <li key={p.overall} data-mine={p.mine || undefined}
-            aria-label={`Pick ${p.overall}: ${p.teamName}${p.mine ? " (you)" : ""}`}>
-          <span className="ondeck-pick tnum">{p.overall}</span>
-          <span className="ondeck-mark" aria-hidden="true">{monogram(p.teamName)}</span>
-          <span className="ondeck-name" aria-hidden="true">{p.mine ? "You" : p.teamName}</span>
-        </li>
+      {picks.map((p, i) => (
+        <Fragment key={p.overall}>
+          {/* Where the order turns back on itself for a new round. */}
+          {i > 0 && picks[i - 1]!.round !== p.round ? (
+            <li className="ondeck-turn" aria-label={`Round ${p.round} starts, order reversed`}>R{p.round}</li>
+          ) : null}
+          <li data-mine={p.mine || undefined}
+              aria-label={`Pick ${p.overall}: ${p.teamName}${p.mine ? " (you)" : ""}`}>
+            <span className="ondeck-pick tnum">{p.overall}</span>
+            <span className="ondeck-mark" aria-hidden="true">{monogram(p.teamName)}</span>
+            <span className="ondeck-name" aria-hidden="true">{p.mine ? "You" : p.teamName}</span>
+          </li>
+        </Fragment>
       ))}
     </ol>
   );

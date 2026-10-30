@@ -6,7 +6,7 @@ import type { Claim } from "@illini/league";
 import { reorder, withdraw, type WaiverActionState } from "./actions.ts";
 import { Empty } from "../ui/bits.tsx";
 import { playerPath } from "../../lib/links.ts";
-import { Arrow } from "../ui/glyphs.tsx";
+import { Arrow, Glyph } from "../ui/glyphs.tsx";
 
 export type ClaimRow = Claim & { runsLabel: string };
 
@@ -75,7 +75,7 @@ export function Claims({ pending, settled }: { pending: ClaimRow[]; settled: Cla
                 </form>
                 <form action={submitWithdraw}>
                   <input type="hidden" name="claimId" value={claim.id} />
-                  <button type="submit" aria-label={`Withdraw the bid on ${claim.playerName}`}>×</button>
+                  <button type="submit" aria-label={`Withdraw the bid on ${claim.playerName}`}><Glyph name="close" size={14} /></button>
                 </form>
               </span>
             </li>
