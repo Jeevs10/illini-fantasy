@@ -571,6 +571,13 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
   animation: fade var(--d-2) var(--e-out) both;
   border: 0;
 }
+/* Both scrims are <button>s so a click outside closes, which also hands
+   them the generic button hover — an opaque surface-2 that blanked the page
+   behind whenever the pointer left the card. */
+.modal-scrim:hover:not(:disabled), .modal-scrim:active:not(:disabled),
+.sheet-scrim:hover:not(:disabled), .sheet-scrim:active:not(:disabled) {
+  background: var(--overlay); border: 0; transform: none;
+}
 .modal {
   position: fixed; z-index: 61;
   inset: 4dvh 50% auto 50%;
