@@ -36,7 +36,6 @@ function RenameForm({ username, rules }: { username: string; rules: Rules }) {
       <div className="panel-head">
         <div>
           <h2>Username</h2>
-          <p>What you sign in as.</p>
         </div>
       </div>
       <div className="panel-body">
@@ -83,7 +82,6 @@ export function TeamNameForm({ teamName, leagueName, max }: { teamName: string; 
       <div className="panel-head">
         <div>
           <h2>Team name</h2>
-          <p>What {leagueName} sees on the scoreboard, the standings and the draft board.</p>
         </div>
       </div>
       <div className="panel-body">
@@ -120,7 +118,6 @@ function PasswordForm({ rules }: { rules: Rules }) {
       <div className="panel-head">
         <div>
           <h2>Password</h2>
-          <p>Changing it does not sign out any session already open.</p>
         </div>
       </div>
       <div className="panel-body">

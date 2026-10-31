@@ -286,16 +286,6 @@ export function Pool({
         <p className="seatless">
           You&rsquo;ve used this week&rsquo;s adds. The count starts again at Sunday&rsquo;s lock.
         </p>
-      ) : swap ? (
-        <p className="seatless">
-          Your roster is full, so each add names who comes off. Players whose
-          school plays tonight aren&rsquo;t listed: they can be dropped tomorrow.
-        </p>
-      ) : full ? (
-        <p className="seatless">
-          Your roster is full. Adding anyone means dropping somebody, which is a
-          single action on the <Link href="/waivers">waivers page</Link>.
-        </p>
       ) : null}
     </div>
   );

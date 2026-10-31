@@ -79,11 +79,6 @@ export default async function Commissioner() {
       <div className="panel">
         <div className="panel-head">
           <h2>Seats</h2>
-          <p>
-            Teams are created unowned. A manager takes one by redeeming an
-            invite, so an empty seat is a person who has not joined yet — not a
-            missing team.
-          </p>
         </div>
         <div className="scroll">
           <table>

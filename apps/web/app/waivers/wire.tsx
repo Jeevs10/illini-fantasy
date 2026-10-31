@@ -43,7 +43,6 @@ export function Wire({
       <div className="panel-head">
         <div>
           <h2>On the wire</h2>
-          <p>Sealed bids. Nobody sees a number until the run opens them.</p>
         </div>
         {players.length > 0 ? <span className="pill ghost">{players.length} claimable</span> : null}
       </div>
@@ -116,14 +115,6 @@ export function Wire({
           </div>
         ))
       )}
-
-      {full && players.length > 0 ? (
-        <p className="seatless">
-          Your roster is full, so a winning bid has to name somebody to come off.
-          A claim that does not is refused at the run rather than silently
-          overfilling the roster.
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -85,7 +85,6 @@ export function Invites({ teams, open }: { teams: LeagueTeam[]; open: Invite[] }
       <div className="panel">
         <div className="panel-head">
           <h2>Outstanding invites</h2>
-          <p>Links that have been created and not yet redeemed.</p>
         </div>
 
         {open.length === 0 ? (

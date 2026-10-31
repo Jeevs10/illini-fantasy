@@ -29,10 +29,6 @@ export function JoinLinkPanel({
       <div className="panel-head">
         <div>
           <h2>Join link</h2>
-          <p>
-            Anyone with it picks a username and takes the next open team as a
-            manager. It stops working once every team has one.
-          </p>
         </div>
         {live ? <span className="pill">{openSeats} open {openSeats === 1 ? "seat" : "seats"}</span> : null}
       </div>

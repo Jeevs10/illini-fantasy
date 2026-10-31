@@ -75,7 +75,6 @@ export default async function SchoolPage({ params }: { params: Promise<{ slug: s
           <div className="panel-head">
             <div>
               <h2>Next games</h2>
-              <p>What the school&rsquo;s projected players add up to in each.</p>
             </div>
           </div>
           <div className="schoolgames">
@@ -103,7 +102,6 @@ export default async function SchoolPage({ params }: { params: Promise<{ slug: s
         <div className="panel-head">
           <div>
             <h2>Roster</h2>
-            <p>Ordered by projected Player Score. The bar runs from zero to the best projection in the pool.</p>
           </div>
         </div>
         {players.length === 0 ? (

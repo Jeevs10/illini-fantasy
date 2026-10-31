@@ -48,9 +48,7 @@ export default async function DraftPage({
           <div className="panel">
             <Empty title="The draft has not been set up" glyph="draft"
                    action={<Link className="button" href="/players">Browse the pool</Link>}>
-              Whoever runs {leagueName} draws the order and starts the clock.
-              Build a queue in the meantime and the clock will draft from it if
-              you are not here.
+              Build a queue while you wait.
             </Empty>
           </div>
         )}

@@ -102,8 +102,7 @@ export function EveryoneWeek({ rows }: { rows: EveryoneRow[] }) {
 
       {counting.length === 0 ? (
         <Empty title="Nobody on the roster" glyph="team">
-          Every game counts for whoever has the player at tip-off. Anyone
-          added now scores from his next game.
+          Add free agents to start scoring.
         </Empty>
       ) : (
         <section aria-label="On the roster">

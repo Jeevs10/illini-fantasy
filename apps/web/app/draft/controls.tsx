@@ -36,7 +36,6 @@ export function SetUp({
     <div className="panel">
       <div className="panel-head">
         <h2>Set up the draft</h2>
-        <p>The order is drawn at random when you create it, and cannot be redrawn.</p>
       </div>
       <div className="panel-body">
         <div role="status" aria-live="polite">

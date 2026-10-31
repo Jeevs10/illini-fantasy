@@ -71,10 +71,6 @@ export function SettingsForm({
         <div className="panel-head">
           <div>
             <h2>Roster</h2>
-            <p>
-              The starting slots, and the seats behind them. FLEX takes anybody;
-              the bench and IR never score.
-            </p>
           </div>
           <span className={`pill ${tooSmall ? "crit" : "ghost"}`}>
             {limit} player{limit === 1 ? "" : "s"}

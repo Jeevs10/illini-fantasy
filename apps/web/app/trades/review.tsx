@@ -33,8 +33,7 @@ export function Review({ trades, commissioner }: { trades: DealRow[]; commission
 
       {trades.length === 0 ? (
         <Empty title="Nothing agreed" glyph="check">
-          An accepted trade waits here, in the open, before the players move.
-          Anyone can see it; the commissioner can stop it.
+          No trades pending.
         </Empty>
       ) : (
         <ul className="deals">
@@ -65,15 +64,6 @@ export function Review({ trades, commissioner }: { trades: DealRow[]; commission
           ))}
         </ul>
       )}
-
-      {commissioner && trades.length > 0 ? (
-        <p className="seatless">
-          A veto has to be said out loud &mdash; the reason is stored and shown
-          to both teams. And it only works inside the window: once the players
-          have moved, stopping the trade would mean rewriting who owned whom on
-          nights that have already been scored.
-        </p>
-      ) : null}
     </div>
   );
 }

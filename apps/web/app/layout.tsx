@@ -21,6 +21,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Edge to edge, so the bottom bar reaches under the home indicator and
+  // stays put while Safari's toolbar comes and goes.
+  viewportFit: "cover",
   themeColor: [
     { color: "#0C1A33" },
   ],
@@ -42,7 +45,7 @@ export default async function RootLayout({
       }
     : { name: viewer.name || viewer.email, commissioner: false, addDrop: false, leagues: [], current: 0 };
   return (
-    <html lang="en" className={`${barlow.variable} ${barlowCond.variable} ${graduate.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${barlow.variable} ${barlowCond.variable} ${graduate.variable}`}>
       <body>
         {signedIn ? (
           <Nav commissioner={signedIn.commissioner} addDrop={signedIn.addDrop}>

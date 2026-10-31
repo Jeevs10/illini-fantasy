@@ -22,12 +22,6 @@ export function StrengthToggle({ state: current }: { state: StrengthAdjustment }
       <div className="panel-head">
         <div>
           <h2>Strength of schedule</h2>
-          <p>
-            Every score ends in a multiplier for who the player was up against,
-            from &times;0.67 against the weakest opponents to &times;1.33
-            against the strongest. Turn it off and the box score is the box
-            score.
-          </p>
         </div>
         <span className={`pill ${on ? "live" : "ghost"}`}>{on ? "Adjusted" : "Flat"}</span>
       </div>

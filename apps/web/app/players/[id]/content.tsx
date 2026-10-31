@@ -326,7 +326,6 @@ export function SeasonAveragesSection({
       <div className="panel-head">
         <div>
           <h2>Season averages</h2>
-          <p>Per-game, against everyone who played the same role this season.</p>
         </div>
       </div>
 
@@ -379,8 +378,7 @@ export function SeasonAveragesSection({
 function EmptyLog({ card }: { card: PlayerCard }) {
   return (
     <Empty title="No scored games" glyph="clock">
-      {card.name} hasn&rsquo;t played a scored game yet. Each regular-season
-      game shows up here the morning after it&rsquo;s played.
+      {card.name} hasn&rsquo;t played yet.
     </Empty>
   );
 }

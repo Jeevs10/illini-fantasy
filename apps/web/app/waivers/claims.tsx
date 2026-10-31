@@ -81,14 +81,6 @@ export function Claims({ pending, settled }: { pending: ClaimRow[]; settled: Cla
         </ol>
       )}
 
-      {pending.length > 1 ? (
-        <p className="seatless">
-          Order matters only against your own claims. A rival&rsquo;s higher bid
-          wins whatever order you put yours in; this decides which of yours takes
-          the last roster spot, or the last of the budget.
-        </p>
-      ) : null}
-
       {settled.length > 0 ? (
         <>
           <div className="panel-head" style={{ borderTop: "1px solid var(--rule)" }}>

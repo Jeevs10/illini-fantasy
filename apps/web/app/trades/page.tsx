@@ -115,9 +115,7 @@ export default async function TradesPage() {
             // offered, and the deadline is not a thing a manager can fix.
             <div className="panel">
               <Empty title="Trading is closed" glyph="swap">
-                Nothing has been offered or agreed in {leagueName} since{" "}
-                {DEADLINE.format(new Date(`${settings.tradeDeadline!}T12:00:00Z`))}. Deals
-                agreed before then still executed when their review window closed.
+                The deadline was {DEADLINE.format(new Date(`${settings.tradeDeadline!}T12:00:00Z`))}.
               </Empty>
             </div>
           ) : (
@@ -146,10 +144,6 @@ export default async function TradesPage() {
                 <ul className="deals">
                   {worded(history).map((trade) => <Deal key={trade.id} trade={trade} />)}
                 </ul>
-                <p className="seatless">
-                  A trade that could not be honoured says so rather than
-                  disappearing: the sentence names the player whose move voided it.
-                </p>
               </>
             )}
           </div>

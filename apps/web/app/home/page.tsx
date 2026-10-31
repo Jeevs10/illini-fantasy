@@ -117,8 +117,7 @@ export default async function HomePage() {
             <section className="nextup" aria-labelledby="nextup-h">
               <h2 id="nextup-h">Fill your roster</h2>
               <p>
-                {activeLimit(settings)} open spots. Every game counts for whoever has the
-                player at tip-off.
+                {activeLimit(settings)} open spots.
               </p>
               <div className="controls">
                 <Link className="button primary" href="/players?free=1">Browse free agents</Link>
@@ -132,7 +131,7 @@ export default async function HomePage() {
             <div className="panel">
               <Empty title="No matchups this week"
                      action={<Link className="button" href="/league">Open the league</Link>}>
-                The schedule has nothing covering {day}. A commissioner generates it once every team has an owner.
+                Nothing scheduled for {day}.
               </Empty>
             </div>
           ) : (
@@ -359,14 +358,14 @@ function Attention({
     items.push({
       tone: "crit", glyph: "alert",
       title: `${out.length} player${out.length === 1 ? "" : "s"} ruled out tonight`,
-      body: `${out.map((p) => p.name).join(", ")} — listed out. Moving ${out.length === 1 ? "him" : "them"} to IR opens a seat for a pickup now.`,
+      body: `${out.map((p) => p.name).join(", ")} — listed out. IR frees the seat.`,
       href: "/team", cta: "IR",
     });
   } else if (out.length > 0) {
     items.push({
       tone: "crit", glyph: "alert",
       title: `${out.length} starter${out.length === 1 ? "" : "s"} ruled out tonight`,
-      body: `${out.map((p) => p.name).join(", ")} — RotoWire lists ${out.length === 1 ? "him" : "them"} out. The slot still scores zero unless somebody else takes it.`,
+      body: `${out.map((p) => p.name).join(", ")} — listed out.`,
       href: "/team", cta: "Swap",
     });
   }
@@ -374,7 +373,7 @@ function Attention({
     items.push({
       tone: "crit", glyph: "alert",
       title: `${open.length} starting slot${open.length === 1 ? "" : "s"} unfilled`,
-      body: `${open.join(", ")} — nobody is scoring there tonight, and somebody eligible is on your bench.`,
+      body: `${open.join(", ")} — someone eligible is on your bench.`,
       href: "/team", cta: "Fill it",
     });
   }
@@ -382,7 +381,7 @@ function Attention({
     items.push({
       tone: "warn", glyph: "clock",
       title: `${missed.length} benched game${missed.length === 1 ? "" : "s"} already tipped off`,
-      body: `About ${missedPoints.toFixed(1)} projected points sat out tonight. Tomorrow's lineup can be set now.`,
+      body: `About ${missedPoints.toFixed(1)} projected points sat out.`,
       href: "/team", cta: "Work ahead",
     });
   }
@@ -390,7 +389,7 @@ function Attention({
     items.push({
       tone: "warn", glyph: "trades",
       title: `${offers} trade offer${offers === 1 ? "" : "s"} waiting`,
-      body: "An offer stands until it is answered or it expires. Nothing moves until you accept.",
+      body: "",
       href: "/trades", cta: "Review",
     });
   }
@@ -398,7 +397,7 @@ function Attention({
     items.push({
       tone: "", glyph: "waivers",
       title: `${claims} sealed bid${claims === 1 ? "" : "s"} in`,
-      body: "Your claims open at the next waiver run, in the order you set.",
+      body: "",
       href: "/waivers", cta: "Reorder",
     });
   }
@@ -406,9 +405,7 @@ function Attention({
     items.push({
       tone: "", glyph: "team",
       title: `${limit - roster} roster spot${limit - roster === 1 ? "" : "s"} open`,
-      body: everyone
-        ? "An empty spot never scores. A free agent added now scores from his next game."
-        : "An empty spot never scores. Free agents can be added outright.",
+      body: "",
       href: "/players?free=1", cta: "Browse",
     });
   }
@@ -423,9 +420,7 @@ function Attention({
       </div>
       {items.length === 0 ? (
         <Empty title="Nothing outstanding" glyph="check">
-          {everyone
-            ? "Nobody is ruled out, no offer is waiting, and the roster is full."
-            : "Every slot is filled, no offer is waiting, and the roster is full."}
+          You&rsquo;re all set.
         </Empty>
       ) : (
         <div className="stagger">
@@ -440,7 +435,7 @@ function Attention({
               </span>
               <span className="plr-id">
                 <span className="plr-name" style={{ whiteSpace: "normal" }}>{item.title}</span>
-                <span className="plr-sub" style={{ whiteSpace: "normal", display: "block", lineHeight: 1.45 }}>{item.body}</span>
+                {item.body ? <span className="plr-sub" style={{ whiteSpace: "normal", display: "block", lineHeight: 1.45 }}>{item.body}</span> : null}
               </span>
               <span className="plr-right">
                 <Link className="button sm" href={item.href}>{item.cta}</Link>

@@ -170,8 +170,7 @@ export default async function LeadersPage({
           {leaders.length === 0 ? (
             <Empty title="No weeks scored yet" glyph="trophy"
                    action={<Link className="button" href="/players">See the projected pool</Link>}>
-              Once a scoring week settles, its cumulative leaders show up here.
-              Until then the pool ranks everyone by the model&rsquo;s projection.
+              Leaders appear once a week settles.
             </Empty>
           ) : (
             leaders.map((p, i) => (
@@ -239,8 +238,7 @@ export default async function LeadersPage({
         {performances.length === 0 ? (
           <Empty title="No games in this window" glyph="trophy"
                  action={<Link className="button" href="/players">See the projected pool</Link>}>
-            {before ? `The season starts ${day(from)}.` : `Nothing has been scored ${from === to ? "on" : "between"} ${span(from, to).replace(" – ", " and ")}.`}{" "}
-            Each game shows up here the morning after it is played.
+            {before ? `The season starts ${day(from)}.` : `Nothing has been scored ${from === to ? "on" : "between"} ${span(from, to).replace(" – ", " and ")}.`}
           </Empty>
         ) : (
           performances.map((p, i) => (

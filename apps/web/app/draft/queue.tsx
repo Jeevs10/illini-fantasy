@@ -86,11 +86,6 @@ export function Queue({ players, clocked }: { players: QueuedPlayer[]; clocked: 
               </li>
             ))}
           </ol>
-          {clocked ? (
-            <p className="seatless">
-              Miss a pick and the clock takes the first of these still available.
-            </p>
-          ) : null}
         </>
       )}
     </div>

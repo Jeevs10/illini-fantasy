@@ -39,8 +39,7 @@ export default async function LeaguePage({
     return (
       <div className="panel">
         <Empty title="No schedule yet" glyph="matchup">
-          This league has no matchups. A commissioner generates the schedule
-          once every team has an owner.
+          The commissioner hasn&rsquo;t made the schedule yet.
         </Empty>
       </div>
     );

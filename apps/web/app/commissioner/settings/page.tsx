@@ -106,11 +106,6 @@ export default async function Settings() {
         <div className="panel-head">
           <div>
             <h2>What has been changed</h2>
-            <p>
-              Straight off the transaction log, the same place a trade or a
-              waiver award lands. A rule nobody can see being changed is the one
-              a league argues about.
-            </p>
           </div>
         </div>
         {changes.length === 0 ? (

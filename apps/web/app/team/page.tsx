@@ -54,8 +54,7 @@ export default async function TeamPage({
     return (
       <div className="panel">
         <Empty title="No schedule yet" glyph="matchup">
-          This league has no matchups, so there is no week to set a lineup for.
-          A commissioner generates the schedule once every team has an owner.
+          The commissioner hasn&rsquo;t made the schedule yet.
         </Empty>
       </div>
     );
@@ -123,12 +122,6 @@ export default async function TeamPage({
               ) : null}
             </nav>
           </div>
-          <p className="sethelp panel-note">
-            No lineup to set. Each game counts for whoever has the player at
-            tip-off: a player you drop keeps what he scored for you, and the
-            one you add scores from his next game.
-            {settings.weeklyAdds !== null ? ` ${settings.weeklyAdds} adds a week.` : ""}
-          </p>
           {week.length === 0 ? (
             <Empty title="Your roster is empty"
                    action={<Link className="button primary" href="/players?free=1">Browse free agents</Link>}>
@@ -278,16 +271,10 @@ export default async function TeamPage({
         {/* One decision for the whole week: a starter is started for the period
           * and everything he plays in it counts, so the page says so once
           * rather than asking the same question again every night. */}
-        <p className="sethelp" style={{ padding: "0 var(--s-4) var(--s-3)" }}>
-          Set once for the week. Every game a starter plays between{" "}
-          {span(period.startsOn, period.endsOn)} counts, and each player locks
-          when he tips off for the first time.
-        </p>
 
         {players.length === 0 && idle.length === 0 ? (
           <Empty title="Nobody plays this week" glyph="clock">
-            College schedules are uneven, and a roster can draw a week where
-            nothing lands. Try another week from the strip above.
+            Try another week.
           </Empty>
         ) : (
           <Lineup

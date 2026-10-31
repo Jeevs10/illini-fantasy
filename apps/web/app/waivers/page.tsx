@@ -23,7 +23,7 @@ export default async function WaiversPage() {
 
   if (settings.weeklyAdds !== null) {
     return <AddDrop leagueId={leagueId} leagueName={leagueName} fantasyTeamId={fantasyTeamId}
-                    fantasyTeamName={fantasyTeamName} limit={activeLimit(settings)} now={now} />;
+                    fantasyTeamName={fantasyTeamName} now={now} />;
   }
 
   // Reading the page is what opens the bids. There is no worker: any manager
@@ -97,7 +97,6 @@ export default async function WaiversPage() {
             <div className="panel-head">
               <div>
                 <h2>Budgets</h2>
-                <p>In priority order. Priority only breaks a tied bid.</p>
               </div>
             </div>
             <table className="budgets">
@@ -129,10 +128,6 @@ export default async function WaiversPage() {
                 })}
               </tbody>
             </table>
-            <p className="seatless">
-              A team that wins a tie goes to the back of the line, so the same
-              coin never lands the same way all season.
-            </p>
           </div>
 
           {fantasyTeamId === null ? null : (
@@ -156,10 +151,10 @@ export default async function WaiversPage() {
  * unowned player is on the free-agent list — so the adds happen there.
  */
 async function AddDrop({
-  leagueId, leagueName, fantasyTeamId, fantasyTeamName, limit, now,
+  leagueId, leagueName, fantasyTeamId, fantasyTeamName, now,
 }: {
   leagueId: number; leagueName: string; fantasyTeamId: number | null; fantasyTeamName: string | null;
-  limit: number; now: Date;
+  now: Date;
 }) {
   if (fantasyTeamId === null) {
     return (
@@ -177,7 +172,6 @@ async function AddDrop({
   ]);
   const tonight = await playingOn(db, roster.map((p) => p.playerId), viewDate());
   const left = adds === null ? 0 : Math.max(0, adds.limit - adds.used);
-  const active = roster.filter((p) => !p.reserve).length;
 
   return (
     <>
@@ -186,8 +180,7 @@ async function AddDrop({
           <h1>Add / drop</h1>
           <p className="meta">
             <span>{leagueName}</span>
-            {adds ? <span className="tnum">{left} of {adds.limit} adds left this week</span> : null}
-            {adds ? <span>Resets {WHEN.format(new Date(adds.resetsAt))}</span> : null}
+            {adds ? <span className="tnum">{left} of {adds.limit} adds left</span> : null}
           </p>
         </div>
         <div className="controls">
@@ -198,37 +191,21 @@ async function AddDrop({
 
       <div className="tradegrid">
         <div className="tradegrid-main">
-          <div className="panel">
-            <div className="panel-head">
-              <h2>How moves work</h2>
-              {adds ? (
-                <span className={`pill${left === 0 ? " warn" : ""}`}>{adds.used} of {adds.limit} used</span>
-              ) : null}
-            </div>
-            <div className="panel-body">
-              {adds ? (
+          {adds ? (
+            <div className="panel">
+              <div className="panel-head">
+                <h2>Adds this week</h2>
+                <span className={`pill${left === 0 ? " warn" : ""}`}>{left} left</span>
+              </div>
+              <div className="panel-body">
                 <Bar percent={(adds.used / adds.limit) * 100}
                      label={`${adds.used} of ${adds.limit} adds used this week`} />
-              ) : null}
-              <p>
-                No waivers. Anybody unowned can be added, and a player you drop
-                is a free agent straight away. Each game counts for whoever has
-                the player at tip-off: drop a man after his Monday game and his
-                Monday points stay yours, and the player you add scores from his
-                next game.
-              </p>
-              <p>
-                You get {adds?.limit ?? 3} adds a week, Sunday to Saturday. A
-                player whose school plays tonight can&rsquo;t be dropped until
-                tomorrow. IR moves and trades don&rsquo;t use an add.
-              </p>
-              {active >= limit ? (
-                <p className="faint">
-                  Your roster is full at {limit}, so each add names somebody to drop.
+                <p className="faint" style={{ marginTop: "var(--s-3)" }}>
+                  {adds.used} of {adds.limit} used · resets {WHEN.format(new Date(adds.resetsAt))}
                 </p>
-              ) : null}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
 
         <aside className="tradegrid-rail" aria-label="Your roster">

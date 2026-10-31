@@ -123,7 +123,7 @@ export default async function PlayersPage({
             <span>
               {picked === null
                 ? everyone
-                  ? "Season: points scored plus projected for games left · Score: projected Player Score"
+                  ? "Season points"
                   : "Ranked by season Player-Score under this league\u2019s config"
                 : historic
                 ? `Week ${picked.week} · ${span(picked.startsOn, picked.endsOn)} · what they actually scored`
@@ -133,7 +133,11 @@ export default async function PlayersPage({
             {fantasyTeamId !== null
               ? <span>{active} of {activeLimit(settings)} rostered</span>
               : null}
-            {adds ? <span className="tnum">{addsLeft} of {adds.limit} adds left this week</span> : null}
+            {adds ? (
+              <Link href="/waivers" className={`pill${addsLeft === 0 ? " warn" : " live"} tnum`}>
+                {addsLeft} of {adds.limit} adds left
+              </Link>
+            ) : null}
           </p>
         </div>
         <SubTabs tabs={VIEWS} active="/players" />

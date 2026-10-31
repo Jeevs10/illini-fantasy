@@ -84,17 +84,6 @@ export function Roster({ team, players, addDrop = false }: {
           </div>
         ))
       )}
-      {addDrop ? (
-        <p className="seatless">
-          A dropped player keeps the points he scored for you and is a free
-          agent at once. Dropping doesn&rsquo;t use an add; adding does.
-        </p>
-      ) : (
-        <p className="seatless">
-          A dropped player goes on the wire until the next run, not back into the
-          pool. Nobody can simply take him, including you.
-        </p>
-      )}
     </div>
   );
 }

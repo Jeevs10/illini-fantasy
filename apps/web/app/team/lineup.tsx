@@ -166,11 +166,6 @@ export function Lineup({
               {overflow.reduce((a, p) => a + p.scored, 0).toFixed(1)} scored
             </span>
           </div>
-          <p className="seatless">
-            Set night by night, before lineups were weekly. These count for the
-            week — they are in the matchup total — but there is no slot left to
-            show them in. Setting this week&rsquo;s lineup replaces them.
-          </p>
           <div className="lineup">
             {overflow.map((player) => (
               <Row

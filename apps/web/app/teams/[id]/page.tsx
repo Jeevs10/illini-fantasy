@@ -113,8 +113,7 @@ export default async function TeamProfilePage({ params }: { params: Promise<{ id
         {roster.length === 0 ? (
           <Empty title="Nobody rostered" glyph="team"
                  action={mine ? <Link className="button primary" href="/players?free=1">Browse free agents</Link> : undefined}>
-            {mine ? "Your roster is empty until the draft, or until you add a free agent."
-              : `${team.name} has no players yet. Rosters fill at the draft.`}
+            {mine ? "Your roster is empty." : `${team.name} has no players yet.`}
           </Empty>
         ) : (
           <>

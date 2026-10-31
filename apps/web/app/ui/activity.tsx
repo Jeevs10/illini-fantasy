@@ -33,8 +33,7 @@ export function ActivityFeed({ events, mineId }: { events: Activity[]; mineId: n
   if (events.length === 0) {
     return (
       <Empty title="Nothing has happened yet" glyph="bolt">
-        Joins, drafts, waiver awards, adds, drops and trades all land here as
-        they happen.
+        Moves will show up here.
       </Empty>
     );
   }

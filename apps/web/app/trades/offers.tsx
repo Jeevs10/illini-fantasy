@@ -37,9 +37,7 @@ export function Offers({
 
       {incoming.length + outgoing.length === 0 ? (
         <Empty title="Nothing outstanding" glyph="trades">
-          An offer stands until it is answered or it expires. Nothing moves when
-          one is made &mdash; only when it is accepted, and then only after the
-          review window.
+          No offers waiting.
         </Empty>
       ) : (
         <ul className="deals">
