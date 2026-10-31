@@ -100,7 +100,8 @@ export async function autoFill(
 /**
  * Injured reserve, in a league with no lineup: a seat outside the twelve for a
  * player listed out, which is what lets a manager field a replacement without
- * dropping him. Takes effect at the next Sunday lock, like every roster move.
+ * dropping him. Takes effect at once: his games from now on score nothing, and
+ * the seat is open for a pickup.
  */
 export async function reserve(
   _state: LineupState, formData: FormData,
@@ -133,8 +134,8 @@ export async function reserve(
   revalidatePath("/team");
   return {
     ok: activate
-      ? `${name} is back from IR from Sunday's lock.`
-      : `${name} goes on IR from Sunday's lock — his seat is open for a pickup now.`,
+      ? `${name} is back from IR and scores from his next game.`
+      : `${name} is on IR — his seat is open for a pickup now.`,
     at: Date.now(),
   };
 }

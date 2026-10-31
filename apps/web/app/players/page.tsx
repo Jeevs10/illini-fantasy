@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
-  activeLimit, availabilityFor, draftFor, playerPool, rosterOn, seasonSchedule, settleWaivers,
+  activeLimit, availabilityFor, draftFor, playerPool, playingOn, rosterOn, seasonSchedule, settleWaivers,
+  weeklyAdds,
   waiverWire, type PoolSort, type PoolWindow, type PositionRole,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -98,6 +99,21 @@ export default async function PlayersPage({
   const active = roster.filter((p) => !p.reserve).length;
   const full = active >= activeLimit(settings);
 
+  // A league with weekly adds swaps in one step, naming the drop beside the
+  // add, because its rosters are always full. A player whose school plays
+  // tonight is not offered: he can't be dropped until tomorrow.
+  const addDrop = settings.weeklyAdds !== null && fantasyTeamId !== null;
+  const [adds, tonight] = addDrop
+    ? await Promise.all([
+        weeklyAdds(db, { leagueId, fantasyTeamId: fantasyTeamId!, now, settings }),
+        playingOn(db, roster.map((p) => p.playerId), today),
+      ])
+    : [null, new Set<number>()];
+  const addsLeft = adds === null ? null : Math.max(0, adds.limit - adds.used);
+  const droppable = addDrop
+    ? roster.filter((p) => !p.reserve && !tonight.has(p.playerId)).map((p) => ({ playerId: p.playerId, name: p.name }))
+    : undefined;
+
   return (
     <>
       <div className="pagehead">
@@ -117,6 +133,7 @@ export default async function PlayersPage({
             {fantasyTeamId !== null
               ? <span>{active} of {activeLimit(settings)} rostered</span>
               : null}
+            {adds ? <span className="tnum">{addsLeft} of {adds.limit} adds left this week</span> : null}
           </p>
         </div>
         <SubTabs tabs={VIEWS} active="/players" />
@@ -187,6 +204,8 @@ export default async function PlayersPage({
           players={rows}
           offset={offset}
           full={full}
+          droppable={droppable}
+          addsLeft={addsLeft}
           canAct={fantasyTeamId !== null && draftComplete}
           week={picked === null ? null : { week: picked.week, historic }}
           sort={sortBy}

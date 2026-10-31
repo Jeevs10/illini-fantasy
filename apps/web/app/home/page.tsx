@@ -117,8 +117,8 @@ export default async function HomePage() {
             <section className="nextup" aria-labelledby="nextup-h">
               <h2 id="nextup-h">Fill your roster</h2>
               <p>
-                {activeLimit(settings)} open spots. Everyone on the roster at Sunday&rsquo;s lock scores
-                every game they play that week.
+                {activeLimit(settings)} open spots. Every game counts for whoever has the
+                player at tip-off.
               </p>
               <div className="controls">
                 <Link className="button primary" href="/players?free=1">Browse free agents</Link>
@@ -209,7 +209,7 @@ function Tonight({
   now: Date;
   settings: { starters: { slot: string; count: number }[] };
   availability: Map<number, PlayerAvailability>;
-  /** No slots to show: everyone held at the lock counts, and anyone else joins on Sunday. */
+  /** No slots to show: everyone held at tip-off counts. */
   everyone?: boolean;
   /** Who is on the roster at all: an empty one has nothing to schedule. */
   rostered: number;
@@ -324,9 +324,8 @@ function Attention({
   offers: number; claims: number; roster: number; limit: number; now: Date;
   availability: Map<number, PlayerAvailability>;
   /**
-   * No lineup: nobody is "benched" (a player shown off the lineup is one added
-   * since the lock, who joins on Sunday), so the slot alarms do not apply and
-   * the answer to a player ruled out is IR, not a swap.
+   * No lineup: nobody is "benched", so the slot alarms do not apply and the
+   * answer to a player ruled out is IR, not a swap.
    */
   everyone?: boolean;
 }) {
@@ -360,7 +359,7 @@ function Attention({
     items.push({
       tone: "crit", glyph: "alert",
       title: `${out.length} player${out.length === 1 ? "" : "s"} ruled out tonight`,
-      body: `${out.map((p) => p.name).join(", ")} — listed out. Moving ${out.length === 1 ? "him" : "them"} to IR opens a seat for a pickup from Sunday's lock.`,
+      body: `${out.map((p) => p.name).join(", ")} — listed out. Moving ${out.length === 1 ? "him" : "them"} to IR opens a seat for a pickup now.`,
       href: "/team", cta: "IR",
     });
   } else if (out.length > 0) {
@@ -408,7 +407,7 @@ function Attention({
       tone: "", glyph: "team",
       title: `${limit - roster} roster spot${limit - roster === 1 ? "" : "s"} open`,
       body: everyone
-        ? "An empty spot never scores. A free agent added now plays from Sunday's lock."
+        ? "An empty spot never scores. A free agent added now scores from his next game."
         : "An empty spot never scores. Free agents can be added outright.",
       href: "/players?free=1", cta: "Browse",
     });

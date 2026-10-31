@@ -39,6 +39,27 @@ export class BudgetExceededError extends Error {
   }
 }
 
+export class AddLimitError extends Error {
+  constructor(readonly used: number, readonly limit: number, readonly resetsAt: string) {
+    super(`${used} of ${limit} adds used this week; the next is available ${resetsAt}`);
+    this.name = "AddLimitError";
+  }
+}
+
+/**
+ * Raised dropping a player whose school plays on the current game day.
+ *
+ * A player is locked to his team for the whole game day, before tip-off as
+ * well as after it, and can be let go from the next morning. The drop and his
+ * game cannot share a night.
+ */
+export class PlaysTonightError extends Error {
+  constructor(readonly playerId: number, readonly playedOn: string) {
+    super(`player ${playerId} plays on ${playedOn} and cannot be dropped until the day after`);
+    this.name = "PlaysTonightError";
+  }
+}
+
 export class NotYourPlayerError extends Error {
   constructor(readonly playerId: number, readonly fantasyTeamId: number) {
     super(`player ${playerId} is not on team ${fantasyTeamId}`);
@@ -84,6 +105,103 @@ export function nextWaiverRun(from: Date, settings: LeagueSettings = DEFAULT_SET
 export function clearsAt(droppedAt: Date, settings: LeagueSettings = DEFAULT_SETTINGS): Date {
   const earliest = new Date(droppedAt.getTime() + settings.waiverDays * 86_400_000);
   return nextWaiverRun(earliest, settings);
+}
+
+// ---------------------------------------------------------------------------
+// Weekly adds
+// ---------------------------------------------------------------------------
+
+/**
+ * The week a moment's adds are counted in: from one period lock to the next.
+ *
+ * Anchored on the league's first period, so the week turns over at the same
+ * Sunday 09:00 UTC the matchups do, before the season as well as during it. A
+ * league with no schedule yet anchors on the configured weekday, Sunday by
+ * default. Pure, for the same reason `nextWaiverRun` is.
+ */
+export function addWindow(
+  now: Date, anchor: string | null, settings: LeagueSettings = DEFAULT_SETTINGS,
+): { from: Date; to: Date } {
+  const days = settings.periodDays;
+  let start: Date;
+  if (anchor !== null) {
+    start = new Date(`${anchor}T00:00:00Z`);
+  } else {
+    start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    while (start.getUTCDay() !== (settings.waiverWeekday ?? 0)) start.setUTCDate(start.getUTCDate() - 1);
+  }
+  start.setUTCHours(settings.waiverHour, 0, 0, 0);
+  const period = days * 86_400_000;
+  const k = Math.floor((now.getTime() - start.getTime()) / period);
+  const from = new Date(start.getTime() + k * period);
+  return { from, to: new Date(from.getTime() + period) };
+}
+
+export interface WeeklyAdds {
+  used: number;
+  limit: number;
+  /** ISO 8601 — when the count starts again. */
+  resetsAt: string;
+}
+
+/**
+ * How many adds a team has made this week, or null in a league with waivers.
+ *
+ * Counted from tenures rather than stored, so the count and the rosters cannot
+ * disagree. A free-agent tenure counts; one that opened at the instant another
+ * of the same player's closed is an IR move carrying the original acquisition,
+ * not an add.
+ */
+export async function weeklyAdds(
+  q: Queryable, { leagueId, fantasyTeamId, now = new Date(), settings }: {
+    leagueId: number; fantasyTeamId: number; now?: Date; settings?: LeagueSettings;
+  },
+): Promise<WeeklyAdds | null> {
+  const rules = settings ?? (await leagueContext(q, leagueId)).settings;
+  if (rules.weeklyAdds === null) return null;
+  const { rows: first } = await q.query<{ starts_on: string | null }>(
+    "SELECT to_char(min(starts_on), 'YYYY-MM-DD') AS starts_on FROM matchup WHERE league_id = $1",
+    [leagueId],
+  );
+  const { from, to } = addWindow(now, first[0]?.starts_on ?? null, rules);
+  const { rows } = await q.query<{ n: string }>(
+    `SELECT count(*) AS n FROM roster_slot r
+      WHERE r.fantasy_team_id = $1 AND r.acquired_via = 'free_agent'
+        AND r.acquired_at >= $2 AND r.acquired_at < $3
+        AND NOT EXISTS (SELECT 1 FROM roster_slot prev
+                         WHERE prev.fantasy_team_id = r.fantasy_team_id
+                           AND prev.player_id = r.player_id
+                           AND prev.released_at = r.acquired_at)`,
+    [fantasyTeamId, from, to],
+  );
+  return { used: Number(rows[0]!.n), limit: rules.weeklyAdds, resetsAt: to.toISOString() };
+}
+
+/** Which of these players' schools play on a game date. */
+export async function playingOn(q: Queryable, playerIds: number[], on: string): Promise<Set<number>> {
+  if (playerIds.length === 0) return new Set();
+  const { rows } = await q.query<{ id: string }>(
+    `SELECT DISTINCT p.id FROM player p
+       JOIN game g ON p.team_id IN (g.home_team_id, g.away_team_id)
+      WHERE p.id = ANY($1::bigint[]) AND g.played_on = $2`,
+    [playerIds, on],
+  );
+  return new Set(rows.map((r) => Number(r.id)));
+}
+
+/**
+ * Refuses a drop on a night the player's school plays.
+ *
+ * The night is the game date of `now`: the UTC day at the waiver hour, the
+ * same boundary every game is filed under, so a drop at 11pm Eastern after
+ * his game is still that night's and waits until 4am.
+ */
+async function requireOffNight(
+  q: Queryable, { playerId, now, settings }: { playerId: number; now: Date; settings: LeagueSettings },
+): Promise<void> {
+  if (settings.weeklyAdds === null) return;
+  const night = isoDay(new Date(now.getTime() - settings.waiverHour * 3_600_000));
+  if ((await playingOn(q, [playerId], night)).size > 0) throw new PlaysTonightError(playerId, night);
 }
 
 // ---------------------------------------------------------------------------
@@ -680,6 +798,10 @@ async function rollPriority(q: Queryable, leagueId: number, winners: number[]): 
  * The wire is what separates this from a claim. A player on it is the scarce
  * thing — somebody just gave up on him, and the league gets a night to decide
  * what he is worth. Everyone else is first come, first served.
+ *
+ * In a league with a weekly cap there is no wire, and the cap is checked here
+ * under the league lock, so two adds from one team at once cannot both take
+ * the last one.
  */
 export async function addFreeAgent(
   db: Db,
@@ -695,11 +817,17 @@ export async function addFreeAgent(
     const league = await leagueContext(client, leagueId, { forUpdate: true });
     const on = isoDay(now);
 
-    const clears = await wireEntry(client, leagueId, playerId, now);
-    if (clears !== null) throw new OnWaiversError(playerId, clears.toISOString());
+    if (league.settings.weeklyAdds === null) {
+      const clears = await wireEntry(client, leagueId, playerId, now);
+      if (clears !== null) throw new OnWaiversError(playerId, clears.toISOString());
+    } else {
+      const adds = (await weeklyAdds(client, { leagueId, fantasyTeamId, now, settings: league.settings }))!;
+      if (adds.used >= adds.limit) throw new AddLimitError(adds.used, adds.limit, adds.resetsAt);
+    }
 
     if (dropPlayerId != null) {
       await requireOnRoster(client, fantasyTeamId, dropPlayerId, on);
+      await requireOffNight(client, { playerId: dropPlayerId, now, settings: league.settings });
       await release(client, {
         leagueId, fantasyTeamId, playerId: dropPlayerId, on, at: now, settings: league.settings,
       });
@@ -723,24 +851,28 @@ export async function addFreeAgent(
  * Dropping straight to free agency rewards whoever happens to be awake, which
  * is the behaviour waivers exist to remove — so the drop and the waiver period
  * are one action, and there is no path that produces the other outcome.
+ *
+ * A league with a weekly cap has no wire: the player is a free agent at once
+ * and `clearsAt` is null.
  */
 export async function dropPlayer(
   db: Db,
   { leagueId, fantasyTeamId, playerId, now = new Date() }: {
     leagueId: number; fantasyTeamId: number; playerId: number; now?: Date;
   },
-): Promise<{ clearsAt: string }> {
+): Promise<{ clearsAt: string | null }> {
   const client = await db.connect();
   try {
     await client.query("BEGIN");
     const league = await leagueContext(client, leagueId, { forUpdate: true });
     const on = isoDay(now);
     await requireOnRoster(client, fantasyTeamId, playerId, on);
+    await requireOffNight(client, { playerId, now, settings: league.settings });
     const clears = await release(client, {
       leagueId, fantasyTeamId, playerId, on, at: now, settings: league.settings,
     });
     await client.query("COMMIT");
-    return { clearsAt: clears.toISOString() };
+    return { clearsAt: clears?.toISOString() ?? null };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -751,7 +883,7 @@ export async function dropPlayer(
 
 /**
  * Closes a tenure, clears the lineups it can no longer stand behind, and starts
- * the waiver period.
+ * the waiver period — in a league with waivers.
  *
  * The lineup part is the one that is easy to miss, and it is `clearFutureLineups`
  * rather than anything written here — every path that closes a tenure owes it,
@@ -763,9 +895,10 @@ async function release(
     leagueId: number; fantasyTeamId: number; playerId: number; on: string; at: Date;
     settings: LeagueSettings;
   },
-): Promise<Date> {
+): Promise<Date | null> {
   await releasePlayer(q, { fantasyTeamId, playerId, on, at });
   await clearFutureLineups(q, { fantasyTeamId, playerId, on, at });
+  if (settings.weeklyAdds !== null) return null;
 
   const clears = clearsAt(at, settings);
   await q.query(

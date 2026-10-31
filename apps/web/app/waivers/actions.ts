@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  AlreadyRosteredError, BudgetExceededError, DraftNotCompleteError, NotOnWaiversError,
-  NotYourPlayerError, OnWaiversError, RosterFullError,
+  AddLimitError, AlreadyRosteredError, BudgetExceededError, DraftNotCompleteError, NotOnWaiversError,
+  NotYourPlayerError, OnWaiversError, PlaysTonightError, RosterFullError,
   addFreeAgent, cancelClaim, dropPlayer, moveClaim, submitClaim,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -17,6 +17,11 @@ export interface WaiverActionState {
 }
 
 const now = () => Date.now();
+
+/** Eastern, because the league is. */
+const RESETS = new Intl.DateTimeFormat("en-US", {
+  weekday: "long", hour: "numeric", timeZone: "America/New_York",
+});
 
 /**
  * Waivers run on the app's clock, not the wall clock.
@@ -140,9 +145,11 @@ export async function add(
     });
     refresh();
     return {
-      ok: act.viewer.membership.settings.lineupMode === "everyone"
-        ? `${name} added. He starts scoring for you at Sunday's lock.`
-        : `${name} added.`,
+      ok: act.viewer.membership.settings.weeklyAdds !== null
+        ? `${name} added. He scores for you from his next game.`
+        : act.viewer.membership.settings.lineupMode === "everyone"
+          ? `${name} added. He starts scoring for you at Sunday's lock.`
+          : `${name} added.`,
       at: now(),
     };
   } catch (error) {
@@ -151,6 +158,15 @@ export async function add(
         error: `${name} is on waivers — put a bid in rather than adding him.`,
         at: now(),
       };
+    }
+    if (error instanceof AddLimitError) {
+      return {
+        error: `You've used all ${error.limit} adds this week. The next one opens ${RESETS.format(new Date(error.resetsAt))}.`,
+        at: now(),
+      };
+    }
+    if (error instanceof PlaysTonightError) {
+      return { error: "The player you named to drop plays tonight — he can be dropped tomorrow.", at: now() };
     }
     if (error instanceof AlreadyRosteredError) {
       return { error: `${error.byTeamName} got there first.`, at: now() };
@@ -183,14 +199,19 @@ export async function drop(
     });
     refresh();
     return {
-      ok: act.viewer.membership.settings.lineupMode === "everyone"
-        ? `${name} dropped. He still scores for you through Saturday, and is on waivers until Sunday's run.`
-        : `${name} dropped. He is on waivers, not back in the pool — anyone who wants him bids.`,
+      ok: act.viewer.membership.settings.weeklyAdds !== null
+        ? `${name} dropped. The points he scored for you stay yours, and he is a free agent now.`
+        : act.viewer.membership.settings.lineupMode === "everyone"
+          ? `${name} dropped. He still scores for you through Saturday, and is on waivers until Sunday's run.`
+          : `${name} dropped. He is on waivers, not back in the pool — anyone who wants him bids.`,
       at: now(),
     };
   } catch (error) {
     if (error instanceof NotYourPlayerError) {
       return { error: `${name} is not on your roster.`, at: now() };
+    }
+    if (error instanceof PlaysTonightError) {
+      return { error: `${name} plays tonight — he can be dropped tomorrow.`, at: now() };
     }
     throw error;
   }

@@ -56,8 +56,13 @@ const MOBILE_SHEET: Dest[] = [
 const COMMISH: Dest = { href: "/commissioner", label: "Commissioner", glyph: "bolt" };
 
 export function Nav({
-  commissioner, children,
-}: { commissioner: boolean; children: React.ReactNode }) {
+  commissioner, addDrop = false, children,
+}: {
+  commissioner: boolean;
+  /** The league caps weekly adds instead of running waivers, so the page is named for what it does. */
+  addDrop?: boolean;
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const [sheet, setSheet] = useState(false);
 
@@ -70,7 +75,10 @@ export function Nav({
     return () => document.removeEventListener("keydown", onKey);
   }, [sheet]);
 
-  const sheetDests = commissioner ? [...MOBILE_SHEET, COMMISH] : MOBILE_SHEET;
+  const named = (list: Dest[]) => addDrop
+    ? list.map((d) => (d.href === "/waivers" ? { ...d, label: "Add/drop" } : d)) : list;
+  const topDests = named(TOPNAV);
+  const sheetDests = named(commissioner ? [...MOBILE_SHEET, COMMISH] : MOBILE_SHEET);
   const matches = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const on = (d: Dest) => matches(d.href) || (d.aliases ?? []).some(matches);
   const inSheet = sheetDests.some(on);
@@ -85,7 +93,7 @@ export function Nav({
           </Link>
 
           <nav className="topnav" aria-label="Sections">
-            {TOPNAV.map((d) => (
+            {topDests.map((d) => (
               <Link key={d.href} href={d.href} data-active={on(d)}>{d.label}</Link>
             ))}
           </nav>

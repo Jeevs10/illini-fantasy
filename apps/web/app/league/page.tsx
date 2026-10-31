@@ -180,7 +180,7 @@ function RosterPanel({
   }
 
   // With no lineup there are no slots to line the panels up by: every player
-  // the side held at the lock is listed, best week first, and nobody is an
+  // who scored for the side or still can is listed, best week first, nobody an
   // "empty FLEX" for having no game.
   const everyone = settings.lineupMode === "everyone";
   const rows = everyone
@@ -242,7 +242,7 @@ function RosterPanel({
       {side.players.length === 0 ? (
         everyone ? (
           <Empty title="Nobody plays this week" glyph="clock">
-            No player this side held at Sunday&rsquo;s lock has a game in the week.
+            Nobody on this side has played or has a game left this week.
           </Empty>
         ) : (
           <Empty title="No lineup for this week" glyph="clock">

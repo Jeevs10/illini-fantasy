@@ -91,6 +91,10 @@ export interface LeagueSettings {
    * that held him at the lock through the end of the week, and the team that
    * picked him up starts with him the period after. Read by the `fielded` view
    * (migration 015), which is where the rule actually lives.
+   *
+   * Superseded for `everyone` leagues by migration 021: a game now counts for
+   * the team holding the player at its tip-off, so a move takes effect at the
+   * next game rather than the next week. See `weeklyAdds`.
    */
   lineupMode: "manual" | "everyone";
   /**
@@ -103,6 +107,16 @@ export interface LeagueSettings {
    * every bid is for the same thing.
    */
   waiverWeekday: number | null;
+  /**
+   * Adds a team may make each week, or null for waivers and FAAB instead.
+   *
+   * A league with a cap has no wire: a dropped player is a free agent the
+   * moment he is let go, and anyone may add him. What stops a team streaming
+   * a new player into every game is the cap, not a waiting period. Only free
+   * agent adds count against it — a draft pick, a trade or an IR move is not
+   * an add. The week is the scoring period, from its lock to the next one.
+   */
+  weeklyAdds: number | null;
 }
 
 export const DEFAULT_SETTINGS: LeagueSettings = {
@@ -142,16 +156,18 @@ export const DEFAULT_SETTINGS: LeagueSettings = {
   playoffTiebreak: "seed",
   lineupMode: "manual",
   waiverWeekday: null,
+  weeklyAdds: null,
 };
 
 /**
- * The 2026-27 league: twelve players, all of them scoring, and every roster
- * move landing at the next Sunday lock.
+ * The 2026-27 league: twelve players, all of them scoring, and three adds a
+ * week with no waivers.
  *
  * Twelve FLEX seats rather than a new slot type, because FLEX already takes
  * anyone and every screen already knows how to draw one. Zero bench, one IR.
- * Waivers run Sundays at 09:00 UTC (4am Eastern), the same instant the
- * week locks, so a claim won in that run plays that week. Nineteen Sunday-to-
+ * A game counts for whoever holds the player at tip-off, so a team can play a
+ * man on Monday, drop him with Monday's points kept, and play his replacement
+ * on Tuesday — three times a week. Nineteen Sunday-to-
  * Saturday weeks from November 1 cover the regular season through March 13;
  * the regular season is the first seventeen (through February 27) and a
  * four-team bracket the last two, a round a week.
@@ -164,6 +180,7 @@ export const EVERYONE_SETTINGS: LeagueSettings = {
   lineupMode: "everyone",
   waiverWeekday: 0,
   waiverDays: 0,
+  weeklyAdds: 3,
   playoffTeams: 4,
   playoffStartWeek: 18,
   playoffRoundWeeks: 1,

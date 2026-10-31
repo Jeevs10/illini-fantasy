@@ -12,12 +12,12 @@ import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
  * seat outside the twelve, for a player the injury report lists out, that
  * frees one of the twelve for somebody else.
  *
- * A move to or from IR is a roster move like any other, so it lands at the
- * next lock. It closes the player's tenure and opens a new one — reserve or
- * not — at the same instant, which is what lets the `fielded` view keep
- * answering "what did this team hold at the lock" from tenures alone: the
- * week already under way still counts him (or still does not), and the next
- * one sees the new tenure.
+ * A move to or from IR closes the player's tenure and opens a new one —
+ * reserve or not — at the same instant, which is what lets the `fielded` view
+ * keep answering "what did this team hold at tip-off" from tenures alone: a
+ * game already played keeps the tenure it was played under, and every game
+ * after the move sees the new one. It is not an add, so it costs nothing
+ * against the weekly cap.
  *
  * A manual league has IR as a lineup slot instead and never calls these.
  */
@@ -95,7 +95,7 @@ async function inTransaction<T>(db: Db, work: (q: Queryable) => Promise<T>): Pro
   }
 }
 
-/** Puts a player listed out on IR, from the next lock. */
+/** Puts a player listed out on IR, from his next game. */
 export async function moveToReserve(
   db: Db, { fantasyTeamId, playerId, now = new Date() }: { fantasyTeamId: number; playerId: number; now?: Date },
 ): Promise<void> {
@@ -118,7 +118,7 @@ export async function moveToReserve(
 }
 
 /**
- * Brings a player back from IR, from the next lock. Needs a free seat among
+ * Brings a player back from IR, from his next game. Needs a free seat among
  * the twelve — a team that filled his seat drops somebody first.
  */
 export async function activateFromReserve(

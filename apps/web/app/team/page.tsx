@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  activeLimit, availabilityFor, carryForwardLineup, eligibleSlots, lockOf, periodContaining, periodForWeek,
+  activeLimit, availabilityFor, carryForwardLineup, eligibleSlots, periodContaining, periodForWeek,
   rosterLimit, rosterOn, seasonWeeks, slateByDay, startableInPeriod, TEAM_NAME_MAX, weekRoster, type Slot,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -19,9 +19,6 @@ export const dynamic = "force-dynamic";
 const SPAN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const span = (from: string, to: string) =>
   `${SPAN.format(new Date(`${from}T00:00:00Z`))} – ${SPAN.format(new Date(`${to}T00:00:00Z`))}`;
-const LOCK = new Intl.DateTimeFormat("en-US", {
-  weekday: "short", month: "short", day: "numeric", hour: "numeric", timeZone: "America/New_York",
-});
 
 export default async function TeamPage({
   searchParams,
@@ -69,9 +66,6 @@ export default async function TeamPage({
   const { from, to } = periodDays(period.startsOn);
 
   if (settings.lineupMode === "everyone") {
-    const nextPeriodStart = new Date(`${period.endsOn}T00:00:00Z`);
-    nextPeriodStart.setUTCDate(nextPeriodStart.getUTCDate() + 1);
-    const nextLock = LOCK.format(lockOf(nextPeriodStart.toISOString().slice(0, 10), settings));
     const [week, slate] = await Promise.all([
       weekRoster(db, {
         fantasyTeamId, from: period.startsOn, to: period.endsOn, configId, season: leagueSeason,
@@ -81,9 +75,10 @@ export default async function TeamPage({
     ]);
     const availability = await availabilityFor(db, week.map((p) => p.playerId));
     const counting = week.filter((p) => p.counting);
-    const held = week.filter((p) => p.held && !p.reserve).length;
-    const scored = counting.reduce((a, p) => a + p.scored, 0);
-    const projectedWeek = counting.reduce((a, p) => a + p.projectedWeek, 0);
+    const held = counting.length;
+    // Everyone who scored for the team this week, including players since let go.
+    const scored = week.reduce((a, p) => a + p.scored, 0);
+    const projectedWeek = week.reduce((a, p) => a + p.projectedWeek, 0);
     return (
       <>
         <div className="pagehead">
@@ -112,9 +107,9 @@ export default async function TeamPage({
               <h2>Week {period.week} <span className="faint" style={{ fontWeight: 500 }}>· {span(period.startsOn, period.endsOn)}</span></h2>
               <div className="row" style={{ gap: "var(--s-2)", marginTop: 2 }}>
                 <WeekFigure scored={scored} projected={projectedWeek} tone="accent"
-                            played={counting.some((p) => p.games.some((g) => g.score !== null))} />
+                            played={week.some((p) => p.games.some((g) => g.counted && g.score !== null))} />
                 <span className="faint" style={{ fontSize: "var(--t-xs)" }}>
-                  {counting.length} counting
+                  {counting.length} on the roster
                 </span>
               </div>
             </div>
@@ -129,17 +124,18 @@ export default async function TeamPage({
             </nav>
           </div>
           <p className="sethelp panel-note">
-            No lineup to set. Everyone on the roster at Sunday&rsquo;s lock scores every
-            game through Saturday; moves made now count from {nextLock}.
+            No lineup to set. Each game counts for whoever has the player at
+            tip-off: a player you drop keeps what he scored for you, and the
+            one you add scores from his next game.
+            {settings.weeklyAdds !== null ? ` ${settings.weeklyAdds} adds a week.` : ""}
           </p>
-          {held === 0 ? (
+          {week.length === 0 ? (
             <Empty title="Your roster is empty"
                    action={<Link className="button primary" href="/players?free=1">Browse free agents</Link>}>
-              Anyone added now scores from the next lock, {nextLock}.
+              Anyone added now scores from his next game.
             </Empty>
           ) : (
             <EveryoneWeek
-              nextLock={nextLock}
               rows={week.map((p) => ({ ...p, availability: availability.get(p.playerId) }))}
             />
           )}

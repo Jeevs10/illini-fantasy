@@ -17,7 +17,7 @@ export interface EveryoneRow {
   counting: boolean;
   held: boolean;
   reserve: boolean;
-  games: { playedOn: string; tipoff: string | null; opponent: string | null; score: number | null; projected: number | null }[];
+  games: { playedOn: string; tipoff: string | null; opponent: string | null; score: number | null; projected: number | null; counted: boolean }[];
   scored: number;
   projectedWeek: number;
   availability?: PlayerAvailability;
@@ -29,20 +29,22 @@ const day = (iso: string) => DAY.format(new Date(`${iso}T00:00:00Z`));
 /**
  * The week in a league where everybody plays.
  *
- * No slots and no lock per player — the roster that counts was fixed at
- * Sunday's lock, and the only decisions left are roster moves for next week.
- * So the page answers three questions in order: who is scoring for me this
- * week and how, who joins on Sunday, and who is on IR.
+ * No slots: a game counts for whoever holds the player at its tip-off. So the
+ * page answers three questions in order: who is on the roster and what they
+ * are scoring, who was let go this week with points already banked, and who
+ * is on IR. A game that did not count here (before he arrived, after he left,
+ * or on IR) is shown struck through rather than hidden.
  */
-export function EveryoneWeek({ rows, nextLock }: { rows: EveryoneRow[]; nextLock: string }) {
+export function EveryoneWeek({ rows }: { rows: EveryoneRow[] }) {
   const [state, submit, pending] = useActionState<LineupState, FormData>(reserve, {});
   const counting = rows.filter((r) => r.counting);
-  const joining = rows.filter((r) => !r.counting && r.held && !r.reserve);
-  const reserved = rows.filter((r) => r.held && r.reserve && !r.counting);
+  const gone = rows.filter((r) => !r.held);
+  const reserved = rows.filter((r) => r.held && r.reserve);
 
   const games = (r: EveryoneRow) => r.games.length === 0 ? "no games this week"
     : r.games.map((g) => `${day(g.playedOn)}${g.opponent ? ` ${g.opponent}` : ""}${
-      g.score !== null ? ` ${g.score.toFixed(1)}` : g.projected !== null ? ` (proj ${g.projected.toFixed(1)})` : ""}`).join(" · ");
+      g.score !== null ? ` ${g.score.toFixed(1)}` : g.projected !== null ? ` (proj ${g.projected.toFixed(1)})` : ""}${
+      g.counted ? "" : " — not yours"}`).join(" · ");
 
   const irButton = (r: EveryoneRow) => {
     if (!r.held) return null;
@@ -62,7 +64,7 @@ export function EveryoneWeek({ rows, nextLock }: { rows: EveryoneRow[]; nextLock
         <input type="hidden" name="playerId" value={r.playerId} />
         <input type="hidden" name="name" value={r.name} />
         <button type="submit" className="sm" disabled={pending}
-                title={`Move ${r.name} to IR from ${nextLock}`}>To IR</button>
+                title={`Move ${r.name} to IR — his seat opens now`}>To IR</button>
       </form>
     );
   };
@@ -82,8 +84,7 @@ export function EveryoneWeek({ rows, nextLock }: { rows: EveryoneRow[]; nextLock
         <span>{r.teamName ?? "—"}</span>
         {r.projected !== null ? <><Dot /><span>{r.projected.toFixed(1)} proj</span></> : null}
         <Dot /><span>{games(r)}</span>
-        {!r.held ? <><Dot /><span>let go — his last week here</span></> : null}
-        {r.counting && r.reserve ? <><Dot /><span>on IR from {nextLock}</span></> : null}
+        {!r.held ? <><Dot /><span>let go — what he scored for you stays</span></> : null}
       </>}
       right={right}
     />
@@ -100,12 +101,12 @@ export function EveryoneWeek({ rows, nextLock }: { rows: EveryoneRow[]; nextLock
       </div>
 
       {counting.length === 0 ? (
-        <Empty title="Nobody is counting this week" glyph="team">
-          Players held at Sunday&rsquo;s lock score for the whole week. Anyone
-          added since starts with the next one.
+        <Empty title="Nobody on the roster" glyph="team">
+          Every game counts for whoever has the player at tip-off. Anyone
+          added now scores from his next game.
         </Empty>
       ) : (
-        <section aria-label="Counting this week">
+        <section aria-label="On the roster">
           {counting.map((r) => row(r, (
             <span className="row" style={{ gap: "var(--s-2)" }}>
               {irButton(r)}
@@ -118,17 +119,22 @@ export function EveryoneWeek({ rows, nextLock }: { rows: EveryoneRow[]; nextLock
         </section>
       )}
 
-      {joining.length > 0 ? (
-        <section aria-label="Joining next week" style={{ marginTop: "var(--s-4)" }}>
-          <h3 className="eyebrow" style={{ padding: "0 var(--s-4)" }}>From {nextLock}</h3>
-          {joining.map((r) => row(r, <span className="row" style={{ gap: "var(--s-2)" }}>{irButton(r)}<span className="pill">Next week</span></span>))}
+      {gone.length > 0 ? (
+        <section aria-label="Let go this week" style={{ marginTop: "var(--s-4)" }}>
+          <h3 className="eyebrow" style={{ padding: "0 var(--s-4)" }}>Let go this week</h3>
+          {gone.map((r) => row(r, <Score value={r.scored} size="sm" />))}
         </section>
       ) : null}
 
       {reserved.length > 0 ? (
         <section aria-label="Injured reserve" style={{ marginTop: "var(--s-4)" }}>
           <h3 className="eyebrow" style={{ padding: "0 var(--s-4)" }}>Injured reserve</h3>
-          {reserved.map((r) => row(r, <span className="row" style={{ gap: "var(--s-2)" }}>{irButton(r)}<span className="pill">IR</span></span>))}
+          {reserved.map((r) => row(r, (
+            <span className="row" style={{ gap: "var(--s-2)" }}>
+              {irButton(r)}
+              {r.scored !== 0 ? <Score value={r.scored} size="sm" /> : <span className="pill">IR</span>}
+            </span>
+          )))}
         </section>
       ) : null}
     </>

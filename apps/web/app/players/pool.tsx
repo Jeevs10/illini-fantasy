@@ -29,12 +29,19 @@ export interface PoolWeekView {
  * appears somewhere the reader is not looking.
  */
 export function Pool({
-  players, offset, full, canAct, sort, sortHrefs, week = null, projection = false,
+  players, offset, full, droppable, addsLeft = null, canAct, sort, sortHrefs, week = null, projection = false,
 }: {
   players: PoolRow[];
   offset: number;
   /** A full roster has to drop somebody, and that form lives on the waivers page. */
   full: boolean;
+  /**
+   * Set in a league with weekly adds: who may be dropped right now. A full
+   * roster then names one beside each Add, so the swap is one action.
+   */
+  droppable?: { playerId: number; name: string }[];
+  /** Adds left this week, in a league that caps them. */
+  addsLeft?: number | null;
   canAct: boolean;
   /** The active sort, so its column header can say so. */
   sort: PoolSort;
@@ -58,6 +65,8 @@ export function Pool({
   projection?: boolean;
 }) {
   const [state, submit, pending] = useActionState<WaiverActionState, FormData>(add, {});
+  const swap = full && droppable !== undefined && droppable.length > 0;
+  const noAdds = addsLeft === 0;
 
   // Whichever number this table is ranked on: the season average, or the
   // week's result, or where the week is projected to land.
@@ -234,18 +243,34 @@ export function Pool({
             ) : player.onWaivers ? (
               <Link className="button sm" href="/waivers">Bid</Link>
             ) : canAct ? (
-              <form action={submit}>
+              <form action={submit} className={swap ? "bidform" : undefined}>
                 <input type="hidden" name="playerId" value={player.playerId} />
                 <input type="hidden" name="name" value={player.name} />
+                {swap ? (
+                  <>
+                    <label className="sr-only" htmlFor={`drop-${player.playerId}`}>
+                      Who to drop for {player.name}
+                    </label>
+                    <select id={`drop-${player.playerId}`} name="dropPlayerId" defaultValue="" required
+                            disabled={noAdds || pending}>
+                      <option value="" disabled>Drop…</option>
+                      {droppable!.map((p) => (
+                        <option key={p.playerId} value={p.playerId}>{p.name}</option>
+                      ))}
+                    </select>
+                  </>
+                ) : null}
                 <button
                   type="submit"
                   className="sm primary"
-                  disabled={full || pending}
+                  disabled={(full && !swap) || noAdds || pending}
                   // Disabled says nothing about why, and why is the whole state
                   // of the roster.
-                  title={full
-                    ? "Your roster is full — drop somebody on the waivers page first"
-                    : `Add ${player.name}`}
+                  title={noAdds
+                    ? "No adds left this week"
+                    : full && !swap
+                      ? "Your roster is full — drop somebody on the waivers page first"
+                      : `Add ${player.name}`}
                 >
                   Add
                 </button>
@@ -257,7 +282,16 @@ export function Pool({
         </div>
       ))}
 
-      {players.length === 0 ? null : full && canAct ? (
+      {players.length === 0 || !canAct ? null : noAdds ? (
+        <p className="seatless">
+          You&rsquo;ve used this week&rsquo;s adds. The count starts again at Sunday&rsquo;s lock.
+        </p>
+      ) : swap ? (
+        <p className="seatless">
+          Your roster is full, so each add names who comes off. Players whose
+          school plays tonight aren&rsquo;t listed: they can be dropped tomorrow.
+        </p>
+      ) : full ? (
         <p className="seatless">
           Your roster is full. Adding anyone means dropping somebody, which is a
           single action on the <Link href="/waivers">waivers page</Link>.

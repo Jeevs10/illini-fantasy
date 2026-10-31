@@ -5,7 +5,7 @@ import { forwardConfigId, ingestForwardFeed, type ForwardFeed, type ForwardLine 
 import { scorePeriod, settleWeek } from "./settle.ts";
 import { generateSchedule } from "./schedule.ts";
 import { EVERYONE_SETTINGS, type LeagueSettings } from "./slots.ts";
-import { addFreeAgent, dropPlayer, nextWaiverRun, settleWaivers, submitClaim } from "./waivers.ts";
+import { AddLimitError, PlaysTonightError, addFreeAgent, addWindow, dropPlayer, weeklyAdds } from "./waivers.ts";
 import { claimPlayer, rosterOn, RosterFullError } from "./roster.ts";
 import { activateFromReserve, moveToReserve, NotInjuredError } from "./reserve.ts";
 import { NoLineupError } from "./lineups.ts";
@@ -17,8 +17,8 @@ import { NotYourTeamError, renameTeam, TeamNameTaken } from "./teamname.ts";
 
 /**
  * The 2026-27 league end to end, on a two-team, two-seat miniature of it:
- * forward-feed scores, every rostered player counting, and every roster move
- * landing at the next Sunday 09:00 UTC lock.
+ * forward-feed scores, every rostered player counting, a game counting for
+ * whoever held the player at its tip-off, and three adds a week.
  *
  *   week 1  Sun Nov 1 - Sat Nov 7      week 2  Sun Nov 8 - Sat Nov 14
  */
@@ -132,15 +132,24 @@ test("there is no lineup to set", async () => {
   }), (e: Error) => e instanceof NoLineupError);
 });
 
-test("weekly waivers open on Sunday at the lock", () => {
-  assert.equal(nextWaiverRun(at("2026-11-03T15:00:00Z"), settings).toISOString(), "2026-11-08T09:00:00.000Z");
-  assert.equal(nextWaiverRun(at("2026-11-08T09:00:00Z"), settings).toISOString(), "2026-11-15T09:00:00.000Z");
-  assert.equal(nextWaiverRun(at("2026-11-08T08:59:00Z"), settings).toISOString(), "2026-11-08T09:00:00.000Z");
+test("adds are counted from one Sunday 09:00 UTC lock to the next", () => {
+  const w = (iso: string) => {
+    const { from, to } = addWindow(at(iso), "2026-11-01", settings);
+    return [from.toISOString(), to.toISOString()];
+  };
+  assert.deepEqual(w("2026-11-03T15:00:00Z"), ["2026-11-01T09:00:00.000Z", "2026-11-08T09:00:00.000Z"]);
+  assert.deepEqual(w("2026-11-08T08:59:00Z"), ["2026-11-01T09:00:00.000Z", "2026-11-08T09:00:00.000Z"]);
+  assert.deepEqual(w("2026-11-08T09:00:00Z"), ["2026-11-08T09:00:00.000Z", "2026-11-15T09:00:00.000Z"]);
+  // Draft night is the week before the first one.
+  assert.deepEqual(w("2026-10-31T20:00:00Z"), ["2026-10-25T09:00:00.000Z", "2026-11-01T09:00:00.000Z"]);
+  // No schedule yet: Sunday.
+  assert.equal(addWindow(at("2026-11-04T12:00:00Z"), null, settings).from.toISOString(), "2026-11-01T09:00:00.000Z");
 });
 
-test("a move after the lock counts from the next week; the player dropped keeps scoring until then", async () => {
-  // Tuesday of week 1: team 1 drops Pur One and adds Ill Two.
-  await dropPlayer(db, { leagueId: 1, fantasyTeamId: 1, playerId: pid.get("3")!, now: at("2026-11-03T15:00:00Z") });
+test("a dropped player keeps what he scored, and his replacement counts from his next game", async () => {
+  // Tuesday of week 1: team 1 drops Pur One (who played Monday) and adds Ill Two.
+  const dropped = await dropPlayer(db, { leagueId: 1, fantasyTeamId: 1, playerId: pid.get("3")!, now: at("2026-11-03T15:00:00Z") });
+  assert.equal(dropped.clearsAt, null, "no waivers: he is a free agent at once");
   await addFreeAgent(db, { leagueId: 1, fantasyTeamId: 1, playerId: pid.get("2")!, now: at("2026-11-03T15:05:00Z") });
 
   // Week 1 and 2's lines arrive over two mornings; the second resends Monday's
@@ -156,47 +165,78 @@ test("a move after the lock counts from the next week; the player dropped keeps 
   assert.equal(r.unscheduled, 0);
 
   const w1 = await scorePeriod(db, { fantasyTeamId: 1, configId, from: "2026-11-01", to: "2026-11-07", settings });
-  // Ill One 5 + 3, Pur One 2 (dropped Tuesday, held at the lock); Ill Two's 7 is next week's.
-  assert.equal(w1.total, 10);
-  assert.deepEqual(w1.players.map((p) => [p.playerName, p.total]), [["Ill One", 8], ["Pur One", 2]]);
+  // Ill One 5 + 3, Pur One's Monday 2 kept, Ill Two's Thursday 7.
+  assert.equal(w1.total, 17);
+  assert.deepEqual(w1.players.map((p) => [p.playerName, p.total]).sort(),
+    [["Ill One", 8], ["Ill Two", 7], ["Pur One", 2]]);
 
   const w2 = await scorePeriod(db, { fantasyTeamId: 1, configId, from: "2026-11-08", to: "2026-11-14", settings });
   assert.equal(w2.total, 3, "week 2 is Ill One 1 + Ill Two 2, and nothing of Pur One");
 });
 
-test("the weekly run awards the wire at the lock, and the winner plays that week", async () => {
-  // Team 2 bids on Pur One, dropping Iowa One; the bid waits for Sunday.
-  const claim = await submitClaim(db, {
-    leagueId: 1, fantasyTeamId: 2, playerId: pid.get("3")!, bid: 5, dropPlayerId: pid.get("5")!,
-    now: at("2026-11-05T12:00:00Z"),
+test("a player cannot be dropped on a night his school plays, until the next morning", async () => {
+  // Thursday the 5th: Iowa plays Illinois tonight. Before tip-off and after it
+  // (11pm Eastern is 04:00 UTC on the 6th), Iowa One stays.
+  for (const when of ["2026-11-05T12:00:00Z", "2026-11-06T04:00:00Z"]) {
+    await assert.rejects(addFreeAgent(db, {
+      leagueId: 1, fantasyTeamId: 2, playerId: pid.get("3")!, dropPlayerId: pid.get("5")!, now: at(when),
+    }), (e: Error) => e instanceof PlaysTonightError && e.playedOn === "2026-11-05");
+  }
+  await assert.rejects(dropPlayer(db, { leagueId: 1, fantasyTeamId: 2, playerId: pid.get("5")!, now: at("2026-11-05T12:00:00Z") }),
+    (e: Error) => e instanceof PlaysTonightError);
+
+  // Friday morning he can go, and Pur One, dropped by team 1, is simply added.
+  await addFreeAgent(db, {
+    leagueId: 1, fantasyTeamId: 2, playerId: pid.get("3")!, dropPlayerId: pid.get("5")!, now: at("2026-11-06T12:00:00Z"),
   });
-  assert.equal(new Date(claim.runsAt).toISOString(), "2026-11-08T09:00:00.000Z");
-  // Nobody loads a page until Sunday afternoon; the run still happens at 09:00.
-  await settleWaivers(db, { leagueId: 1, now: at("2026-11-08T15:00:00Z") });
 
   const w1 = await scorePeriod(db, { fantasyTeamId: 2, configId, from: "2026-11-01", to: "2026-11-07", settings });
-  assert.equal(w1.total, 4 + 1 + -1, "week 1 is Iowa One 4 and -1, Ind One 1");
+  assert.equal(w1.total, 4 + 1 + -1, "week 1 is Iowa One 4 and -1 (Thursday, still held), Ind One 1");
   const w2 = await scorePeriod(db, { fantasyTeamId: 2, configId, from: "2026-11-08", to: "2026-11-14", settings });
-  assert.equal(w2.total, 4 + 5, "week 2 is Pur One 4 (won at the lock) and Ind One 5");
+  assert.equal(w2.total, 4 + 5, "week 2 is Pur One 4 and Ind One 5");
 
   const settled = await settleWeek(db, 1, 2);
   assert.equal(settled.length, 1);
   assert.deepEqual([settled[0]!.home.total, settled[0]!.away.total].sort(), [3, 9]);
 });
 
-test("IR holds a player listed out outside the twelve, from the next lock", async () => {
+test("a team gets three adds a week, and the count starts again at Sunday's lock", async () => {
+  // Team 1 has used one (Ill Two, Tuesday). Friday, with nobody playing, two more.
+  await addFreeAgent(db, { leagueId: 1, fantasyTeamId: 1, playerId: pid.get("4")!, dropPlayerId: pid.get("2")!, now: at("2026-11-06T13:00:00Z") });
+  await addFreeAgent(db, { leagueId: 1, fantasyTeamId: 1, playerId: pid.get("2")!, dropPlayerId: pid.get("4")!, now: at("2026-11-06T14:00:00Z") });
+  assert.deepEqual(await weeklyAdds(db, { leagueId: 1, fantasyTeamId: 1, now: at("2026-11-06T14:30:00Z") }),
+    { used: 3, limit: 3, resetsAt: "2026-11-08T09:00:00.000Z" });
+
+  await assert.rejects(addFreeAgent(db, {
+    leagueId: 1, fantasyTeamId: 1, playerId: pid.get("6")!, dropPlayerId: pid.get("2")!, now: at("2026-11-06T15:00:00Z"),
+  }), (e: Error) => e instanceof AddLimitError && e.used === 3);
+  assert.deepEqual((await rosterOn(db, 1, "2026-11-06")).map((p) => p.name), ["Ill One", "Ill Two"],
+    "the refused add dropped nobody");
+
+  assert.equal((await weeklyAdds(db, { leagueId: 1, fantasyTeamId: 1, now: at("2026-11-08T09:00:00Z") }))!.used, 0);
+
+  // Ill Two's Thursday counted under the tenure he had then; the week is unchanged.
+  const w1 = await scorePeriod(db, { fantasyTeamId: 1, configId, from: "2026-11-01", to: "2026-11-07", settings });
+  assert.equal(w1.total, 17);
+});
+
+test("IR holds a player listed out outside the twelve, at once, and is not an add", async () => {
   const ind = pid.get("7")!;
   await assert.rejects(moveToReserve(db, { fantasyTeamId: 2, playerId: ind, now: at("2026-11-11T12:00:00Z") }),
     (e: Error) => e instanceof NotInjuredError);
   await db.query("INSERT INTO player_availability (player_id, as_of, status) VALUES ($1, '2026-11-11T11:00:00Z', 'out')", [ind]);
   await moveToReserve(db, { fantasyTeamId: 2, playerId: ind, now: at("2026-11-11T12:00:00Z") });
 
-  // His week-2 game was Monday and already counted; the week is not reopened.
+  // His Monday game already counted, and is not reopened.
   const w2 = await scorePeriod(db, { fantasyTeamId: 2, configId, from: "2026-11-08", to: "2026-11-14", settings });
   assert.equal(w2.total, 9);
 
-  // The seat he left is open: a third player fits beside him.
+  // The seat he left is open: a third player fits beside him. Ind Two's
+  // Tuesday game tipped before he was added, so it is not team 2's.
   await addFreeAgent(db, { leagueId: 1, fantasyTeamId: 2, playerId: pid.get("8")!, now: at("2026-11-11T13:00:00Z") });
+  assert.equal((await scorePeriod(db, { fantasyTeamId: 2, configId, from: "2026-11-08", to: "2026-11-14", settings })).total, 9);
+  assert.equal((await weeklyAdds(db, { leagueId: 1, fantasyTeamId: 2, now: at("2026-11-11T13:00:00Z") }))!.used, 1,
+    "the IR move was not an add");
   const held = await rosterOn(db, 2, "2026-11-11");
   assert.deepEqual(held.map((p) => [p.name, p.reserve]).sort(),
     [["Ind One", true], ["Ind Two", false], ["Pur One", false]]);
@@ -206,21 +246,20 @@ test("IR holds a player listed out outside the twelve, from the next lock", asyn
     (e: Error) => e instanceof RosterFullError);
 });
 
-test("the team page's week reads the roster held at the lock", async () => {
+test("the team page's week counts each game for whoever held him at tip-off", async () => {
   const week = await weekRoster(db, {
     fantasyTeamId: 2, from: "2026-11-08", to: "2026-11-14", configId, season: 2027, settings,
     now: at("2026-11-12T12:00:00Z"), today: "2026-11-12",
   });
   const by = new Map(week.map((p) => [p.name, p]));
-  // Won at the lock: counting. Put on IR mid-week: still counting this week.
   assert.equal(by.get("Pur One")!.counting, true);
-  assert.equal(by.get("Ind One")!.counting, true);
-  assert.equal(by.get("Ind One")!.reserve, true);
-  assert.equal(by.get("Ind One")!.scored, 5);
-  // Picked up Wednesday: next week's.
-  assert.equal(by.get("Ind Two")!.counting, false);
+  // Put on IR Wednesday: held, not counting from now, Monday's 5 still banked.
+  assert.deepEqual([by.get("Ind One")!.counting, by.get("Ind One")!.reserve, by.get("Ind One")!.scored], [false, true, 5]);
+  // Picked up Wednesday after his Tuesday game: on the roster, nothing banked.
+  assert.equal(by.get("Ind Two")!.counting, true);
   assert.equal(by.get("Ind Two")!.scored, 0);
-  // Dropped in the claim at the lock: not held, not counting.
+  assert.equal(by.get("Ind Two")!.games[0]!.counted, false);
+  // Dropped the week before: not in this week at all.
   assert.equal(by.has("Iowa One"), false);
 
   const w1 = await weekRoster(db, {
@@ -228,7 +267,11 @@ test("the team page's week reads the roster held at the lock", async () => {
     now: at("2026-11-04T12:00:00Z"), today: "2026-11-04",
   });
   const pur = w1.find((p) => p.name === "Pur One")!;
-  assert.deepEqual([pur.counting, pur.held, pur.scored], [true, false, 2], "dropped Tuesday, still this week's");
+  assert.deepEqual([pur.counting, pur.held, pur.scored], [false, false, 2], "dropped Tuesday, Monday kept");
+  const two = w1.find((p) => p.name === "Ill Two")!;
+  assert.deepEqual(two.games.map((g) => [g.playedOn, g.counted]), [["2026-11-02", false], ["2026-11-05", true]],
+    "added Tuesday: Monday is not his, Thursday is");
+  assert.equal(two.counting, true);
   // Thursday's score is the future from Wednesday.
   assert.equal(w1.find((p) => p.name === "Ill One")!.scored, 5);
 });

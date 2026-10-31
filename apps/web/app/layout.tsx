@@ -36,15 +36,16 @@ export default async function RootLayout({
     ? {
         name: viewer.viewer.name || viewer.viewer.email,
         commissioner: viewer.viewer.membership.role === "commissioner",
+        addDrop: viewer.viewer.membership.settings.weeklyAdds != null,
         leagues: viewer.viewer.memberships.map((m) => ({ leagueId: m.leagueId, leagueName: m.leagueName })),
         current: viewer.viewer.membership.leagueId,
       }
-    : { name: viewer.name || viewer.email, commissioner: false, leagues: [], current: 0 };
+    : { name: viewer.name || viewer.email, commissioner: false, addDrop: false, leagues: [], current: 0 };
   return (
     <html lang="en" className={`${barlow.variable} ${barlowCond.variable} ${graduate.variable}`}>
       <body>
         {signedIn ? (
-          <Nav commissioner={signedIn.commissioner}>
+          <Nav commissioner={signedIn.commissioner} addDrop={signedIn.addDrop}>
             <LeagueSwitch leagues={signedIn.leagues} current={signedIn.current} />
             <ProfileMenu name={signedIn.name} commissioner={signedIn.commissioner} />
           </Nav>

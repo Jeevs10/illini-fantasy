@@ -12,6 +12,8 @@ export interface RosterRow {
   name: string;
   teamName: string | null;
   acquiredVia: string;
+  /** His school plays tonight, so he cannot be dropped until tomorrow. Only in an add/drop league. */
+  playsTonight?: boolean;
 }
 
 /**
@@ -21,7 +23,11 @@ export interface RosterRow {
  * of every transaction on this screen — a manager clearing room for a claim
  * should not have to leave the page where the claim is.
  */
-export function Roster({ team, players }: { team: string; players: RosterRow[] }) {
+export function Roster({ team, players, addDrop = false }: {
+  team: string; players: RosterRow[];
+  /** The league has weekly adds instead of waivers: a drop frees the player at once. */
+  addDrop?: boolean;
+}) {
   const [state, submit, pending] = useActionState<WaiverActionState, FormData>(drop, {});
 
   return (
@@ -62,22 +68,33 @@ export function Roster({ team, players }: { team: string; players: RosterRow[] }
                 <input type="hidden" name="playerId" value={player.playerId} />
                 <input type="hidden" name="name" value={player.name} />
                 <button
-                  type="submit" className="sm danger" disabled={pending}
+                  type="submit" className="sm danger" disabled={pending || player.playsTonight}
                   // The consequence, said before the click rather than after it:
                   // a drop is not reversible by re-adding him.
-                  title={`Drop ${player.name} — he goes on waivers, and anyone can bid`}
+                  title={player.playsTonight
+                    ? `${player.name} plays tonight — he can be dropped tomorrow`
+                    : addDrop
+                      ? `Drop ${player.name} — he is a free agent at once, and anyone can add him`
+                      : `Drop ${player.name} — he goes on waivers, and anyone can bid`}
                 >
-                  Drop
+                  {player.playsTonight ? "Plays tonight" : "Drop"}
                 </button>
               </form>
             </span>
           </div>
         ))
       )}
-      <p className="seatless">
-        A dropped player goes on the wire until the next run, not back into the
-        pool. Nobody can simply take him, including you.
-      </p>
+      {addDrop ? (
+        <p className="seatless">
+          A dropped player keeps the points he scored for you and is a free
+          agent at once. Dropping doesn&rsquo;t use an add; adding does.
+        </p>
+      ) : (
+        <p className="seatless">
+          A dropped player goes on the wire until the next run, not back into the
+          pool. Nobody can simply take him, including you.
+        </p>
+      )}
     </div>
   );
 }
