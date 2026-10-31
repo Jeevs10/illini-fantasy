@@ -18,6 +18,9 @@ const graduate = Graduate({ subsets: ["latin"], weight: "400", variable: "--font
 export const metadata: Metadata = {
   title: "Illini Fantasy Hoops",
   description: "The Illinois staff fantasy league, scored on the forward model.",
+  // Added to an iPhone home screen, it opens without Safari's bars, under a
+  // status bar the masthead's navy shows through.
+  appleWebApp: { capable: true, title: "Illini Fantasy", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
