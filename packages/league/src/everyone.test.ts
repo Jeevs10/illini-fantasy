@@ -8,7 +8,7 @@ import type { EspnLiveEvent } from "@illini/sources";
 import { scorePeriod, settleWeek } from "./settle.ts";
 import { generateSchedule } from "./schedule.ts";
 import { EVERYONE_SETTINGS, type LeagueSettings } from "./slots.ts";
-import { AddLimitError, PlaysTonightError, addFreeAgent, addWindow, dropPlayer, weeklyAdds } from "./waivers.ts";
+import { AddLimitError, PlaysTonightError, addFreeAgent, addWindow, dropPlayer, tippedOff, weeklyAdds } from "./waivers.ts";
 import { claimPlayer, rosterOn, RosterFullError } from "./roster.ts";
 import { activateFromReserve, moveToReserve, NotInjuredError, ReserveFullError } from "./reserve.ts";
 import { NoLineupError } from "./lineups.ts";
@@ -177,16 +177,19 @@ test("a dropped player keeps what he scored, and his replacement counts from his
   assert.equal(w2.total, 3, "week 2 is Ill One 1 + Ill Two 2, and nothing of Pur One");
 });
 
-test("a player cannot be dropped on a night his school plays, until the next morning", async () => {
-  // Thursday the 5th: Iowa plays Illinois tonight. Before tip-off and after it
-  // (11pm Eastern is 04:00 UTC on the 6th), Iowa One stays.
-  for (const when of ["2026-11-05T12:00:00Z", "2026-11-06T04:00:00Z"]) {
+test("a player can be dropped until his game tips off, and from then until the next morning he stays", async () => {
+  // Thursday the 5th: Iowa plays Illinois at 7pm Eastern (00:00 UTC on the 6th).
+  // At tip-off and after it (11pm Eastern is 04:00 UTC on the 6th), Iowa One stays.
+  for (const when of ["2026-11-06T00:00:00Z", "2026-11-06T04:00:00Z"]) {
     await assert.rejects(addFreeAgent(db, {
       leagueId: 1, fantasyTeamId: 2, playerId: pid.get("3")!, dropPlayerId: pid.get("5")!, now: at(when),
     }), (e: Error) => e instanceof PlaysTonightError && e.playedOn === "2026-11-05");
   }
-  await assert.rejects(dropPlayer(db, { leagueId: 1, fantasyTeamId: 2, playerId: pid.get("5")!, now: at("2026-11-05T12:00:00Z") }),
+  await assert.rejects(dropPlayer(db, { leagueId: 1, fantasyTeamId: 2, playerId: pid.get("5")!, now: at("2026-11-06T00:30:00Z") }),
     (e: Error) => e instanceof PlaysTonightError);
+  // Before tip-off nothing is locked.
+  assert.equal((await tippedOff(db, [pid.get("5")!], at("2026-11-05T23:59:00Z"), settings)).size, 0);
+  assert.equal((await tippedOff(db, [pid.get("5")!], at("2026-11-06T00:00:00Z"), settings)).size, 1);
 
   // Friday morning he can go, and Pur One, dropped by team 1, is simply added.
   await addFreeAgent(db, {

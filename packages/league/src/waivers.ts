@@ -47,15 +47,16 @@ export class AddLimitError extends Error {
 }
 
 /**
- * Raised dropping a player whose school plays on the current game day.
+ * Raised dropping a player whose school's game tonight has tipped off.
  *
- * A player is locked to his team for the whole game day, before tip-off as
- * well as after it, and can be let go from the next morning. The drop and his
- * game cannot share a night.
+ * Until tip-off he can go (user decision 2026-11-02), and the game counts for
+ * whoever holds him then. From tip-off he is locked to his team until the next
+ * morning, so the drop and his game cannot share a night. A game with no
+ * tip-off time yet locks him all day: there is no clock to drop him ahead of.
  */
 export class PlaysTonightError extends Error {
   constructor(readonly playerId: number, readonly playedOn: string) {
-    super(`player ${playerId} plays on ${playedOn} and cannot be dropped until the day after`);
+    super(`player ${playerId}'s game on ${playedOn} has tipped off; he cannot be dropped until the day after`);
     this.name = "PlaysTonightError";
   }
 }
@@ -177,31 +178,37 @@ export async function weeklyAdds(
   return { used: Number(rows[0]!.n), limit: rules.weeklyAdds, resetsAt: to.toISOString() };
 }
 
-/** Which of these players' schools play on a game date. */
-export async function playingOn(q: Queryable, playerIds: number[], on: string): Promise<Set<number>> {
+/**
+ * The game night `now` falls in: the UTC day at the waiver hour, the same
+ * boundary every game is filed under, so 11pm Eastern after a game is still
+ * that game's night and the next one starts at 4am.
+ */
+export function gameNight(now: Date, settings: LeagueSettings = DEFAULT_SETTINGS): string {
+  return isoDay(new Date(now.getTime() - settings.waiverHour * 3_600_000));
+}
+
+/** Which of these players are locked to their team: tonight's game has tipped off, or has no time to wait for. */
+export async function tippedOff(
+  q: Queryable, playerIds: number[], now: Date, settings: LeagueSettings = DEFAULT_SETTINGS,
+): Promise<Set<number>> {
   if (playerIds.length === 0) return new Set();
   const { rows } = await q.query<{ id: string }>(
     `SELECT DISTINCT p.id FROM player p
        JOIN game g ON p.team_id IN (g.home_team_id, g.away_team_id)
-      WHERE p.id = ANY($1::bigint[]) AND g.played_on = $2`,
-    [playerIds, on],
+      WHERE p.id = ANY($1::bigint[]) AND g.played_on = $2 AND (g.tipoff IS NULL OR g.tipoff <= $3)`,
+    [playerIds, gameNight(now, settings), now],
   );
   return new Set(rows.map((r) => Number(r.id)));
 }
 
-/**
- * Refuses a drop on a night the player's school plays.
- *
- * The night is the game date of `now`: the UTC day at the waiver hour, the
- * same boundary every game is filed under, so a drop at 11pm Eastern after
- * his game is still that night's and waits until 4am.
- */
+/** Refuses a drop once the player's game tonight has tipped off. */
 async function requireOffNight(
   q: Queryable, { playerId, now, settings }: { playerId: number; now: Date; settings: LeagueSettings },
 ): Promise<void> {
   if (settings.weeklyAdds === null) return;
-  const night = isoDay(new Date(now.getTime() - settings.waiverHour * 3_600_000));
-  if ((await playingOn(q, [playerId], night)).size > 0) throw new PlaysTonightError(playerId, night);
+  if ((await tippedOff(q, [playerId], now, settings)).size > 0) {
+    throw new PlaysTonightError(playerId, gameNight(now, settings));
+  }
 }
 
 // ---------------------------------------------------------------------------

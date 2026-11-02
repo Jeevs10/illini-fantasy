@@ -12,7 +12,7 @@ export interface RosterRow {
   name: string;
   teamName: string | null;
   acquiredVia: string;
-  /** His school plays tonight, so he cannot be dropped until tomorrow. Only in an add/drop league. */
+  /** His game tonight has tipped off, so he cannot be dropped until tomorrow. Only in an add/drop league. */
   playsTonight?: boolean;
 }
 
@@ -72,12 +72,12 @@ export function Roster({ team, players, addDrop = false }: {
                   // The consequence, said before the click rather than after it:
                   // a drop is not reversible by re-adding him.
                   title={player.playsTonight
-                    ? `${player.name} plays tonight — he can be dropped tomorrow`
+                    ? `${player.name} has tipped off tonight — he can be dropped tomorrow`
                     : addDrop
                       ? `Drop ${player.name} — he is a free agent at once, and anyone can add him`
                       : `Drop ${player.name} — he goes on waivers, and anyone can bid`}
                 >
-                  {player.playsTonight ? "Plays tonight" : "Drop"}
+                  {player.playsTonight ? "Locked" : "Drop"}
                 </button>
               </form>
             </span>

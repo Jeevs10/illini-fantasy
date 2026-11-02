@@ -166,7 +166,7 @@ export async function add(
       };
     }
     if (error instanceof PlaysTonightError) {
-      return { error: "The player you named to drop plays tonight — he can be dropped tomorrow.", at: now() };
+      return { error: "The player you named to drop has tipped off tonight — he can be dropped tomorrow.", at: now() };
     }
     if (error instanceof AlreadyRosteredError) {
       return { error: `${error.byTeamName} got there first.`, at: now() };
@@ -211,7 +211,7 @@ export async function drop(
       return { error: `${name} is not on your roster.`, at: now() };
     }
     if (error instanceof PlaysTonightError) {
-      return { error: `${name} plays tonight — he can be dropped tomorrow.`, at: now() };
+      return { error: `${name} has tipped off tonight — he can be dropped tomorrow.`, at: now() };
     }
     throw error;
   }

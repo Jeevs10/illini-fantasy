@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { activeLimit, claimsFor, playingOn, rosterOn, settleWaivers, waiverState, weeklyAdds } from "@illini/league";
+import { activeLimit, claimsFor, rosterOn, settleWaivers, tippedOff, waiverState, weeklyAdds, type LeagueSettings } from "@illini/league";
 import { db } from "../../lib/db.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { Wire, type WireRow } from "./wire.tsx";
@@ -23,7 +23,7 @@ export default async function WaiversPage() {
 
   if (settings.weeklyAdds !== null) {
     return <AddDrop leagueId={leagueId} leagueName={leagueName} fantasyTeamId={fantasyTeamId}
-                    fantasyTeamName={fantasyTeamName} now={now} />;
+                    fantasyTeamName={fantasyTeamName} now={now} settings={settings} />;
   }
 
   // Reading the page is what opens the bids. There is no worker: any manager
@@ -151,10 +151,10 @@ export default async function WaiversPage() {
  * unowned player is on the free-agent list — so the adds happen there.
  */
 async function AddDrop({
-  leagueId, leagueName, fantasyTeamId, fantasyTeamName, now,
+  leagueId, leagueName, fantasyTeamId, fantasyTeamName, now, settings,
 }: {
   leagueId: number; leagueName: string; fantasyTeamId: number | null; fantasyTeamName: string | null;
-  now: Date;
+  now: Date; settings: LeagueSettings;
 }) {
   if (fantasyTeamId === null) {
     return (
@@ -170,7 +170,7 @@ async function AddDrop({
     weeklyAdds(db, { leagueId, fantasyTeamId, now }),
     rosterOn(db, fantasyTeamId, viewDate()),
   ]);
-  const tonight = await playingOn(db, roster.map((p) => p.playerId), viewDate());
+  const tonight = await tippedOff(db, roster.map((p) => p.playerId), now, settings);
   const left = adds === null ? 0 : Math.max(0, adds.limit - adds.used);
 
   return (
