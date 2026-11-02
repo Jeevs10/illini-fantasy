@@ -1,13 +1,16 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { connect, migrate, type Db } from "@illini/db";
-import { forwardConfigId, ingestForwardFeed, type ForwardFeed, type ForwardLine } from "@illini/ingest";
+import {
+  cbbdTipoff, fillTipoffs, forwardConfigId, ingestForwardFeed, type ForwardFeed, type ForwardInjury, type ForwardLine,
+} from "@illini/ingest";
+import type { EspnLiveEvent } from "@illini/sources";
 import { scorePeriod, settleWeek } from "./settle.ts";
 import { generateSchedule } from "./schedule.ts";
 import { EVERYONE_SETTINGS, type LeagueSettings } from "./slots.ts";
 import { AddLimitError, PlaysTonightError, addFreeAgent, addWindow, dropPlayer, weeklyAdds } from "./waivers.ts";
 import { claimPlayer, rosterOn, RosterFullError } from "./roster.ts";
-import { activateFromReserve, moveToReserve, NotInjuredError } from "./reserve.ts";
+import { activateFromReserve, moveToReserve, NotInjuredError, ReserveFullError } from "./reserve.ts";
 import { NoLineupError } from "./lineups.ts";
 import { setPeriodLineup } from "./periodlineup.ts";
 import { playerPool } from "./roster.ts";
@@ -344,4 +347,134 @@ test("the feed's schedule adds a game published after the first load, and its li
   assert.deepEqual(rows[0], { played_on: "2026-11-13", name: "Chicago State" });
   // Resending the same schedule changes nothing.
   assert.equal((await ingestForwardFeed(db, f)).scheduled, 0);
+});
+
+const covers = (key: string, status: string, injury: string): ForwardInjury => ({
+  key, status, out: status.startsWith("Out"), seasonOut: false, injury, since: null, source: "Covers",
+});
+
+test("a player on IR who plays scores nothing, until he is moved back into the twelve", async () => {
+  const ind = pid.get("7")!;
+  // Saturday the 14th: Ind One, still on IR, plays and scores 8.
+  const f = feed("2026-11-15", [line(106, "7", 8)]);
+  f.games = [{ gameId: 106, start: "2026-11-15T00:00:00.000Z", homeId: 4, awayId: 99,
+               homeName: "Indiana", awayName: "Chicago State", neutral: false }];
+  // And comes off Covers' list: healthy, but still on IR until his manager moves him.
+  f.injuries = [];
+  await ingestForwardFeed(db, f);
+  assert.equal((await scorePeriod(db, { fantasyTeamId: 2, configId, from: "2026-11-08", to: "2026-11-14", settings })).total, 9,
+    "the 8 he scored on IR is not team 2's");
+  assert.equal((await rosterOn(db, 2, "2026-11-15")).find((p) => p.playerId === ind)!.reserve, true);
+
+  // Back needs a seat: still full, so team 2 drops Pur One and then he fits.
+  await assert.rejects(activateFromReserve(db, { fantasyTeamId: 2, playerId: ind, now: at("2026-11-15T12:00:00Z") }),
+    (e: Error) => e instanceof RosterFullError);
+  await dropPlayer(db, { leagueId: 1, fantasyTeamId: 2, playerId: pid.get("3")!, now: at("2026-11-15T12:00:00Z") });
+  await activateFromReserve(db, { fantasyTeamId: 2, playerId: ind, now: at("2026-11-15T12:05:00Z") });
+
+  // Monday the 16th he plays again, back among the twelve, and it counts.
+  const g = feed("2026-11-17", [line(107, "7", 6)]);
+  g.games = [{ gameId: 107, start: "2026-11-17T00:00:00.000Z", homeId: 4, awayId: 99,
+               homeName: "Indiana", awayName: "Chicago State", neutral: false }];
+  await ingestForwardFeed(db, g);
+  assert.equal((await scorePeriod(db, { fantasyTeamId: 2, configId, from: "2026-11-15", to: "2026-11-21", settings })).total, 6);
+});
+
+test("Covers' list marks players out, doubtful or questionable, and only an out player takes the one IR seat", async () => {
+  const f = feed("2026-11-18", []);
+  f.injuries = [covers("1", "Questionable", "Ankle"), covers("2", "Out", "Knee"), covers("5", "Doubtful", "Elbow")];
+  await ingestForwardFeed(db, f);
+  const status = async () => new Map((await db.query<{ player_id: string; status: string; injury: string | null }>(
+    `SELECT DISTINCT ON (player_id) player_id, status, injury FROM player_availability
+      ORDER BY player_id, as_of DESC`)).rows.map((r) => [Number(r.player_id), [r.status, r.injury]]));
+  let now = await status();
+  assert.deepEqual(now.get(pid.get("1")!), ["questionable", "Ankle"]);
+  assert.deepEqual(now.get(pid.get("2")!), ["out", "Knee"]);
+  assert.deepEqual(now.get(pid.get("5")!), ["doubtful", "Elbow"], "doubtful stays doubtful");
+  assert.deepEqual(now.get(pid.get("7")!), ["available", null], "Ind One came off the list a feed ago");
+
+  // Questionable is not out.
+  await assert.rejects(moveToReserve(db, { fantasyTeamId: 1, playerId: pid.get("1")!, now: at("2026-11-18T13:00:00Z") }),
+    (e: Error) => e instanceof NotInjuredError && e.status === "questionable");
+  await moveToReserve(db, { fantasyTeamId: 1, playerId: pid.get("2")!, now: at("2026-11-18T13:00:00Z") });
+
+  // Next morning Ill One is out too, with a new injury, but the one seat is taken.
+  const g = feed("2026-11-19", []);
+  g.injuries = [covers("1", "Out", "Hamstring"), covers("2", "Out", "Knee"), covers("5", "Doubtful", "Wrist")];
+  await ingestForwardFeed(db, g);
+  now = await status();
+  assert.deepEqual(now.get(pid.get("1")!), ["out", "Hamstring"]);
+  assert.deepEqual(now.get(pid.get("5")!), ["doubtful", "Wrist"], "a new injury under the same status is written");
+  await assert.rejects(moveToReserve(db, { fantasyTeamId: 1, playerId: pid.get("1")!, now: at("2026-11-19T13:00:00Z") }),
+    (e: Error) => e instanceof ReserveFullError && e.limit === 1);
+});
+
+test("a game CBBD has no time for is filed on its own date, and ESPN's time wins", async () => {
+  // CBBD's placeholder for a TBD game is midnight Eastern, which the 4am
+  // boundary would have filed on the night before.
+  assert.deepEqual(cbbdTipoff("2026-11-21T05:00:00.000Z", true, "2026-11-21"),
+    { playedOn: "2026-11-21", tipoff: null, source: null });
+  assert.deepEqual(cbbdTipoff("2026-11-21T05:00:00.000Z", true), { playedOn: "2026-11-21", tipoff: null, source: null });
+  assert.deepEqual(cbbdTipoff("2026-11-22T03:00:00.000Z", false),
+    { playedOn: "2026-11-21", tipoff: "2026-11-22T03:00:00.000Z", source: "cbbd" });
+
+  const game = (tbd: boolean, start: string) => {
+    const f = feed("2026-11-20", []);
+    f.games = [{ gameId: 108, start, tbd, date: "2026-11-21", homeId: 1, awayId: 3,
+                 homeName: "Illinois", awayName: "Iowa", neutral: false }];
+    return f;
+  };
+  const row = async () => (await db.query<{ played_on: string; tipoff: Date | null; tipoff_source: string | null }>(
+    `SELECT to_char(played_on, 'YYYY-MM-DD') AS played_on, tipoff, tipoff_source FROM game WHERE cbbd_id = 108`)).rows[0]!;
+  let espnStart = "2026-11-22T00:30:00.000Z";
+  let timeValid = true;
+  let visitor = "Iowa";
+  const scoreboard = async (date: string): Promise<EspnLiveEvent[]> => date !== "2026-11-21" ? [] : [{
+    eventId: "9", state: "pre", detail: "", start: espnStart, timeValid,
+    teams: [{ espnId: "1", location: "Illinois", homeAway: "home", score: 0 },
+            { espnId: "2", location: visitor, homeAway: "away", score: 0 }],
+  }];
+
+  await ingestForwardFeed(db, game(true, "2026-11-21T05:00:00.000Z"));
+  assert.deepEqual(await row(), { played_on: "2026-11-21", tipoff: null, tipoff_source: null });
+
+  // ESPN calls its own time a placeholder: nothing is written.
+  timeValid = false;
+  assert.equal((await fillTipoffs(db, { from: "2026-11-20", days: 3, scoreboard })).stillTbd, 1);
+  assert.equal((await row()).tipoff, null);
+
+  timeValid = true;
+  const r = await fillTipoffs(db, { from: "2026-11-20", days: 3, scoreboard });
+  assert.deepEqual([r.filled, r.unmatched, r.disagree.length], [1, 0, 0]);
+  assert.deepEqual(await row(), { played_on: "2026-11-21", tipoff: new Date(espnStart), tipoff_source: "espn" });
+
+  // The next morning CBBD still has it TBD: ESPN's time stands, and nothing changed.
+  assert.equal((await ingestForwardFeed(db, game(true, "2026-11-21T05:00:00.000Z"))).scheduled, 0);
+  assert.equal((await row()).tipoff_source, "espn");
+
+  // CBBD announces 8pm Eastern. ESPN's 7:30 already stands, and ESPN wins a disagreement.
+  await ingestForwardFeed(db, game(false, "2026-11-22T01:00:00.000Z"));
+  assert.deepEqual(await row(), { played_on: "2026-11-21", tipoff: new Date(espnStart), tipoff_source: "espn" });
+
+  // A game CBBD has a time for that ESPN disagrees with: ESPN's replaces it, and is reported.
+  await db.query("UPDATE game SET tipoff = '2026-11-22T01:00:00Z', tipoff_source = 'cbbd' WHERE cbbd_id = 108");
+  const d = await fillTipoffs(db, { from: "2026-11-20", days: 3, scoreboard });
+  assert.deepEqual([d.filled, d.disagree.map((x) => [x.cbbd, x.espn])],
+    [1, [["2026-11-22T01:00:00.000Z", espnStart]]]);
+  assert.deepEqual(await row(), { played_on: "2026-11-21", tipoff: new Date(espnStart), tipoff_source: "espn" });
+  assert.equal((await fillTipoffs(db, { from: "2026-11-20", days: 3, scoreboard })).filled, 0, "nothing left to change");
+
+  // CBBD moves the game to the next day: ESPN's time for the old day no longer stands.
+  const moved = game(false, "2026-11-23T01:00:00.000Z");
+  moved.games![0]!.date = "2026-11-22";
+  await ingestForwardFeed(db, moved);
+  assert.deepEqual(await row(), { played_on: "2026-11-22", tipoff: new Date("2026-11-23T01:00:00.000Z"), tipoff_source: "cbbd" });
+  await ingestForwardFeed(db, game(false, "2026-11-22T01:00:00.000Z"));
+
+  // ESPN names the visitor differently (a non-D1 school, usually): Illinois alone finds the game.
+  visitor = "Iowa Visitors";
+  espnStart = "2026-11-22T01:30:00.000Z";
+  const v = await fillTipoffs(db, { from: "2026-11-20", days: 3, scoreboard });
+  assert.deepEqual([v.unmatched, v.filled], [0, 1]);
+  assert.equal((await row()).tipoff_source, "espn");
 });

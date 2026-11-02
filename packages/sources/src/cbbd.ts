@@ -171,6 +171,8 @@ export interface CbbdRating {
 }
 export interface CbbdGame {
   id: number; sourceId: string; startDate: string; season: number;
+  /** No tip-off time yet: `startDate` is a midnight-Eastern placeholder. */
+  startTimeTbd?: boolean;
   homeTeamId: number; homeTeam: string; awayTeamId: number; awayTeam: string;
   neutralSite: boolean; conferenceGame: boolean;
   homePoints: number | null; awayPoints: number | null;

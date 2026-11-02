@@ -95,6 +95,10 @@ export interface EspnLiveEvent {
   state: "pre" | "in" | "post";
   /** "2nd - 8:41", "Halftime", "Final", "Final/OT". */
   detail: string;
+  /** Tip-off, ISO 8601 UTC. */
+  start: string;
+  /** False when ESPN's start is a placeholder (its 11:59pm Eastern) rather than an announced time. */
+  timeValid: boolean;
   teams: { espnId: string; location: string; homeAway: "home" | "away"; score: number }[];
 }
 
@@ -114,7 +118,9 @@ export interface EspnBox {
 
 interface RawCompetitor { homeAway: "home" | "away"; score?: string; team: { id: string; location: string } }
 interface RawStatus { type: { state: "pre" | "in" | "post"; detail?: string; shortDetail?: string } }
-interface RawScoreboard { events: { id: string; competitions: { competitors: RawCompetitor[]; status: RawStatus }[] }[] }
+interface RawScoreboard {
+  events: { id: string; date: string; competitions: { competitors: RawCompetitor[]; status: RawStatus; timeValid?: boolean }[] }[];
+}
 interface RawSummary {
   header: { id: string; competitions: { status: RawStatus }[] };
   boxscore?: {
@@ -162,6 +168,8 @@ export async function espnScoreboard(date: string): Promise<EspnLiveEvent[]> {
       eventId: e.id,
       state: c.status.type.state,
       detail: c.status.type.shortDetail ?? c.status.type.detail ?? "",
+      start: new Date(e.date).toISOString(),
+      timeValid: c.timeValid !== false,
       teams: c.competitors.map((t) => ({
         espnId: t.team.id, location: t.team.location, homeAway: t.homeAway, score: Number(t.score ?? 0),
       })),

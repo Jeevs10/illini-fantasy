@@ -9,6 +9,7 @@
  *   npm run ingest -- ranks 2026             rebuild the season rank rollup
  *   npm run ingest -- injuries 2026          crosswalk RotoWire's injury report
  *   npm run ingest -- identity 2026          crosswalk ESPN's team colours
+ *   npm run ingest -- tipoffs 2027 20261102 [days]   ESPN's times for games CBBD has as TBD
  *   npm run ingest -- forward 2027 <feed.json>   the Data repo's forward-model feed
  *                                            (rosters, projections, valAdj lines);
  *                                            the same thing POST /api/ingest/forward does
@@ -27,7 +28,7 @@ import { settleDue } from "@illini/league";
 import { CbbdClient, EspnClient, RotoWireClient, TorvikClient } from "@illini/sources";
 import {
   ingestNight, opponentsOn, syncSchedule, syncTeams, syncRatings, syncTeamIdentity,
-  linkCbbdRosters, rebuildPlayerRanks, ingestInjuries, ingestForwardFeed, assertFeed,
+  linkCbbdRosters, rebuildPlayerRanks, ingestInjuries, ingestForwardFeed, assertFeed, fillTipoffs,
 } from "@illini/ingest";
 import { loadEnv } from "./env.ts";
 
@@ -36,7 +37,7 @@ loadEnv();
 const [command, seasonArg, a, b] = process.argv.slice(2);
 const season = Number(seasonArg);
 if (!command || !Number.isFinite(season)) {
-  console.error("usage: ingest <setup|schedule|night|range|link|ranks|injuries|identity|forward> <season> [date] [endDate]");
+  console.error("usage: ingest <setup|schedule|night|range|link|ranks|injuries|identity|forward|tipoffs> <season> [date] [endDate]");
   process.exit(1);
 }
 
@@ -98,6 +99,11 @@ try {
       console.log(`  league ${l.leagueId}: waiver runs ${l.waiverRuns}, trades ${l.trades}, ` +
         `weeks settled [${l.weeks.join(", ")}], playoff results ${l.playoffs}`);
     }
+  } else if (command === "tipoffs") {
+    const r = await fillTipoffs(db, { from: iso(a!), days: b ? Number(b) : 14 });
+    console.log(`tipoffs: ${r.checked} games, ${r.filled} filled from ESPN, ${r.stillTbd} still TBD, ` +
+      `${r.unmatched} not on ESPN's scoreboard, ${r.disagree.length} where CBBD and ESPN disagree`);
+    for (const d of r.disagree) console.log(`  ${d.playedOn} ${d.away} at ${d.home}: CBBD ${d.cbbd}, ESPN ${d.espn}`);
   } else if (command === "identity") {
     const matched = await syncTeamIdentity(db, espn);
     console.log(`espn identity matched ${matched} teams`);

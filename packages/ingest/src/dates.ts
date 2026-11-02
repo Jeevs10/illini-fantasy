@@ -15,3 +15,8 @@ export function basketballDate(startDate: string): string {
   shifted.setUTCHours(shifted.getUTCHours() - 9);
   return shifted.toISOString().slice(0, 10);
 }
+
+/** The calendar date in the Eastern time zone, for a CBBD start with no real time behind it. */
+export function easternDate(instant: string): string {
+  return new Date(instant).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}

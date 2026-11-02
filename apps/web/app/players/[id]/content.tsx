@@ -86,7 +86,7 @@ export function Hero({ card, outlook, linkAway }: { card: PlayerCard; outlook?: 
 }
 
 /**
- * RotoWire reports a status and a body part, not prose — this panel shows
+ * Covers reports a status and a body part, not prose — this panel shows
  * exactly that, and nothing it does not have. The caller only renders this
  * when the status is not `available`, so a healthy player never sees an empty box.
  */
@@ -96,7 +96,7 @@ export function Availability({ availability }: { availability: PlayerAvailabilit
       <div className="panel-body" style={{ display: "flex", alignItems: "center", gap: "var(--s-3)" }}>
         <AvailabilityTag status={availability.status} injury={availability.injury} />
         <p style={{ margin: 0 }}>
-          {availability.injury ?? "No further detail from RotoWire."}
+          {availability.injury ?? "No further detail from Covers."}
           <span className="faint" style={{ marginLeft: "var(--s-2)", fontSize: "var(--t-xs)" }}>
             as of {availability.asOf.slice(0, 10)}
           </span>

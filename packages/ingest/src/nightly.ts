@@ -12,6 +12,7 @@ import { insertMany } from "@illini/db";
 import { ensureTeams, resolveTorvikPlayers, type TorvikIdentity } from "./players.ts";
 import { strengthMap, teamMap } from "./teams.ts";
 import { basketballDate } from "./dates.ts";
+import { cbbdTipoff, TIPOFF_ON_CONFLICT } from "./tipoffs.ts";
 
 export { basketballDate };
 
@@ -37,22 +38,24 @@ async function writeGames(
     if (!home || !away) continue;
     // The game's own date, not the requested one, so a game pulled in by the
     // overnight tail is not relabelled.
-    rows.push([basketballDate(g.startDate), season, home, away,
-               g.neutralSite ?? false, g.id, g.sourceId ?? null, g.startDate]);
+    const t = cbbdTipoff(g.startDate, g.startTimeTbd);
+    rows.push([t.playedOn, season, home, away,
+               g.neutralSite ?? false, g.id, g.sourceId ?? null, t.tipoff, t.source]);
     pairs.push({ home, away, cbbdId: g.id });
   }
 
   await insertMany(db, {
     table: "game",
     columns: ["played_on", "season", "home_team_id", "away_team_id",
-              "neutral_site", "cbbd_id", "espn_id", "tipoff"],
+              "neutral_site", "cbbd_id", "espn_id", "tipoff", "tipoff_source"],
     rows,
     dedupeOn: [5],
     conflict: `(cbbd_id) DO UPDATE SET
       played_on = EXCLUDED.played_on,
       home_team_id = EXCLUDED.home_team_id,
       away_team_id = EXCLUDED.away_team_id,
-      tipoff = EXCLUDED.tipoff`,
+      tipoff = ${TIPOFF_ON_CONFLICT.tipoff},
+      tipoff_source = ${TIPOFF_ON_CONFLICT.source}`,
   });
 
   if (pairs.length === 0) return { ids: new Map(), pairs };

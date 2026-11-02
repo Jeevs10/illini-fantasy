@@ -6,6 +6,7 @@
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./forward": "./src/forward.ts"
+    "./forward": "./src/forward.ts",
+    "./tipoffs": "./src/tipoffs.ts"
   }
 }

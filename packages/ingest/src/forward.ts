@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Db } from "@illini/db";
 import { insertMany } from "@illini/db";
 import { canonicaliseName, normaliseTeam } from "@illini/crosswalk";
-import { basketballDate } from "./dates.ts";
+import { cbbdTipoff, TIPOFF_ON_CONFLICT } from "./tipoffs.ts";
 
 /**
  * The Data repo's forward model, as illini-fantasy reads it.
@@ -116,8 +116,12 @@ export interface ForwardLive {
 
 export interface ForwardGame {
   gameId: number;
-  /** Tip-off, ISO 8601 UTC. */
+  /** Tip-off, ISO 8601 UTC; CBBD's midnight-Eastern placeholder when `tbd`. */
   start: string;
+  /** CBBD has no tip-off time yet. Absent before 2026-11-02. */
+  tbd?: boolean;
+  /** The game's date, Eastern. Absent before 2026-11-02. */
+  date?: string | null;
   homeId: number | null;
   awayId: number | null;
   homeName: string | null;
@@ -229,20 +233,24 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
   let scheduled = 0;
   if (feed.games !== undefined && feed.games.length > 0) {
     teamOf = await syncTeamsFrom(db, feed.games, teamOf);
+    const { tipoff, source } = TIPOFF_ON_CONFLICT;
     scheduled = await insertMany(db, {
       table: "game",
-      columns: ["played_on", "season", "home_team_id", "away_team_id", "neutral_site", "cbbd_id", "tipoff"],
+      columns: ["played_on", "season", "home_team_id", "away_team_id", "neutral_site", "cbbd_id", "tipoff", "tipoff_source"],
       rows: feed.games
         .filter((g) => g.homeId !== null && g.awayId !== null && teamOf.has(g.homeId) && teamOf.has(g.awayId))
-        .map((g) => [basketballDate(g.start), season, teamOf.get(g.homeId!), teamOf.get(g.awayId!),
-                     g.neutral, g.gameId, g.start]),
+        .map((g) => {
+          const t = cbbdTipoff(g.start, g.tbd, g.date);
+          return [t.playedOn, season, teamOf.get(g.homeId!), teamOf.get(g.awayId!), g.neutral, g.gameId, t.tipoff, t.source];
+        }),
       dedupeOn: [5],
       conflict: `(cbbd_id) DO UPDATE SET played_on = EXCLUDED.played_on,
         home_team_id = EXCLUDED.home_team_id, away_team_id = EXCLUDED.away_team_id,
-        neutral_site = EXCLUDED.neutral_site, tipoff = EXCLUDED.tipoff
+        neutral_site = EXCLUDED.neutral_site, tipoff = ${tipoff},
+        tipoff_source = ${source}
         WHERE (game.played_on, game.home_team_id, game.away_team_id, game.neutral_site, game.tipoff)
           IS DISTINCT FROM (EXCLUDED.played_on, EXCLUDED.home_team_id, EXCLUDED.away_team_id,
-                            EXCLUDED.neutral_site, EXCLUDED.tipoff)`,
+                            EXCLUDED.neutral_site, ${tipoff})`,
     });
   }
 
@@ -518,7 +526,7 @@ async function writeProjections(
 /**
  * The injury list onto `player_availability`, the table RotoWire's ingest
  * writes and every screen reads. Same two rules as `ingestInjuries`: a status
- * is only written when it changed, and a forward-model player who has dropped
+ * is only written when it or its injury changed, and a forward-model player who has dropped
  * off the list gets an explicit `available`, because the table is append-only
  * and his last `out` would otherwise stand all season.
  */
@@ -526,12 +534,12 @@ async function writeInjuries(
   db: Db, list: ForwardInjury[], ids: Map<string, number>, generated: string,
 ): Promise<number> {
   const latest = new Map(
-    (await db.query<{ player_id: string; status: string }>(
-      `SELECT DISTINCT ON (a.player_id) a.player_id, a.status
+    (await db.query<{ player_id: string; status: string; injury: string | null }>(
+      `SELECT DISTINCT ON (a.player_id) a.player_id, a.status, a.injury
          FROM player_availability a
          JOIN player_source_id s ON s.player_id = a.player_id AND s.source = 'forward'
         ORDER BY a.player_id, a.as_of DESC`)).rows
-      .map((r) => [Number(r.player_id), r.status]),
+      .map((r) => [Number(r.player_id), { status: r.status, injury: r.injury }]),
   );
   const listed = new Map<number, ForwardInjury>();
   for (const i of list) {
@@ -541,10 +549,11 @@ async function writeInjuries(
   const rows: unknown[][] = [];
   for (const [id, i] of listed) {
     const status = injuryStatus(i);
-    if (latest.get(id) === status) continue;
+    const last = latest.get(id);
+    if (last?.status === status && last.injury === i.injury) continue;
     rows.push([id, generated, status, i.injury, i.seasonOut ? "out for the season" : (i.source ?? null)]);
   }
-  for (const [id, status] of latest) {
+  for (const [id, { status }] of latest) {
     if (!listed.has(id) && status !== "available") rows.push([id, generated, "available", null, "off the injury list"]);
   }
   return insertMany(db, {
