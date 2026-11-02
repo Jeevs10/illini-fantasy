@@ -486,3 +486,31 @@ test("a game CBBD has no time for is filed on its own date, and ESPN's time wins
   assert.deepEqual([m.moved, m.unmatched, m.disagree.length], [1, 0, 1]);
   assert.deepEqual(await row(), { played_on: "2026-11-21", tipoff: new Date(espnStart), tipoff_source: "espn" });
 });
+
+test("a newcomer added upstream shifts the model's newcomer keys, and every row stays the player it was drafted as", async () => {
+  // preseason.py numbers players it has never seen -20000000 - n in roster
+  // order; on 2026-11-02 one more at Baylor moved every later key by one.
+  const newcomer = (key: string, name: string, cbbd: number) => ({
+    key, name, slug: "x", team: "x", cbbdTeamId: cbbd, pos: "G", yr: "Fr", ht: "6-4", status: "newcomer (unseen)",
+    score: 30, scoreLo: null, scoreHi: null, mpg: 10, valueRank: null, espn: null,
+  });
+  const base = feed("2026-10-30", []);
+  const first = await ingestForwardFeed(db, { ...base, players: [...base.players,
+    newcomer("-20000001", "Owen Alpha", 1), newcomer("-20000002", "Tris Beta", 2)] });
+  assert.equal(first.created, 2);
+  const rowOf = async (key: string) => Number((await db.query<{ player_id: string }>(
+    "SELECT player_id FROM player_source_id WHERE source = 'forward' AND source_id = $1", [key])).rows[0]?.player_id);
+  const alpha = await rowOf("-20000001");
+  const beta = await rowOf("-20000002");
+
+  const shifted = await ingestForwardFeed(db, { ...base, players: [...base.players,
+    newcomer("-20000001", "Juslin Gamma", 3), newcomer("-20000002", "Owen Alpha", 1), newcomer("-20000003", "Tris Beta", 2)] });
+  assert.equal(shifted.created, 1, "only the new player gets a row");
+  assert.equal(await rowOf("-20000002"), alpha);
+  assert.equal(await rowOf("-20000003"), beta);
+  const names = (await db.query<{ id: string; name: string }>(
+    "SELECT id, name FROM player WHERE id = ANY($1::bigint[])", [[alpha, beta, await rowOf("-20000001")]])).rows;
+  assert.deepEqual(Object.fromEntries(names.map((r) => [Number(r.id), r.name])), {
+    [alpha]: "Owen Alpha", [beta]: "Tris Beta", [await rowOf("-20000001")]: "Juslin Gamma",
+  });
+});

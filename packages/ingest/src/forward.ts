@@ -27,7 +27,9 @@ import { cbbdTipoff, TIPOFF_ON_CONFLICT } from "./tipoffs.ts";
  *     onto a 2025-26 Torvik row by name: a wrong merge would hand one player's
  *     history and injuries to another, and the draft has no use for last
  *     season's per-game rows anyway. His school can change between feeds (a
- *     late transfer, a roster fix) and follows the feed.
+ *     late transfer, a roster fix) and follows the feed. The exception is a
+ *     newcomer the model has never seen, whose key is a running count and
+ *     moves (`rebindNewcomers`).
  *   - **A line is matched through the schedule, not its date.** The feed
  *     carries CBBD's game id; the basketball date and both teams come from the
  *     stored `game` row, so a 9pm tip filed under the next UTC day lands on
@@ -275,6 +277,7 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
       "SELECT source_id, player_id FROM player_source_id WHERE source = 'forward'")).rows
       .map((r) => [r.source_id, Number(r.player_id)]),
   );
+  await rebindNewcomers(db, feed.players, teamOf);
   let ids = await known();
   const fresh = feed.players.filter((p) => !ids.has(p.key));
   if (fresh.length > 0) {
@@ -465,6 +468,61 @@ async function writeLive(
  * already have under that name gains the id; one we have under the id keeps
  * its row.
  */
+/** Keys at or below this are the model's unseen newcomers: `-20000000 - n` (Data `preseason.py`). */
+const NEWCOMER_KEY = -20_000_000;
+
+/**
+ * Binds each unseen newcomer's key to the row that is that player.
+ *
+ * Their keys come from a count in roster order, so a newcomer added to one
+ * roster moves every key after him by one, and a key-to-row binding would
+ * rename those rows into their neighbours: on 2026-11-02 the row drafted as
+ * Owen Foxwell became Tristan Devers. So for these keys the player is the row
+ * of the same name at the same school, whatever key it held before; a key
+ * whose player has no row loses its binding and gets a fresh one. Rows found
+ * twice under one name and school are left as they are.
+ */
+async function rebindNewcomers(
+  db: Db, players: ForwardPlayer[], teamOf: Map<number, number>,
+): Promise<void> {
+  const { rows } = await db.query<{ source_id: string; player_id: string; normalised: string; team_id: string | null }>(
+    `SELECT s.source_id, s.player_id, p.normalised, p.team_id
+       FROM player_source_id s JOIN player p ON p.id = s.player_id
+      WHERE s.source = 'forward' AND s.source_id ~ '^-[0-9]+$' AND s.source_id::bigint <= $1`, [NEWCOMER_KEY]);
+  if (rows.length === 0) return;
+  const who = (name: string, team: number | string | null) => `${name}|${team ?? ""}`;
+  const rowOf = new Map<string, number | null>();
+  for (const r of rows) {
+    const k = who(r.normalised, r.team_id);
+    rowOf.set(k, rowOf.has(k) ? null : Number(r.player_id));
+  }
+  const bound = new Map(rows.map((r) => [r.source_id, Number(r.player_id)]));
+
+  const rebind: [string, number][] = [];
+  const unbind: string[] = [];
+  for (const p of players) {
+    if (!/^-\d+$/.test(p.key) || Number(p.key) > NEWCOMER_KEY) continue;
+    const row = rowOf.get(who(canonicaliseName(p.name), p.cbbdTeamId === null ? null : teamOf.get(p.cbbdTeamId) ?? null));
+    if (row === null) continue;
+    if (row === undefined) {
+      if (bound.has(p.key)) unbind.push(p.key);
+    } else if (bound.get(p.key) !== row) {
+      rebind.push([p.key, row]);
+    }
+  }
+  if (unbind.length > 0) {
+    await db.query("DELETE FROM player_source_id WHERE source = 'forward' AND source_id = ANY($1::text[])", [unbind]);
+  }
+  if (rebind.length > 0) {
+    await db.query(
+      `INSERT INTO player_source_id (player_id, source, source_id, confidence, reason)
+       SELECT u.id, 'forward', u.key, 'exact', 'source of record'
+         FROM UNNEST($1::text[], $2::bigint[]) AS u(key, id)
+       ON CONFLICT (source, source_id) DO UPDATE SET player_id = EXCLUDED.player_id`,
+      [rebind.map(([k]) => k), rebind.map(([, id]) => id)]);
+  }
+}
+
 async function syncTeamsFrom(
   db: Db, games: ForwardGame[], known: Map<number, number>,
 ): Promise<Map<number, number>> {
