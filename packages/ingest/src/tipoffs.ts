@@ -61,8 +61,10 @@ export interface TipoffResult {
   filled: number;
   /** TBD games ESPN has no announced time for yet. */
   stillTbd: number;
-  /** Games not found on ESPN's scoreboard for their date. */
+  /** Games not found on ESPN's scoreboard for their date or the next. */
   unmatched: number;
+  /** Of `filled`, games ESPN has on the next day, refiled there: CBBD's midnight placeholder without its TBD flag. */
+  moved: number;
   /** Of `filled`, the games whose CBBD time ESPN's replaced. */
   disagree: TipoffDisagreement[];
 }
@@ -95,7 +97,8 @@ export async function fillTipoffs(
     [from, addDays(from, days - 1)],
   );
 
-  const result: TipoffResult = { checked: rows.length, filled: 0, stillTbd: 0, unmatched: 0, disagree: [] };
+  const result: TipoffResult = { checked: rows.length, filled: 0, stillTbd: 0, unmatched: 0, moved: 0, disagree: [] };
+  const missed: typeof rows = [];
   const byDate = new Map<string, typeof rows>();
   for (const r of rows) byDate.set(r.played_on, [...(byDate.get(r.played_on) ?? []), r]);
 
@@ -129,8 +132,7 @@ export async function fillTipoffs(
       const one = (k: string) => (byTeam.get(k)?.length === 1 ? byTeam.get(k)![0] : undefined);
       const e = byPair.get(`${g.home_norm}|${g.away_norm}`) ?? one(g.home_norm) ?? one(g.away_norm);
       if (!e) {
-        result.unmatched += 1;
-        if (g.tipoff === null) result.stillTbd += 1;
+        missed.push(g);
         continue;
       }
       if (!e.timeValid) {
@@ -145,6 +147,33 @@ export async function fillTipoffs(
       await db.query(`UPDATE game SET tipoff = $2, tipoff_source = 'espn' WHERE id = $1`, [g.id, e.start]);
       result.filled += 1;
     }
+  }
+
+  // CBBD sometimes gives a game its midnight-Eastern placeholder without the
+  // TBD flag, which files it on the night before. ESPN then has it a day
+  // later. Both schools must match there — a school can play on consecutive
+  // days — and ESPN's time must be a real one; the game is refiled on its date.
+  const nextDay = new Map<string, Promise<EspnLiveEvent[]>>();
+  for (const g of missed) {
+    const date = addDays(g.played_on, 1);
+    if (!nextDay.has(date)) nextDay.set(date, scoreboard(date).catch(() => []));
+    const e = (await nextDay.get(date)!).find((ev) => {
+      const names = ev.teams.map((t) => normaliseTeam(t.location));
+      return names.includes(g.home_norm) && names.includes(g.away_norm);
+    });
+    if (!e || !e.timeValid) {
+      result.unmatched += 1;
+      if (g.tipoff === null) result.stillTbd += 1;
+      continue;
+    }
+    const ours = g.tipoff === null ? null : new Date(g.tipoff).toISOString();
+    if (ours !== null && g.tipoff_source !== "espn") {
+      result.disagree.push({ gameId: Number(g.id), playedOn: g.played_on, home: g.home, away: g.away, cbbd: ours, espn: e.start });
+    }
+    await db.query(`UPDATE game SET tipoff = $2, tipoff_source = 'espn', played_on = $3 WHERE id = $1`,
+      [g.id, e.start, basketballDate(e.start)]);
+    result.filled += 1;
+    result.moved += 1;
   }
   return result;
 }

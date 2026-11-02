@@ -477,4 +477,12 @@ test("a game CBBD has no time for is filed on its own date, and ESPN's time wins
   const v = await fillTipoffs(db, { from: "2026-11-20", days: 3, scoreboard });
   assert.deepEqual([v.unmatched, v.filled], [0, 1]);
   assert.equal((await row()).tipoff_source, "espn");
+
+  // CBBD's midnight placeholder without the TBD flag files the game on the
+  // night before; ESPN has it the next day, and it is refiled there.
+  await db.query("UPDATE game SET played_on = '2026-11-20', tipoff = '2026-11-21T05:00:00Z', tipoff_source = 'cbbd' WHERE cbbd_id = 108");
+  visitor = "Iowa";
+  const m = await fillTipoffs(db, { from: "2026-11-20", days: 1, scoreboard });
+  assert.deepEqual([m.moved, m.unmatched, m.disagree.length], [1, 0, 1]);
+  assert.deepEqual(await row(), { played_on: "2026-11-21", tipoff: new Date(espnStart), tipoff_source: "espn" });
 });
