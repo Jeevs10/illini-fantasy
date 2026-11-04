@@ -8,7 +8,7 @@ import type {
 } from "@illini/league";
 import { autoFill, moveToSlot, type LineupState } from "./actions.ts";
 import { buildSlots } from "./slots.ts";
-import { AvailabilityTag, RoleTag, Score } from "../ui/bits.tsx";
+import { AvailabilityTag, RoleTag, Score, statLine } from "../ui/bits.tsx";
 import { playerPath } from "../../lib/links.ts";
 
 /**
@@ -225,6 +225,9 @@ function Row({
   // November night rendering as a game still in progress.
   const next = player.games.find((g) => g.state !== "final") ?? null;
   const live = player.games.some((g) => g.state === "live");
+  // His most recent filed game, so the box line stays on the row after the
+  // game is over rather than going with the live feed.
+  const last = [...player.games].reverse().find((g) => g.box !== null && g.score !== null) ?? null;
   // A locked starter is the good outcome. A locked bench player is the loss —
   // whatever he scored this week is gone — so that is where the alarm belongs.
   const rowState = live && !onBench ? "live" : onBench && player.locked ? "missed" : undefined;
@@ -243,6 +246,11 @@ function Row({
           <RoleTag role={player.role} />
           <AvailabilityTag status={player.availability?.status} injury={player.availability?.injury} compact />
         </span>
+        {last?.box ? (
+          <span className="plr-sub" title={`${dayOf(last.playedOn)}${last.opponent ? ` vs ${last.opponent}` : ""}`}>
+            <span>{played > 1 ? `${dayOf(last.playedOn)}: ` : ""}{statLine(last.box)}</span>
+          </span>
+        ) : null}
         <span className="lineup-mobilemeta">
           <span>{player.games.length} game{player.games.length === 1 ? "" : "s"}</span>
           <span className="dot" />

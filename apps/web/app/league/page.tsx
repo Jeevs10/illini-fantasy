@@ -8,7 +8,7 @@ import { liveMatchups } from "../../lib/live.ts";
 import { requireViewer, viewDate, viewNow } from "../../lib/session.ts";
 import { buildSlots } from "../team/slots.ts";
 import { Avatar } from "../ui/identity.tsx";
-import { AvailabilityTag, Empty, ET, LiveTag, Score, WeekFigure } from "../ui/bits.tsx";
+import { AvailabilityTag, Empty, ET, LiveTag, Score, statLine, WeekFigure } from "../ui/bits.tsx";
 import { MatchupList } from "../ui/matchups.tsx";
 import { SeasonLine } from "../ui/seasonline.tsx";
 import { Arrow } from "../ui/glyphs.tsx";
@@ -309,6 +309,9 @@ function StarterRow({
   const playing = lines.find((l) => !l.final);
   const onNow = pending.some((p) => p.tipoff !== null && new Date(p.tipoff) <= now);
   const games = played.length + pending.length;
+  // The last game that filed a box line: what he did most recently, kept on
+  // the row once the live feed has let go of it.
+  const last = [...played].reverse().find((g) => g.box);
 
   return (
     <details className="wk">
@@ -332,6 +335,8 @@ function StarterRow({
                 <span className="dot" /><span>{statLine(lines[lines.length - 1]!)}</span></>
             ) : onNow ? (
               <><span className="dot" /><LiveTag /></>
+            ) : last?.box && !next ? (
+              <><span className="dot" /><span>{played.length > 1 ? `${dayOf(last.playedOn)}: ` : ""}{statLine(last.box)}</span></>
             ) : next ? (
               <>
                 <span className="dot" />
@@ -374,7 +379,10 @@ function StarterRow({
           </span>
           <span className="plr-id">
             <span className="plr-name">{dayOf(g.playedOn)}</span>
-            <span className="plr-sub"><span>final</span></span>
+            <span className="plr-sub">
+              {g.opponent ? <><span>vs {g.opponent}</span><span className="dot" /></> : null}
+              {g.box ? <span>{statLine(g.box)}</span> : <span>final</span>}
+            </span>
           </span>
           <span className="plr-right"><Score value={g.score} size="xs" /></span>
         </div>
@@ -426,14 +434,6 @@ function StarterRow({
       })}
     </details>
   );
-}
-
-/** "14 pts · 6 reb · 3 ast · 24 min", the box line a live number is made of. */
-function statLine(l: LiveLine): string {
-  const bits = [`${l.pts} pts`, `${l.reb} reb`, `${l.ast} ast`];
-  if (l.stl) bits.push(`${l.stl} stl`);
-  if (l.blk) bits.push(`${l.blk} blk`);
-  return `${bits.join(" · ")} · ${l.min} min`;
 }
 
 /**

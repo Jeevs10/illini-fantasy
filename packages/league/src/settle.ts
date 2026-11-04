@@ -1,6 +1,7 @@
 import type { Db } from "@illini/db";
 import type { Queryable } from "./membership.ts";
 import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
+import { boxLineOf, type BoxLine } from "./live.ts";
 
 export interface CountedGame {
   playerId: number;
@@ -9,6 +10,10 @@ export interface CountedGame {
   slot: string;
   score: number;
   counted: boolean;
+  /** Who he played, when the box score says. */
+  opponent?: string | null;
+  /** The box line the score was made from; null when the stats row is missing. */
+  box?: BoxLine | null;
 }
 
 /** One starter's whole week: every game he played, and what they add up to. */
@@ -80,15 +85,19 @@ export async function scorePeriod(
 ): Promise<TeamPeriod> {
   const { rows } = await db.query<{
     player_id: string; name: string; played_on: string; slot: string; score: number;
+    stats: unknown; minutes: number | null; opponent: string | null;
   }>(
     `SELECT l.player_id, p.name, to_char(l.played_on, 'YYYY-MM-DD') AS played_on,
-            l.slot, s.score
+            l.slot, s.score, st.stats, st.minutes, opp.name AS opponent
        FROM fielded l
        JOIN player p ON p.id = l.player_id
        JOIN player_game_score s
          ON s.player_id = l.player_id
         AND s.played_on = l.played_on
         AND s.config_id = $2
+       LEFT JOIN player_game_stat st
+         ON st.player_id = l.player_id AND st.played_on = l.played_on
+       LEFT JOIN team opp ON opp.id = st.opponent_team_id
       WHERE l.fantasy_team_id = $1
         AND l.played_on BETWEEN $3 AND $4
         AND l.slot NOT IN ('BENCH', 'IR')
@@ -107,6 +116,8 @@ export async function scorePeriod(
     slot: r.slot,
     score: Number(r.score),
     counted: true,
+    opponent: r.opponent,
+    box: boxLineOf(r.stats, r.minutes),
   }));
 
   const byPlayer = new Map<number, PlayerWeek>();

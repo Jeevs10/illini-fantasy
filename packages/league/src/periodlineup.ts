@@ -6,6 +6,7 @@ import {
 } from "./slots.ts";
 import { InvalidLineupError, LineupLockedError, NotOnRosterError, hasLineup, requireLineup } from "./lineups.ts";
 import { nightState, type GameState } from "./outlook.ts";
+import { boxLineOf, type BoxLine } from "./live.ts";
 
 /**
  * The lineup as a decision about the week, not about a night.
@@ -40,6 +41,8 @@ export interface PeriodGame {
   opponentStrength: number | null;
   /** The filed box score, or null for a night not yet played or not yet in. */
   score: number | null;
+  /** The counting stats behind `score`; null until the box score is filed. */
+  box: BoxLine | null;
   /**
    * Where the night stands as of the clock this was read under.
    *
@@ -134,6 +137,7 @@ export async function startableInPeriod(
     game_id: string; played_on: string; tipoff: Date | null;
     opponent: string | null; opponent_strength: number | null;
     score: number | null; projected: number | null;
+    stats: unknown; minutes: number | null;
   }>(
     `WITH roster AS (
        SELECT r.player_id, p.name, p.team_id
@@ -163,6 +167,8 @@ export async function startableInPeriod(
             -- A score dated after today is the season's future, not this
             -- night's result: the same barrier the outlook reads under.
             CASE WHEN slate.played_on <= $6 THEN filed.score ELSE NULL END AS score,
+            CASE WHEN slate.played_on <= $6 AND filed.score IS NOT NULL THEN box.stats END AS stats,
+            box.minutes,
             form.projected
        FROM roster
        JOIN slate ON slate.team_id = roster.team_id
@@ -171,6 +177,8 @@ export async function startableInPeriod(
        LEFT JOIN player_game_score filed
          ON filed.player_id = roster.player_id AND filed.played_on = slate.played_on
         AND filed.config_id = $5
+       LEFT JOIN player_game_stat box
+         ON box.player_id = roster.player_id AND box.played_on = slate.played_on
        LEFT JOIN fielded l
          ON l.fantasy_team_id = $1 AND l.player_id = roster.player_id
         AND l.played_on = slate.played_on
@@ -208,6 +216,7 @@ export async function startableInPeriod(
       ...night,
       opponent: r.opponent,
       opponentStrength: r.opponent_strength === null ? null : Number(r.opponent_strength),
+      box: r.stats == null ? null : boxLineOf(r.stats, r.minutes),
       state: nightState(night, now),
       projected,
       started: r.slot !== null && r.slot !== "BENCH" && r.slot !== "IR",

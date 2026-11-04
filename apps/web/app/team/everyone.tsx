@@ -1,10 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
-import type { PlayerAvailability } from "@illini/league";
+import type { BoxLine, PlayerAvailability } from "@illini/league";
 import { reserve, type LineupState } from "./actions.ts";
 import { PlayerRow, Dot } from "../ui/playerrow.tsx";
-import { AvailabilityTag, Empty, RoleTag, Score, WeekFigure } from "../ui/bits.tsx";
+import { AvailabilityTag, Empty, RoleTag, Score, statLine, WeekFigure } from "../ui/bits.tsx";
 
 /**
  * @illini/league's `IR_ELIGIBLE`, copied rather than imported so this client
@@ -25,7 +25,7 @@ export interface EveryoneRow {
   counting: boolean;
   held: boolean;
   reserve: boolean;
-  games: { playedOn: string; tipoff: string | null; opponent: string | null; score: number | null; projected: number | null; counted: boolean }[];
+  games: { playedOn: string; tipoff: string | null; opponent: string | null; score: number | null; projected: number | null; counted: boolean; box?: BoxLine | null }[];
   scored: number;
   projectedWeek: number;
   availability?: PlayerAvailability;
@@ -77,6 +77,15 @@ export function EveryoneWeek({ rows }: { rows: EveryoneRow[] }) {
     );
   };
 
+  // His most recent game with a box line in: what he did, kept on the row
+  // after the game is over rather than going with the live feed.
+  const latest = (r: EveryoneRow) => {
+    const g = [...r.games].reverse().find((x) => x.box);
+    if (!g?.box) return null;
+    const filed = r.games.filter((x) => x.box).length;
+    return `${filed > 1 ? `${day(g.playedOn)}: ` : ""}${statLine(g.box)}`;
+  };
+
   const row = (r: EveryoneRow, right: React.ReactNode) => (
     <PlayerRow
       key={r.playerId}
@@ -92,6 +101,7 @@ export function EveryoneWeek({ rows }: { rows: EveryoneRow[] }) {
         <span>{r.teamName ?? "—"}</span>
         {r.projected !== null ? <><Dot /><span>{r.projected.toFixed(1)} proj</span></> : null}
         <Dot /><span>{games(r)}</span>
+        {latest(r) ? <><Dot /><span>{latest(r)}</span></> : null}
         {!r.held ? <><Dot /><span>let go — what he scored for you stays</span></> : null}
       </>}
       right={right}

@@ -77,6 +77,32 @@ export interface LiveLine {
 export const liveKey = (playerId: number, playedOn: string) => `${playerId}|${playedOn}`;
 
 /**
+ * The counting stats from one game's box score: the line a manager reads to
+ * see what a number was made of. Same field names as `LiveLine`, so a game in
+ * progress and a game filed the next morning read the same way.
+ */
+export type BoxLine = Pick<LiveLine, "min" | "pts" | "reb" | "ast" | "stl" | "blk">;
+
+/**
+ * A filed game's box line, read off `player_game_stat.stats`.
+ *
+ * Both feeds write points, rebounds and assists at the top level and steals
+ * and blocks under `box`. A row with no stats at all has no line, so the
+ * screen shows nothing rather than a run of zeros.
+ */
+export function boxLineOf(stats: unknown, minutes?: number | null): BoxLine | null {
+  if (stats === null || typeof stats !== "object") return null;
+  const s = stats as Record<string, unknown>;
+  const box = (s.box && typeof s.box === "object" ? s.box : {}) as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v ?? 0) || 0);
+  return {
+    min: Math.round(n(minutes ?? s.minutes)),
+    pts: n(s.points), reb: n(s.rebounds), ast: n(s.assists),
+    stl: n(box.steals ?? s.steals), blk: n(box.blocks ?? s.blocks),
+  };
+}
+
+/**
  * value_adj for one line: the box weights, plus the opponent's defence by the
  * player's share of the game's possessions, less the program terms at his own
  * school (level discount below `levelRef`, team credit above it).

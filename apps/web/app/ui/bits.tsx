@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { AvailabilityStatus, GameState } from "@illini/league";
+import type { AvailabilityStatus, BoxLine, GameState } from "@illini/league";
 import { Arrow, Glyph, type GlyphName } from "./glyphs.tsx";
 
 /* Small shared parts. Everything here is presentational and takes only what
@@ -223,6 +223,17 @@ export function SubTabs({
 const ET_TIME = new Intl.DateTimeFormat("en-US", {
   hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
 });
+/**
+ * "14 pts · 6 reb · 3 ast · 24 min" — the box line a score is made of. Steals
+ * and blocks only when there are some, so a quiet night stays short.
+ */
+export function statLine(l: BoxLine): string {
+  const bits = [`${l.pts} pts`, `${l.reb} reb`, `${l.ast} ast`];
+  if (l.stl) bits.push(`${l.stl} stl`);
+  if (l.blk) bits.push(`${l.blk} blk`);
+  return `${bits.join(" · ")} · ${l.min} min`;
+}
+
 export function ET({ iso }: { iso: string }) {
   return <time dateTime={iso}>{ET_TIME.format(new Date(iso))}</time>;
 }
