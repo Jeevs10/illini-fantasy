@@ -99,7 +99,7 @@ export async function autoFill(
 
 /**
  * Injured reserve, in a league with no lineup: a seat outside the twelve for a
- * player listed out, which is what lets a manager field a replacement without
+ * player listed out, doubtful or questionable, which is what lets a manager field a replacement without
  * dropping him. Takes effect at once: his games from now on score nothing, and
  * the seat is open for a pickup.
  */
@@ -118,7 +118,7 @@ export async function reserve(
     else await moveToReserve(db, { fantasyTeamId, playerId, now: viewNow() });
   } catch (error) {
     if (error instanceof NotInjuredError) {
-      return { error: `${name} is not listed out — IR is only for a player the injury report has out.`, at: Date.now() };
+      return { error: `${name} is not on the injury report as out, doubtful or questionable — only those players can go on IR.`, at: Date.now() };
     }
     if (error instanceof ReserveFullError) {
       return { error: `Your IR seat is taken. Activate or drop that player first.`, at: Date.now() };

@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { connect, migrate, type Db } from "@illini/db";
 import {
-  cbbdTipoff, fillTipoffs, forwardConfigId, ingestForwardFeed, type ForwardFeed, type ForwardInjury, type ForwardLine,
+  cbbdTipoff, fillTipoffs, forwardConfigId, ingestForwardFeed, injuryStatus, type ForwardFeed, type ForwardInjury, type ForwardLine,
 } from "@illini/ingest";
 import type { EspnLiveEvent } from "@illini/sources";
 import { scorePeriod, settleWeek } from "./settle.ts";
@@ -10,7 +10,7 @@ import { generateSchedule } from "./schedule.ts";
 import { EVERYONE_SETTINGS, type LeagueSettings } from "./slots.ts";
 import { AddLimitError, PlaysTonightError, addFreeAgent, addWindow, dropPlayer, tippedOff, weeklyAdds } from "./waivers.ts";
 import { claimPlayer, rosterOn, RosterFullError } from "./roster.ts";
-import { activateFromReserve, moveToReserve, NotInjuredError, ReserveFullError } from "./reserve.ts";
+import { activateFromReserve, irEligible, moveToReserve, NotInjuredError, ReserveFullError } from "./reserve.ts";
 import { NoLineupError } from "./lineups.ts";
 import { setPeriodLineup } from "./periodlineup.ts";
 import { playerPool } from "./roster.ts";
@@ -383,22 +383,24 @@ test("a player on IR who plays scores nothing, until he is moved back into the t
   assert.equal((await scorePeriod(db, { fantasyTeamId: 2, configId, from: "2026-11-15", to: "2026-11-21", settings })).total, 6);
 });
 
-test("Covers' list marks players out, doubtful or questionable, and only an out player takes the one IR seat", async () => {
+test("Covers' list marks players out, doubtful or questionable, and any of those takes the one IR seat", async () => {
+  assert.deepEqual(["out", "doubtful", "questionable", "probable", "available", null].map(irEligible),
+    [true, true, true, false, false, false]);
   const f = feed("2026-11-18", []);
-  f.injuries = [covers("1", "Questionable", "Ankle"), covers("2", "Out", "Knee"), covers("5", "Doubtful", "Elbow")];
+  f.injuries = [covers("1", "Probable", "Ankle"), covers("2", "Out", "Knee"), covers("5", "Doubtful", "Elbow")];
   await ingestForwardFeed(db, f);
   const status = async () => new Map((await db.query<{ player_id: string; status: string; injury: string | null }>(
     `SELECT DISTINCT ON (player_id) player_id, status, injury FROM player_availability
       ORDER BY player_id, as_of DESC`)).rows.map((r) => [Number(r.player_id), [r.status, r.injury]]));
   let now = await status();
-  assert.deepEqual(now.get(pid.get("1")!), ["questionable", "Ankle"]);
+  assert.deepEqual(now.get(pid.get("1")!), ["probable", "Ankle"]);
   assert.deepEqual(now.get(pid.get("2")!), ["out", "Knee"]);
   assert.deepEqual(now.get(pid.get("5")!), ["doubtful", "Elbow"], "doubtful stays doubtful");
   assert.deepEqual(now.get(pid.get("7")!), ["available", null], "Ind One came off the list a feed ago");
 
-  // Questionable is not out.
+  // Probable is not enough.
   await assert.rejects(moveToReserve(db, { fantasyTeamId: 1, playerId: pid.get("1")!, now: at("2026-11-18T13:00:00Z") }),
-    (e: Error) => e instanceof NotInjuredError && e.status === "questionable");
+    (e: Error) => e instanceof NotInjuredError && e.status === "probable");
   await moveToReserve(db, { fantasyTeamId: 1, playerId: pid.get("2")!, now: at("2026-11-18T13:00:00Z") });
 
   // Next morning Ill One is out too, with a new injury, but the one seat is taken.
@@ -410,6 +412,16 @@ test("Covers' list marks players out, doubtful or questionable, and only an out 
   assert.deepEqual(now.get(pid.get("5")!), ["doubtful", "Wrist"], "a new injury under the same status is written");
   await assert.rejects(moveToReserve(db, { fantasyTeamId: 1, playerId: pid.get("1")!, now: at("2026-11-19T13:00:00Z") }),
     (e: Error) => e instanceof ReserveFullError && e.limit === 1);
+  // EvanMiya's Eligibility Pending comes in on the same list and is out, so it is IR-eligible.
+  assert.equal(injuryStatus({ status: "Eligibility Pending", out: false }), "out");
+  await activateFromReserve(db, { fantasyTeamId: 1, playerId: pid.get("2")!, now: at("2026-11-19T13:00:00Z") });
+  const h = feed("2026-11-20", []);
+  h.injuries = [{ key: "1", status: "Eligibility Pending", out: true, seasonOut: false, injury: "Eligibility pending",
+                  since: null, source: "EvanMiya" }];
+  await ingestForwardFeed(db, h);
+  now = await status();
+  assert.deepEqual(now.get(pid.get("1")!), ["out", "Eligibility pending"]);
+  await moveToReserve(db, { fantasyTeamId: 1, playerId: pid.get("1")!, now: at("2026-11-20T13:00:00Z") });
 });
 
 test("a game CBBD has no time for is filed on its own date, and ESPN's time wins", async () => {

@@ -6,6 +6,14 @@ import { reserve, type LineupState } from "./actions.ts";
 import { PlayerRow, Dot } from "../ui/playerrow.tsx";
 import { AvailabilityTag, Empty, RoleTag, Score, WeekFigure } from "../ui/bits.tsx";
 
+/**
+ * @illini/league's `IR_ELIGIBLE`, copied rather than imported so this client
+ * component keeps pulling only types from the server package. moveToReserve
+ * enforces the real rule; this only decides whether to show the button.
+ */
+const irEligible = (status: string | undefined) =>
+  status === "out" || status === "doubtful" || status === "questionable";
+
 /** A `WeekPlayer` as the page hands it over, with his injury status. */
 export interface EveryoneRow {
   playerId: number;
@@ -58,7 +66,7 @@ export function EveryoneWeek({ rows }: { rows: EveryoneRow[] }) {
         </form>
       );
     }
-    if (r.availability?.status !== "out") return null;
+    if (!irEligible(r.availability?.status)) return null;
     return (
       <form action={submit}>
         <input type="hidden" name="playerId" value={r.playerId} />

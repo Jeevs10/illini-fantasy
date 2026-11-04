@@ -78,7 +78,7 @@ export interface ForwardLine {
 
 export interface ForwardInjury {
   key: string;
-  /** The site's wording: "Out", "Out For Season", "Doubtful", "Questionable", "Game Time Decision", "Probable". */
+  /** The site's wording: "Out", "Out For Season", "Doubtful", "Questionable", "Game Time Decision", "Probable", or EvanMiya's "Eligibility Pending". */
   status: string | null;
   out: boolean;
   seasonOut: boolean;
@@ -145,11 +145,15 @@ export interface ForwardProjection {
   out?: boolean;
 }
 
-/** The site's injury wording onto the app's five statuses. Unrecognised wording is questionable, as RotoWire's is. */
+/**
+ * The site's injury wording onto the app's five statuses. Unrecognised wording is questionable, as RotoWire's is.
+ * EvanMiya's "Eligibility Pending" (the Data repo adds those players to Covers' list) is out: he can't play until
+ * his case is decided, and out is what puts him on IR and projects him at zero.
+ */
 export function injuryStatus(i: Pick<ForwardInjury, "status" | "out">): string {
   if (i.out) return "out";
   const s = (i.status ?? "").toLowerCase();
-  if (s.startsWith("out")) return "out";
+  if (s.startsWith("out") || s.startsWith("eligib")) return "out";
   if (s.startsWith("doubt")) return "doubtful";
   if (s.startsWith("prob")) return "probable";
   if (s.startsWith("avail") || s === "active") return "available";

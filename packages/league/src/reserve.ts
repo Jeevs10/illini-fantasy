@@ -9,8 +9,8 @@ import { DEFAULT_SETTINGS, type LeagueSettings } from "./slots.ts";
  *
  * With no bench, a player who is hurt is a seat that scores nothing, and the
  * only way to field a replacement is to drop him. IR is the third option: a
- * seat outside the twelve, for a player the injury report lists out, that
- * frees one of the twelve for somebody else.
+ * seat outside the twelve, for a player the injury report lists out, doubtful
+ * or questionable, that frees one of the twelve for somebody else.
  *
  * A move to or from IR closes the player's tenure and opens a new one —
  * reserve or not — at the same instant, which is what lets the `fielded` view
@@ -29,11 +29,17 @@ export class NotEveryoneLeagueError extends Error {
   }
 }
 
+/** The injury-report statuses that may go on IR (user, 2026-11-03: questionable and doubtful as well as out). */
+export const IR_ELIGIBLE: readonly string[] = ["out", "doubtful", "questionable"];
+
+export const irEligible = (status: string | null | undefined): boolean =>
+  status != null && IR_ELIGIBLE.includes(status);
+
 export class NotInjuredError extends Error {
   constructor(readonly playerId: number, readonly status: string | null) {
     super(status === null
-      ? `player ${playerId} has no injury report — only a player listed out can go on IR`
-      : `player ${playerId} is listed ${status} — only a player listed out can go on IR`);
+      ? `player ${playerId} has no injury report — only a player listed out, doubtful or questionable can go on IR`
+      : `player ${playerId} is listed ${status} — only a player listed out, doubtful or questionable can go on IR`);
     this.name = "NotInjuredError";
   }
 }
@@ -95,7 +101,7 @@ async function inTransaction<T>(db: Db, work: (q: Queryable) => Promise<T>): Pro
   }
 }
 
-/** Puts a player listed out on IR, from his next game. */
+/** Puts a player listed out, doubtful or questionable on IR, from his next game. */
 export async function moveToReserve(
   db: Db, { fantasyTeamId, playerId, now = new Date() }: { fantasyTeamId: number; playerId: number; now?: Date },
 ): Promise<void> {
@@ -111,7 +117,7 @@ export async function moveToReserve(
     const { rows } = await q.query<{ status: string }>(
       `SELECT status FROM player_availability WHERE player_id = $1 ORDER BY as_of DESC LIMIT 1`, [playerId]);
     const status = rows[0]?.status ?? null;
-    if (status !== "out") throw new NotInjuredError(playerId, status);
+    if (!irEligible(status)) throw new NotInjuredError(playerId, status);
 
     await flip(q, { fantasyTeamId, playerId, on, at: now, reserve: true, leagueId });
   });
