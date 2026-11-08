@@ -23,7 +23,7 @@ export function WeekReport({
   const closest = margins.reduce((a, m) => (m.margin < a.margin ? m : a), margins[0]!);
   const top = report.teams[0]!;
   const bottom = report.teams[report.teams.length - 1]!;
-  const movement = new Map(standings.map((r) => [r.fantasyTeamId, r]));
+  const thisWeek = new Map(report.teams.map((t) => [t.fantasyTeamId, t]));
 
   return (
     <div className="card">
@@ -84,40 +84,39 @@ export function WeekReport({
       ) : null}
 
       <div className="card-head" style={{ borderTop: "1px solid var(--line-soft)" }}>
-        <h3 className="eyebrow">Weekly power ranking</h3>
+        <h3 className="eyebrow">Standings</h3>
+        <Link href="/standings" className="card-link arrowlink">Full table <Arrow /></Link>
       </div>
-      {report.teams.map((t) => {
-        const seat = movement.get(t.fantasyTeamId);
-        const best = top.points > 0 ? t.points / top.points : 0;
+      {standings.map((r) => {
+        const week = thisWeek.get(r.fantasyTeamId);
         return (
-          <div className="plr" key={t.fantasyTeamId} data-mine={t.fantasyTeamId === mineId || undefined}>
-            <span className="plr-lead"><span className="stand-rank"><span className="tnum">{t.rank}</span></span></span>
+          <div className="plr" key={r.fantasyTeamId} data-mine={r.fantasyTeamId === mineId || undefined}>
+            <span className="plr-lead">
+              <span className="stand-rank"><span className="tnum">{r.rank}</span></span>
+              {r.movement ? (
+                <span className="delta" data-dir={r.movement > 0 ? "up" : "down"}
+                      aria-label={`${r.movement > 0 ? "up" : "down"} ${Math.abs(r.movement)}`}>
+                  <Arrow dir={r.movement > 0 ? "up" : "down"} size={11} />{Math.abs(r.movement)}
+                </span>
+              ) : null}
+            </span>
             <span className="plr-id">
-              <Link href={`/teams/${t.fantasyTeamId}`} className="plr-name">{t.name}</Link>
+              <Link href={`/teams/${r.fantasyTeamId}`} className="plr-name">{r.name}</Link>
               <span className="plr-sub">
-                <span>{t.won === null ? "Tied" : t.won ? "Won" : "Lost"}</span>
-                {seat ? (
+                <span>{r.pointsFor.toFixed(1)} points for</span>
+                {week ? (
                   <>
                     <Dot />
                     <span>
-                      {ordinal(seat.rank)} overall
-                      {seat.movement ? (
-                        <span className="delta" data-dir={seat.movement > 0 ? "up" : "down"}
-                              aria-label={`${seat.movement > 0 ? "up" : "down"} ${Math.abs(seat.movement)}`}>
-                          {" "}<Arrow dir={seat.movement > 0 ? "up" : "down"} size={11} />{Math.abs(seat.movement)}
-                        </span>
-                      ) : null}
+                      {week.won === null ? "Tied" : week.won ? "Won" : "Lost"} week {report.week}, {week.points.toFixed(1)}
                     </span>
                   </>
                 ) : null}
               </span>
             </span>
             <span className="plr-right">
-              <span className="leadfig">
-                <span className="leadfig-bar" aria-hidden="true">
-                  <span style={{ width: `${(best * 100).toFixed(1)}%` }} />
-                </span>
-                <Score value={t.points} size="sm" tone={t.rank === 1 ? "accent" : "default"} />
+              <span className="tnum" style={{ fontWeight: 700 }}>
+                {r.wins}&ndash;{r.losses}{r.ties ? `–${r.ties}` : ""}
               </span>
             </span>
           </div>
@@ -201,5 +200,3 @@ function Performers({
 }
 
 const games = (n: number) => `${n} ${n === 1 ? "game" : "games"}`;
-const ordinal = (n: number) =>
-  `${n}${["th", "st", "nd", "rd"][(n % 100 - n % 10 !== 10 ? n % 10 : 0)] ?? "th"}`;
