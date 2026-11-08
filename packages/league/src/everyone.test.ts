@@ -8,7 +8,7 @@ import type { EspnLiveEvent } from "@illini/sources";
 import { scorePeriod, settleWeek } from "./settle.ts";
 import { generateSchedule } from "./schedule.ts";
 import { EVERYONE_SETTINGS, type LeagueSettings } from "./slots.ts";
-import { AddLimitError, PlaysTonightError, addFreeAgent, addWindow, dropPlayer, tippedOff, weeklyAdds } from "./waivers.ts";
+import { AddLimitError, addFreeAgent, addWindow, dropPlayer, weeklyAdds } from "./waivers.ts";
 import { claimPlayer, rosterOn, RosterFullError } from "./roster.ts";
 import { activateFromReserve, irEligible, moveToReserve, NotInjuredError, ReserveFullError } from "./reserve.ts";
 import { NoLineupError } from "./lineups.ts";
@@ -177,27 +177,16 @@ test("a dropped player keeps what he scored, and his replacement counts from his
   assert.equal(w2.total, 3, "week 2 is Ill One 1 + Ill Two 2, and nothing of Pur One");
 });
 
-test("a player can be dropped until his game tips off, and from then until the next morning he stays", async () => {
+test("a player can be dropped mid-game, keeping that game's points, and his pickup scores from his next game", async () => {
   // Thursday the 5th: Iowa plays Illinois at 7pm Eastern (00:00 UTC on the 6th).
-  // At tip-off and after it (11pm Eastern is 04:00 UTC on the 6th), Iowa One stays.
-  for (const when of ["2026-11-06T00:00:00Z", "2026-11-06T04:00:00Z"]) {
-    await assert.rejects(addFreeAgent(db, {
-      leagueId: 1, fantasyTeamId: 2, playerId: pid.get("3")!, dropPlayerId: pid.get("5")!, now: at(when),
-    }), (e: Error) => e instanceof PlaysTonightError && e.playedOn === "2026-11-05");
-  }
-  await assert.rejects(dropPlayer(db, { leagueId: 1, fantasyTeamId: 2, playerId: pid.get("5")!, now: at("2026-11-06T00:30:00Z") }),
-    (e: Error) => e instanceof PlaysTonightError);
-  // Before tip-off nothing is locked.
-  assert.equal((await tippedOff(db, [pid.get("5")!], at("2026-11-05T23:59:00Z"), settings)).size, 0);
-  assert.equal((await tippedOff(db, [pid.get("5")!], at("2026-11-06T00:00:00Z"), settings)).size, 1);
-
-  // Friday morning he can go, and Pur One, dropped by team 1, is simply added.
+  // At 9pm Eastern, with the game still going, team 2 drops Iowa One for Pur One.
   await addFreeAgent(db, {
-    leagueId: 1, fantasyTeamId: 2, playerId: pid.get("3")!, dropPlayerId: pid.get("5")!, now: at("2026-11-06T12:00:00Z"),
+    leagueId: 1, fantasyTeamId: 2, playerId: pid.get("3")!, dropPlayerId: pid.get("5")!, now: at("2026-11-06T02:00:00Z"),
   });
+  assert.deepEqual((await rosterOn(db, 2, "2026-11-06")).map((p) => p.name).sort(), ["Ind One", "Pur One"]);
 
   const w1 = await scorePeriod(db, { fantasyTeamId: 2, configId, from: "2026-11-01", to: "2026-11-07", settings });
-  assert.equal(w1.total, 4 + 1 + -1, "week 1 is Iowa One 4 and -1 (Thursday, still held), Ind One 1");
+  assert.equal(w1.total, 4 + 1 + -1, "week 1 is Iowa One 4 and -1 (Thursday, held at tip-off), Ind One 1");
   const w2 = await scorePeriod(db, { fantasyTeamId: 2, configId, from: "2026-11-08", to: "2026-11-14", settings });
   assert.equal(w2.total, 4 + 5, "week 2 is Pur One 4 and Ind One 5");
 
@@ -528,4 +517,43 @@ test("a newcomer added upstream shifts the model's newcomer keys, and every row 
   assert.deepEqual(Object.fromEntries(names.map((r) => [Number(r.id), r.name])), {
     [alpha]: "Owen Alpha", [beta]: "Tris Beta", [await rowOf("-20000001")]: "Juslin Gamma",
   });
+});
+
+test("a mid-game drop's pickup counts tonight if his game has not tipped off, and not if it has", async () => {
+  // A league of its own, on a night of its own: Tuesday Jan 5, an early game
+  // (7pm Eastern) and a late one (10pm Eastern).
+  for (const [id, name] of [[11, "Early A"], [12, "Early B"], [13, "Late A"], [14, "Late B"]] as const) {
+    await db.query("INSERT INTO team (id, name, normalised) VALUES ($1, $2, $3)", [id, name, name.toLowerCase()]);
+  }
+  await db.query(
+    `INSERT INTO game (played_on, season, home_team_id, away_team_id, tipoff) VALUES
+       ('2027-01-05', 2027, 11, 12, '2027-01-06T00:00:00Z'), ('2027-01-05', 2027, 13, 14, '2027-01-06T03:00:00Z')`);
+  const p: Record<string, number> = {};
+  for (const [key, team] of [["e1", 11], ["e2", 12], ["l1", 13], ["l2", 14]] as const) {
+    p[key] = Number((await db.query<{ id: string }>(
+      "INSERT INTO player (name, normalised, team_id) VALUES ($1, $1, $2) RETURNING id", [key, team])).rows[0]!.id);
+  }
+  await db.query(`INSERT INTO league (id, name, season, config_id, settings, commissioner_id) VALUES (2,'M',2027,$1,$2,1)`,
+    [configId, JSON.stringify(settings)]);
+  for (const t of [3, 4]) {
+    await db.query("INSERT INTO fantasy_team (id, league_id, owner_id, name, waiver_priority) VALUES ($1,2,1,$2,$3)",
+      [t, `Team ${t}`, t - 2]);
+  }
+  await db.query(`INSERT INTO draft (league_id, rounds, pick_seconds, status, opens_on, completed_at)
+                  VALUES (2, 1, 0, 'complete', '2027-01-01', '2027-01-01T20:00:00Z')`);
+  await claimPlayer(db, { fantasyTeamId: 3, playerId: p.e1!, on: "2027-01-01", via: "draft", settings, at: at("2027-01-01T20:00:00Z") });
+  await claimPlayer(db, { fantasyTeamId: 4, playerId: p.l2!, on: "2027-01-01", via: "draft", settings, at: at("2027-01-01T20:00:00Z") });
+
+  // 8pm Eastern, the early game still on: team 3 drops e1 for l1, whose game
+  // is at 10. Both count tonight: e1 was held at his tip-off, l1 is at his.
+  await addFreeAgent(db, { leagueId: 2, fantasyTeamId: 3, playerId: p.l1!, dropPlayerId: p.e1!, now: at("2027-01-06T01:00:00Z") });
+  // 11pm Eastern, the late game on: team 4 drops l2 for e2, whose game has
+  // already tipped. l2 counts for team 4; e2 counts for nobody tonight.
+  await addFreeAgent(db, { leagueId: 2, fantasyTeamId: 4, playerId: p.e2!, dropPlayerId: p.l2!, now: at("2027-01-06T04:00:00Z") });
+
+  const fielded = async (team: number) => (await db.query<{ player_id: string }>(
+    "SELECT player_id FROM fielded WHERE fantasy_team_id = $1 AND played_on = '2027-01-05' ORDER BY player_id", [team],
+  )).rows.map((r) => Number(r.player_id));
+  assert.deepEqual(await fielded(3), [p.e1!, p.l1!].sort((a, b) => a - b));
+  assert.deepEqual(await fielded(4), [p.l2]);
 });

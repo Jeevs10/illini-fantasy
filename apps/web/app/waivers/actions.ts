@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   AddLimitError, AlreadyRosteredError, BudgetExceededError, DraftNotCompleteError, NotOnWaiversError,
-  NotYourPlayerError, OnWaiversError, PlaysTonightError, RosterFullError,
+  NotYourPlayerError, OnWaiversError, RosterFullError,
   addFreeAgent, cancelClaim, dropPlayer, moveClaim, submitClaim,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -146,7 +146,7 @@ export async function add(
     refresh();
     return {
       ok: act.viewer.membership.settings.weeklyAdds !== null
-        ? `${name} added. He scores for you from his next game.`
+        ? `${name} added. He scores for you from his next game that hasn't tipped off yet.`
         : act.viewer.membership.settings.lineupMode === "everyone"
           ? `${name} added. He starts scoring for you at Sunday's lock.`
           : `${name} added.`,
@@ -164,9 +164,6 @@ export async function add(
         error: `You've used all ${error.limit} adds this week. The next one opens ${RESETS.format(new Date(error.resetsAt))}.`,
         at: now(),
       };
-    }
-    if (error instanceof PlaysTonightError) {
-      return { error: "The player you named to drop has tipped off tonight — he can be dropped tomorrow.", at: now() };
     }
     if (error instanceof AlreadyRosteredError) {
       return { error: `${error.byTeamName} got there first.`, at: now() };
@@ -209,9 +206,6 @@ export async function drop(
   } catch (error) {
     if (error instanceof NotYourPlayerError) {
       return { error: `${name} is not on your roster.`, at: now() };
-    }
-    if (error instanceof PlaysTonightError) {
-      return { error: `${name} has tipped off tonight — he can be dropped tomorrow.`, at: now() };
     }
     throw error;
   }

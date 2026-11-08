@@ -46,21 +46,6 @@ export class AddLimitError extends Error {
   }
 }
 
-/**
- * Raised dropping a player whose school's game tonight has tipped off.
- *
- * Until tip-off he can go (user decision 2026-11-02), and the game counts for
- * whoever holds him then. From tip-off he is locked to his team until the next
- * morning, so the drop and his game cannot share a night. A game with no
- * tip-off time yet locks him all day: there is no clock to drop him ahead of.
- */
-export class PlaysTonightError extends Error {
-  constructor(readonly playerId: number, readonly playedOn: string) {
-    super(`player ${playerId}'s game on ${playedOn} has tipped off; he cannot be dropped until the day after`);
-    this.name = "PlaysTonightError";
-  }
-}
-
 export class NotYourPlayerError extends Error {
   constructor(readonly playerId: number, readonly fantasyTeamId: number) {
     super(`player ${playerId} is not on team ${fantasyTeamId}`);
@@ -176,39 +161,6 @@ export async function weeklyAdds(
     [fantasyTeamId, from, to],
   );
   return { used: Number(rows[0]!.n), limit: rules.weeklyAdds, resetsAt: to.toISOString() };
-}
-
-/**
- * The game night `now` falls in: the UTC day at the waiver hour, the same
- * boundary every game is filed under, so 11pm Eastern after a game is still
- * that game's night and the next one starts at 4am.
- */
-export function gameNight(now: Date, settings: LeagueSettings = DEFAULT_SETTINGS): string {
-  return isoDay(new Date(now.getTime() - settings.waiverHour * 3_600_000));
-}
-
-/** Which of these players are locked to their team: tonight's game has tipped off, or has no time to wait for. */
-export async function tippedOff(
-  q: Queryable, playerIds: number[], now: Date, settings: LeagueSettings = DEFAULT_SETTINGS,
-): Promise<Set<number>> {
-  if (playerIds.length === 0) return new Set();
-  const { rows } = await q.query<{ id: string }>(
-    `SELECT DISTINCT p.id FROM player p
-       JOIN game g ON p.team_id IN (g.home_team_id, g.away_team_id)
-      WHERE p.id = ANY($1::bigint[]) AND g.played_on = $2 AND (g.tipoff IS NULL OR g.tipoff <= $3)`,
-    [playerIds, gameNight(now, settings), now],
-  );
-  return new Set(rows.map((r) => Number(r.id)));
-}
-
-/** Refuses a drop once the player's game tonight has tipped off. */
-async function requireOffNight(
-  q: Queryable, { playerId, now, settings }: { playerId: number; now: Date; settings: LeagueSettings },
-): Promise<void> {
-  if (settings.weeklyAdds === null) return;
-  if ((await tippedOff(q, [playerId], now, settings)).size > 0) {
-    throw new PlaysTonightError(playerId, gameNight(now, settings));
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -833,8 +785,11 @@ export async function addFreeAgent(
     }
 
     if (dropPlayerId != null) {
+      // No tip-off lock (user decision 2026-11-07). A game counts for whoever
+      // held the player at its tip-off (the `fielded` view): a drop mid-game
+      // keeps tonight's points here, and the pickup counts tonight only if his
+      // own game has not tipped off yet.
       await requireOnRoster(client, fantasyTeamId, dropPlayerId, on);
-      await requireOffNight(client, { playerId: dropPlayerId, now, settings: league.settings });
       await release(client, {
         leagueId, fantasyTeamId, playerId: dropPlayerId, on, at: now, settings: league.settings,
       });
@@ -874,7 +829,6 @@ export async function dropPlayer(
     const league = await leagueContext(client, leagueId, { forUpdate: true });
     const on = isoDay(now);
     await requireOnRoster(client, fantasyTeamId, playerId, on);
-    await requireOffNight(client, { playerId, now, settings: league.settings });
     const clears = await release(client, {
       leagueId, fantasyTeamId, playerId, on, at: now, settings: league.settings,
     });

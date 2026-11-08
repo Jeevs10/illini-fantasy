@@ -12,8 +12,6 @@ export interface RosterRow {
   name: string;
   teamName: string | null;
   acquiredVia: string;
-  /** His game tonight has tipped off, so he cannot be dropped until tomorrow. Only in an add/drop league. */
-  playsTonight?: boolean;
 }
 
 /**
@@ -68,16 +66,14 @@ export function Roster({ team, players, addDrop = false }: {
                 <input type="hidden" name="playerId" value={player.playerId} />
                 <input type="hidden" name="name" value={player.name} />
                 <button
-                  type="submit" className="sm danger" disabled={pending || player.playsTonight}
+                  type="submit" className="sm danger" disabled={pending}
                   // The consequence, said before the click rather than after it:
                   // a drop is not reversible by re-adding him.
-                  title={player.playsTonight
-                    ? `${player.name} has tipped off tonight — he can be dropped tomorrow`
-                    : addDrop
-                      ? `Drop ${player.name} — he is a free agent at once, and anyone can add him`
-                      : `Drop ${player.name} — he goes on waivers, and anyone can bid`}
+                  title={addDrop
+                    ? `Drop ${player.name} — he is a free agent at once, and anyone can add him`
+                    : `Drop ${player.name} — he goes on waivers, and anyone can bid`}
                 >
-                  {player.playsTonight ? "Locked" : "Drop"}
+                  Drop
                 </button>
               </form>
             </span>

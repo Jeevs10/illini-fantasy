@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  activeLimit, availabilityFor, draftFor, playerPool, rosterOn, seasonSchedule, settleWaivers, tippedOff,
+  activeLimit, availabilityFor, draftFor, playerPool, rosterOn, seasonSchedule, settleWaivers,
   weeklyAdds,
   waiverWire, type PoolSort, type PoolWindow, type PositionRole,
 } from "@illini/league";
@@ -100,18 +100,15 @@ export default async function PlayersPage({
   const full = active >= activeLimit(settings);
 
   // A league with weekly adds swaps in one step, naming the drop beside the
-  // add, because its rosters are always full. A player whose game tonight has
-  // tipped off is not offered: he can't be dropped until tomorrow.
+  // add, because its rosters are always full. Anyone off IR can go, even
+  // mid-game: tonight's points stay with the team that held him at tip-off.
   const addDrop = settings.weeklyAdds !== null && fantasyTeamId !== null;
-  const [adds, tonight] = addDrop
-    ? await Promise.all([
-        weeklyAdds(db, { leagueId, fantasyTeamId: fantasyTeamId!, now, settings }),
-        tippedOff(db, roster.map((p) => p.playerId), now, settings),
-      ])
-    : [null, new Set<number>()];
+  const adds = addDrop
+    ? await weeklyAdds(db, { leagueId, fantasyTeamId: fantasyTeamId!, now, settings })
+    : null;
   const addsLeft = adds === null ? null : Math.max(0, adds.limit - adds.used);
   const droppable = addDrop
-    ? roster.filter((p) => !p.reserve && !tonight.has(p.playerId)).map((p) => ({ playerId: p.playerId, name: p.name }))
+    ? roster.filter((p) => !p.reserve).map((p) => ({ playerId: p.playerId, name: p.name }))
     : undefined;
 
   return (
