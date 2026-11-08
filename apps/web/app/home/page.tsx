@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   availabilityFor, claimsFor, eligibleSlots, gameState, leagueActivity, listTrades,
-  activeLimit, draftFor, rankedStandings, rosterOn, scoresOn, seasonSchedule, startableOn, weekMatchups,
+  activeLimit, draftFor, rankedStandings, rosterOn, scoresOn, seasonSchedule, startableOn, weekMatchups, weeklyReport,
   type PlayerAvailability, type Slot, type Startable,
 } from "@illini/league";
 import { db } from "../../lib/db.ts";
@@ -15,6 +15,7 @@ import { MatchupList } from "../ui/matchups.tsx";
 import { Rafters, type RafterTeam } from "../ui/rafters.tsx";
 import { SeasonLine } from "../ui/seasonline.tsx";
 import { Arrow } from "../ui/glyphs.tsx";
+import { WeekReport } from "./report.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function HomePage() {
   // reading it as of today would call a freshly drafted team empty.
   const rosterDay = matchups[0] && matchups[0].startsOn > day ? matchups[0].startsOn : day;
 
-  const [tonight, standingsTable, trades, claims, roster, activity, draft, schedule] = await Promise.all([
+  const [tonight, standingsTable, trades, claims, roster, activity, draft, schedule, report] = await Promise.all([
     fantasyTeamId === null ? [] : startableOn(db, { fantasyTeamId, day, configId, now }),
     rankedStandings(db, leagueId),
     fantasyTeamId === null ? [] : listTrades(db, { leagueId, involving: fantasyTeamId, limit: 6 }),
@@ -46,6 +47,7 @@ export default async function HomePage() {
     leagueActivity(db, { leagueId, limit: 8 }),
     draftFor(db, leagueId),
     seasonSchedule(db, leagueId),
+    weeklyReport(db, { leagueId, configId, fantasyTeamId }),
   ]);
 
   const availability = await availabilityFor(db, tonight.map((p) => p.playerId));
@@ -146,6 +148,13 @@ export default async function HomePage() {
                          everyone={everyone} rostered={held} />
               </div>
             </>
+          ) : null}
+
+          {/* Last week, told back: ready the moment a week settles. */}
+          {report ? (
+            <div style={{ marginTop: "var(--s-5)" }}>
+              <WeekReport report={report} standings={standingsTable} mineId={fantasyTeamId} />
+            </div>
           ) : null}
         </div>
 

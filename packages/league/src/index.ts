@@ -23,3 +23,4 @@ export * from "./weekroster.ts";
 export * from "./teamname.ts";
 export * from "./scouting.ts";
 export * from "./live.ts";
+export * from "./report.ts";
