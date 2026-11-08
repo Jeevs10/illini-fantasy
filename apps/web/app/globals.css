@@ -843,6 +843,21 @@ button.linkish:hover { color: var(--on-deep); background: color-mix(in srgb, var
 .plr-sub .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--line-hard); flex: none; }
 .plr-right { display: flex; align-items: center; gap: var(--s-3); justify-content: flex-end; flex: none; }
 .plr-figure { display: grid; justify-items: end; gap: 1px; }
+/* Standings as a list: record, points for and against in fixed columns at the
+   row's right edge, under a small header row that names them. */
+.standcols {
+  display: grid;
+  grid-template-columns: 3rem 4.25rem 4.25rem;
+  gap: var(--s-2);
+  justify-items: end;
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+.standrow .plr-lead { width: 3.25rem; }
+.standhead { padding-block: var(--s-2); font-size: var(--t-xs); color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+.standhead:hover { background: none; }
+.standhead .standcols { font-size: var(--t-xs); }
+@media (max-width: 560px) { .standcols { grid-template-columns: 2.5rem 3.5rem 3.5rem; font-size: var(--t-xs); } }
 .plr-figure .cap { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
 .plr-actions { display: flex; gap: var(--s-2); align-items: center; flex: none; }
 

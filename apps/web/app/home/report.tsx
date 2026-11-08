@@ -87,10 +87,15 @@ export function WeekReport({
         <h3 className="eyebrow">Standings</h3>
         <Link href="/standings" className="card-link arrowlink">Full table <Arrow /></Link>
       </div>
+      <div className="plr standrow standhead" aria-hidden="true">
+        <span className="plr-lead" />
+        <span className="plr-id">Team</span>
+        <span className="plr-right standcols"><span>W–L</span><span>PF</span><span>PA</span></span>
+      </div>
       {standings.map((r) => {
         const week = thisWeek.get(r.fantasyTeamId);
         return (
-          <div className="plr" key={r.fantasyTeamId} data-mine={r.fantasyTeamId === mineId || undefined}>
+          <div className="plr standrow" key={r.fantasyTeamId} data-mine={r.fantasyTeamId === mineId || undefined}>
             <span className="plr-lead">
               <span className="stand-rank"><span className="tnum">{r.rank}</span></span>
               {r.movement ? (
@@ -102,22 +107,20 @@ export function WeekReport({
             </span>
             <span className="plr-id">
               <Link href={`/teams/${r.fantasyTeamId}`} className="plr-name">{r.name}</Link>
-              <span className="plr-sub">
-                <span>{r.pointsFor.toFixed(1)} points for</span>
-                {week ? (
-                  <>
-                    <Dot />
-                    <span>
-                      {week.won === null ? "Tied" : week.won ? "Won" : "Lost"} week {report.week}, {week.points.toFixed(1)}
-                    </span>
-                  </>
-                ) : null}
-              </span>
+              {week ? (
+                <span className="plr-sub">
+                  <span>
+                    {week.won === null ? "Tied" : week.won ? "Won" : "Lost"} week {report.week}, {week.points.toFixed(1)}
+                  </span>
+                </span>
+              ) : null}
             </span>
-            <span className="plr-right">
-              <span className="tnum" style={{ fontWeight: 700 }}>
+            <span className="plr-right standcols">
+              <span aria-label="Record" style={{ fontWeight: 700 }}>
                 {r.wins}&ndash;{r.losses}{r.ties ? `–${r.ties}` : ""}
               </span>
+              <span aria-label="Points for">{r.pointsFor.toFixed(1)}</span>
+              <span aria-label="Points against" className="faint">{r.pointsAgainst.toFixed(1)}</span>
             </span>
           </div>
         );
