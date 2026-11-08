@@ -23,7 +23,6 @@ export function WeekReport({
   const closest = margins.reduce((a, m) => (m.margin < a.margin ? m : a), margins[0]!);
   const top = report.teams[0]!;
   const bottom = report.teams[report.teams.length - 1]!;
-  const thisWeek = new Map(report.teams.map((t) => [t.fantasyTeamId, t]));
 
   return (
     <div className="card">
@@ -92,9 +91,7 @@ export function WeekReport({
         <span className="plr-id">Team</span>
         <span className="plr-right standcols"><span>W–L</span><span>PF</span><span>PA</span></span>
       </div>
-      {standings.map((r) => {
-        const week = thisWeek.get(r.fantasyTeamId);
-        return (
+      {standings.map((r) => (
           <div className="plr standrow" key={r.fantasyTeamId} data-mine={r.fantasyTeamId === mineId || undefined}>
             <span className="plr-lead">
               <span className="stand-rank"><span className="tnum">{r.rank}</span></span>
@@ -107,13 +104,6 @@ export function WeekReport({
             </span>
             <span className="plr-id">
               <Link href={`/teams/${r.fantasyTeamId}`} className="plr-name">{r.name}</Link>
-              {week ? (
-                <span className="plr-sub">
-                  <span>
-                    {week.won === null ? "Tied" : week.won ? "Won" : "Lost"} week {report.week}, {week.points.toFixed(1)}
-                  </span>
-                </span>
-              ) : null}
             </span>
             <span className="plr-right standcols">
               <span aria-label="Record" style={{ fontWeight: 700 }}>
@@ -123,8 +113,7 @@ export function WeekReport({
               <span aria-label="Points against" className="faint">{r.pointsAgainst.toFixed(1)}</span>
             </span>
           </div>
-        );
-      })}
+      ))}
     </div>
   );
 }

@@ -27,7 +27,9 @@ before(async () => {
      (5, 'Pickup', 'pickup', 1, 'Wing G'),
      (6, 'Dud', 'dud', 1, 'Wing G'),
      (7, 'Idle Add', 'idle add', 1, 'Wing G'),
-     (8, 'Late Add', 'late add', 1, 'Wing G')`,
+     (8, 'Late Add', 'late add', 1, 'Wing G'),
+     (9, 'Mid Week', 'mid week', 1, 'Wing G'),
+     (10, 'Dropped', 'dropped', 1, 'Wing G')`,
   );
   await db.query(
     `INSERT INTO league (id, name, season, config_id, settings) VALUES (1, 'L', 2026, $1, '{}')`,
@@ -38,7 +40,12 @@ before(async () => {
     `INSERT INTO roster_slot (fantasy_team_id, league_id, player_id, acquired_on, acquired_via) VALUES
      (11, 1, 1, '2025-12-01', 'draft'), (11, 1, 2, '2025-12-01', 'draft'), (12, 1, 4, '2025-12-01', 'draft'),
      (12, 1, 5, '2026-01-02', 'free_agent'), (11, 1, 6, '2025-12-31', 'waiver'),
-     (11, 1, 7, '2026-01-03', 'free_agent'), (12, 1, 8, '2026-01-07', 'free_agent')`,
+     (11, 1, 7, '2026-01-03', 'free_agent'), (12, 1, 8, '2026-01-07', 'free_agent'),
+     (12, 1, 9, '2026-01-03', 'trade')`,
+  );
+  await db.query(
+    `INSERT INTO roster_slot (fantasy_team_id, league_id, player_id, acquired_on, acquired_via, released_on) VALUES
+     (11, 1, 10, '2025-12-01', 'draft', '2026-01-05')`,
   );
   await db.query(
     `INSERT INTO matchup (league_id, week, starts_on, ends_on, home_team_id, away_team_id,
@@ -47,7 +54,7 @@ before(async () => {
      (1, 2, '2026-01-08', '2026-01-14', 12, 11, NULL, NULL, NULL)`,
   );
 
-  for (const [player, on, score] of [[1, "2026-01-02", 40], [2, "2026-01-02", 99], [3, "2026-01-03", 33], [4, "2026-01-03", 25], [5, "2026-01-04", 12], [6, "2026-01-04", 2], [8, "2026-01-07", 30]] as const) {
+  for (const [player, on, score] of [[1, "2026-01-02", 40], [2, "2026-01-02", 99], [3, "2026-01-03", 33], [4, "2026-01-03", 25], [5, "2026-01-04", 12], [6, "2026-01-04", 2], [8, "2026-01-07", 30], [9, "2026-01-02", 20], [10, "2026-01-02", 18]] as const) {
     await db.query(
       `INSERT INTO player_game_stat (player_id, played_on, season, role, minutes, stats, source)
        VALUES ($1, $2, 2026, 'Pure PG', 30, '{}', 'torvik')`,
@@ -91,13 +98,17 @@ test("weeklyReport reads the last settled week", async () => {
     [["Alpha", 40, 1, true], ["Beta", 25, 2, false]]);
 });
 
-test("rostered performers count only points that counted, wire only nobody's", async () => {
+test("rostered and wire split on who holds a player now, each by his whole week", async () => {
   const report = (await weeklyReport(db, { leagueId: 1, configId, fantasyTeamId: 11 }))!;
-  // The benched 99 never scored for Alpha, so it is not a rostered performance.
+  // Benched points count — the player is rostered and he scored them — and
+  // Mid Week's game before Beta got him still counts toward his week.
   assert.deepEqual(report.rostered.map((p) => [p.playerName, p.points, p.ownedBy]),
-    [["Starter", 40, "Alpha"], ["Late Add", 30, "Beta"], ["Other Team", 25, "Beta"],
-     ["Pickup", 12, "Beta"], ["Dud", 2, "Alpha"]]);
-  assert.deepEqual(report.unrostered.map((p) => [p.playerName, p.points]), [["Wire Guy", 33]]);
+    [["Benched", 99, "Alpha"], ["Starter", 40, "Alpha"], ["Late Add", 30, "Beta"],
+     ["Other Team", 25, "Beta"], ["Mid Week", 20, "Beta"]]);
+  // The wire is who nobody holds now: Mid Week has been picked up, and
+  // Dropped's 18 came while Alpha still had him.
+  assert.deepEqual(report.unrostered.map((p) => [p.playerName, p.points]), [["Wire Guy", 33], ["Dropped", 18]]);
+  // The MVP is still what counted for the viewer's team.
   assert.equal(report.mvp?.playerName, "Starter");
 });
 

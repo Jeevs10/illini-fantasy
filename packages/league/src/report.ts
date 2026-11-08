@@ -57,9 +57,9 @@ export interface WeeklyReport {
   results: ReportResult[];
   /** Every team's score for the week, highest first. */
   teams: ReportTeamWeek[];
-  /** Points that counted for a fantasy team, one row per player and team. */
+  /** Players on a roster now, by all their points in the week, wherever scored. */
   rostered: ReportPerformer[];
-  /** Points scored while nobody in the league held the player. */
+  /** Players nobody in the league holds now, by all their points in the week. */
   unrostered: ReportPerformer[];
   /** The viewer's top scorer this week, when they have a team. */
   mvp: ReportPerformer | null;
@@ -207,8 +207,26 @@ export async function weeklyReport(
      GROUP BY f.fantasy_team_id, ft.name`;
 
   const [rostered, unrostered, mvp, adds, projections] = await Promise.all([
-    db.query(fieldedQuery(false), [leagueId, configId, startsOn, endsOn, limit]),
-    // The wire: nights the player scored while no team in the league held him.
+    // Who is on a roster now, by everything he scored in the week — a player
+    // picked up after his first game still shows his whole week, under the
+    // team that holds him today.
+    db.query(
+      `SELECT s.player_id, p.name, t.name AS school, count(*) AS games, sum(s.score) AS points,
+              r.fantasy_team_id, ft.name AS owned_by
+         FROM roster_slot r
+         JOIN fantasy_team ft ON ft.id = r.fantasy_team_id
+         JOIN player_game_score s
+           ON s.player_id = r.player_id AND s.config_id = $2 AND s.played_on BETWEEN $3 AND $4
+         JOIN player p ON p.id = r.player_id
+         LEFT JOIN team t ON t.id = p.team_id
+        WHERE r.league_id = $1 AND r.released_on IS NULL
+        GROUP BY s.player_id, p.name, t.name, r.fantasy_team_id, ft.name
+        ORDER BY points DESC
+        LIMIT $5`,
+      [leagueId, configId, startsOn, endsOn, limit],
+    ),
+    // The wire: players no team holds now, by everything they scored in the
+    // week — including nights on a roster they have since been dropped from.
     db.query(
       `SELECT s.player_id, p.name, t.name AS school, count(*) AS games, sum(s.score) AS points,
               NULL::bigint AS fantasy_team_id, NULL::text AS owned_by
@@ -218,9 +236,7 @@ export async function weeklyReport(
         WHERE s.config_id = $2 AND s.played_on BETWEEN $3 AND $4
           AND NOT EXISTS (
             SELECT 1 FROM roster_slot r
-             WHERE r.league_id = $1 AND r.player_id = s.player_id
-               AND r.acquired_on <= s.played_on
-               AND (r.released_on IS NULL OR r.released_on > s.played_on))
+             WHERE r.league_id = $1 AND r.player_id = s.player_id AND r.released_on IS NULL)
         GROUP BY s.player_id, p.name, t.name
         ORDER BY points DESC
         LIMIT $5`,
