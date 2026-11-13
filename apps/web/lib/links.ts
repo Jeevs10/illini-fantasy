@@ -35,5 +35,9 @@ export const schoolPathFor = (key: string) => schoolPath(key.replace(/ /g, "-"))
  */
 export const DATA_SITE = (process.env.DATA_SITE_URL ?? "https://www.illini-prospect-analyzer.org").replace(/\/$/, "");
 
-export const dataPlayerUrl = (forwardKey: string) => `${DATA_SITE}/college-players/${encodeURIComponent(forwardKey)}`;
+/**
+ * By forward-model key, which is not the site's profile id (`/college-players/<pid>`): the `key/` route resolves
+ * it to his college profile, his high-school or international page, or his team's roster.
+ */
+export const dataPlayerUrl = (forwardKey: string) => `${DATA_SITE}/college-players/key/${encodeURIComponent(forwardKey)}`;
 export const dataTeamUrl = (forwardSlug: string) => `${DATA_SITE}/teams/${encodeURIComponent(forwardSlug)}`;
