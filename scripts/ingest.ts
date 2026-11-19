@@ -101,7 +101,7 @@ try {
     }
   } else if (command === "tipoffs") {
     const r = await fillTipoffs(db, { from: iso(a!), days: b ? Number(b) : 14 });
-    console.log(`tipoffs: ${r.checked} games, ${r.filled} filled from ESPN, ${r.stillTbd} still TBD, ` +
+    console.log(`tipoffs: ${r.checked} games, ${r.filled} filled from ESPN, ${r.stillTbd} still TBD, ${r.opponents} TBD opponents filled, ` +
       `${r.moved} refiled on ESPN's date, ${r.unmatched} not on ESPN's scoreboard, ` +
       `${r.disagree.length} CBBD times replaced by ESPN's`);
     for (const d of r.disagree) console.log(`  ${d.playedOn} ${d.away} at ${d.home}: CBBD ${d.cbbd}, ESPN ${d.espn}`);

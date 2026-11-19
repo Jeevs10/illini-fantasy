@@ -45,6 +45,14 @@ export const TIPOFF_ON_CONFLICT = {
   source: `CASE WHEN ${KEEP_ESPN} THEN 'espn' ELSE EXCLUDED.tipoff_source END`,
 };
 
+/**
+ * The `ON CONFLICT (cbbd_id) DO UPDATE` value for one side's school: CBBD's,
+ * unless CBBD still has that side as TBD and the game already names a school.
+ */
+export const keepKnown = (side: "home" | "away"): string =>
+  `CASE WHEN EXCLUDED.${side}_team_id IN (SELECT id FROM team WHERE normalised IN ('tbd', 'tba'))
+        THEN game.${side}_team_id ELSE EXCLUDED.${side}_team_id END`;
+
 export interface TipoffDisagreement {
   gameId: number;
   playedOn: string;
@@ -67,7 +75,15 @@ export interface TipoffResult {
   moved: number;
   /** Of `filled`, the games whose CBBD time ESPN's replaced. */
   disagree: TipoffDisagreement[];
+  /** Bracket games CBBD still had as "<team> vs TBD", given ESPN's opponent. */
+  opponents: number;
 }
+
+/** CBBD's stand-in for a bracket opponent not decided yet (its team 1543, "TBD"). */
+export const isTbd = (normalised: string): boolean => normalised === "tbd" || normalised === "tba";
+
+/** How far ESPN's tip-off may sit from CBBD's for a TBD game to count as the same game (Data espn_check.MAX_GAP). */
+const MAX_GAP_MS = 3 * 3_600_000;
 
 export interface TipoffOptions {
   /** First date, YYYY-MM-DD. */
@@ -97,7 +113,10 @@ export async function fillTipoffs(
     [from, addDays(from, days - 1)],
   );
 
-  const result: TipoffResult = { checked: rows.length, filled: 0, stillTbd: 0, unmatched: 0, moved: 0, disagree: [] };
+  const result: TipoffResult = {
+    checked: rows.length, filled: 0, stillTbd: 0, unmatched: 0, moved: 0, disagree: [], opponents: 0,
+  };
+  let teamIdOf: Map<string, string> | undefined;
   const missed: typeof rows = [];
   const byDate = new Map<string, typeof rows>();
   for (const r of rows) byDate.set(r.played_on, [...(byDate.get(r.played_on) ?? []), r]);
@@ -129,11 +148,36 @@ export async function fillTipoffs(
     }
 
     for (const g of games) {
-      const one = (k: string) => (byTeam.get(k)?.length === 1 ? byTeam.get(k)![0] : undefined);
+      // A TBD side is never a school to look up: ESPN lists its own undecided
+      // bracket slots as "TBD" too, and one of those is not this game.
+      const one = (k: string) => (!isTbd(k) && byTeam.get(k)?.length === 1 ? byTeam.get(k)![0] : undefined);
       const e = byPair.get(`${g.home_norm}|${g.away_norm}`) ?? one(g.home_norm) ?? one(g.away_norm);
       if (!e) {
         missed.push(g);
         continue;
+      }
+
+      // A tournament's later rounds sit in CBBD as "<team> vs TBD" until CBBD
+      // catches up, often hours after the earlier round ends, and ESPN fills
+      // its bracket as soon as it does (Data repo espn_check.fill_tbd, user
+      // 2026-11-18: that morning's Players Era games came in as "Houston @
+      // TBD"). The known school's one game that day, at about the same time,
+      // names the opponent; the feed's upsert then keeps it until CBBD names
+      // the team itself (forward.ts).
+      const tbdSide = isTbd(g.home_norm) ? "home" : isTbd(g.away_norm) ? "away" : null;
+      if (tbdSide !== null && !isTbd(tbdSide === "home" ? g.away_norm : g.home_norm)) {
+        const known = tbdSide === "home" ? g.away_norm : g.home_norm;
+        const other = e.teams.find((t) => normaliseTeam(t.location) !== known);
+        const close = g.tipoff === null || Math.abs(Date.parse(e.start) - new Date(g.tipoff).getTime()) <= MAX_GAP_MS;
+        if (other && close && !isTbd(normaliseTeam(other.location)) && !other.espnId.startsWith("-")) {
+          teamIdOf ??= new Map((await db.query<{ id: string; normalised: string }>(
+            "SELECT id, normalised FROM team")).rows.map((t) => [t.normalised, t.id]));
+          const teamId = teamIdOf.get(normaliseTeam(other.location));
+          if (teamId !== undefined) {
+            await db.query(`UPDATE game SET ${tbdSide}_team_id = $2 WHERE id = $1`, [g.id, teamId]);
+            result.opponents += 1;
+          }
+        }
       }
       if (!e.timeValid) {
         if (g.tipoff === null) result.stillTbd += 1;

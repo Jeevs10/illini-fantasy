@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Db } from "@illini/db";
 import { insertMany } from "@illini/db";
 import { canonicaliseName, normaliseTeam } from "@illini/crosswalk";
-import { cbbdTipoff, TIPOFF_ON_CONFLICT } from "./tipoffs.ts";
+import { cbbdTipoff, keepKnown, TIPOFF_ON_CONFLICT } from "./tipoffs.ts";
 
 /**
  * The Data repo's forward model, as illini-fantasy reads it.
@@ -250,12 +250,14 @@ export async function ingestForwardFeed(db: Db, feed: ForwardFeed): Promise<Forw
           return [t.playedOn, season, teamOf.get(g.homeId!), teamOf.get(g.awayId!), g.neutral, g.gameId, t.tipoff, t.source];
         }),
       dedupeOn: [5],
+      // A bracket side CBBD still has as TBD never replaces a school already
+      // filled in, by the Data repo's ESPN fill or by fillTipoffs (user 2026-11-18).
       conflict: `(cbbd_id) DO UPDATE SET played_on = EXCLUDED.played_on,
-        home_team_id = EXCLUDED.home_team_id, away_team_id = EXCLUDED.away_team_id,
+        home_team_id = ${keepKnown("home")}, away_team_id = ${keepKnown("away")},
         neutral_site = EXCLUDED.neutral_site, tipoff = ${tipoff},
         tipoff_source = ${source}
         WHERE (game.played_on, game.home_team_id, game.away_team_id, game.neutral_site, game.tipoff)
-          IS DISTINCT FROM (EXCLUDED.played_on, EXCLUDED.home_team_id, EXCLUDED.away_team_id,
+          IS DISTINCT FROM (EXCLUDED.played_on, ${keepKnown("home")}, ${keepKnown("away")},
                             EXCLUDED.neutral_site, ${tipoff})`,
     });
   }
