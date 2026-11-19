@@ -20,9 +20,11 @@ import { settleWaivers } from "./waivers.ts";
  * Order matters and is the order a week actually happens in: the draft clock,
  * then the moves due by now (waivers before trades, the same order the pages
  * call them in), then every regular-season week that has ended, then the
- * bracket. A week is settled again for seven days after it ends, because a
- * late box score lands in the next morning's feed and settling recomputes
- * from scores rather than accumulating them.
+ * bracket. A week settles once, on the first feed after its last night, and
+ * is then frozen: a box score that lands later is filed against the player
+ * but never reopens a result the league has already seen (user, 2026-11-15 —
+ * a Sunday-night filing flipped a week-1 result six days after the fact). A
+ * deliberate correction is `npm run league -- settle <league> <week>`.
  */
 export async function settleDue(
   db: Db, { season, now = new Date(), through }: {
@@ -43,7 +45,7 @@ export async function settleDue(
     const { rows: weeks } = await db.query<{ week: number }>(
       `SELECT DISTINCT week FROM matchup
         WHERE league_id = $1 AND round IS NULL AND ends_on < $2::date
-          AND (settled_at IS NULL OR ends_on >= $2::date - 7)
+          AND settled_at IS NULL
         ORDER BY week`,
       [leagueId, through]);
     for (const { week } of weeks) await settleWeek(db, leagueId, week);
